@@ -191,7 +191,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	disasmGtx.Constraints.Min.X = 0
 	for i, ix := range ui.Match.Code {
 		stack := op.Offset(image.Pt(int(disasm.Min)+pad/2, i*lineHeight+int(ui.ScrollAsm))).Push(gtx.Ops)
-		lineText.Text = strconv.Itoa(i) + ":" + ix.Text
+		lineText.Text = ix.Text
 		if highlightDisasmIndex == i {
 			lineText.Font.Weight = text.Heavy
 		} else {
