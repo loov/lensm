@@ -10,7 +10,6 @@ import (
 	"regexp"
 
 	"gioui.org/app"
-	"gioui.org/f32"
 	"gioui.org/font/gofont"
 	"gioui.org/io/system"
 	"gioui.org/layout"
@@ -117,10 +116,7 @@ type UI struct {
 	Output   *Output
 	Matches  widget.List
 	Selected *Match
-
-	ScrollAsm     widget.Scrollbar
-	ScrollSrc     widget.Scrollbar
-	MousePosition f32.Point
+	MatchUI  MatchUIState
 }
 
 func NewUI() *UI {
@@ -150,7 +146,7 @@ func (ui *UI) Run(w *app.Window) error {
 
 func (ui *UI) Layout(gtx layout.Context) {
 	if ui.Selected == nil && len(ui.Output.Matches) > 0 {
-		ui.Selected = &ui.Output.Matches[0]
+		ui.selectMatch(&ui.Output.Matches[0])
 	}
 
 	layout.Flex{
@@ -194,7 +190,7 @@ func (ui *UI) layoutMatches(gtx layout.Context) layout.Dimensions {
 	for i := range ui.Output.Matches {
 		match := &ui.Output.Matches[i]
 		for match.Select.Clicked() {
-			ui.Selected = match
+			ui.selectMatch(match)
 		}
 	}
 
@@ -227,15 +223,22 @@ func (ui *UI) layoutMatch(gtx layout.Context, match *Match) layout.Dimensions {
 	})
 }
 
+func (ui *UI) selectMatch(target *Match) {
+	if ui.Selected == target {
+		return
+	}
+	ui.Selected = target
+	ui.MatchUI.ScrollAsm = 0
+	ui.MatchUI.ScrollSrc = 0
+}
+
 func (ui *UI) layoutCode(gtx layout.Context, match *Match) layout.Dimensions {
-	return MatchUI{
-		Theme:         ui.Theme,
-		Match:         ui.Selected,
-		ScrollAsm:     &ui.ScrollAsm,
-		ScrollSrc:     &ui.ScrollSrc,
-		TextHeight:    unit.Sp(12),
-		LineHeight:    unit.Sp(14),
-		MousePosition: &ui.MousePosition,
+	return MatchUIStyle{
+		Theme:        ui.Theme,
+		Match:        ui.Selected,
+		MatchUIState: &ui.MatchUI,
+		TextHeight:   unit.Sp(12),
+		LineHeight:   unit.Sp(14),
 	}.Layout(gtx)
 }
 

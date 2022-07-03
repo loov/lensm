@@ -20,17 +20,23 @@ import (
 	"loov.dev/lensm/internal/f32color"
 )
 
-type MatchUI struct {
+type MatchUIState struct {
+	ScrollAsm float32
+	ScrollSrc float32
+
+	ScrollbarAsm widget.Scrollbar
+	ScrollbarSrc widget.Scrollbar
+
+	MousePosition f32.Point
+}
+
+type MatchUIStyle struct {
 	Theme *material.Theme
 	Match *Match
-
-	ScrollAsm *widget.Scrollbar
-	ScrollSrc *widget.Scrollbar
+	*MatchUIState
 
 	TextHeight unit.Sp
 	LineHeight unit.Sp
-
-	MousePosition *f32.Point
 }
 
 type Bounds struct{ Min, Max float32 }
@@ -47,7 +53,7 @@ func (b Bounds) Contains(v float32) bool {
 	return b.Min <= v && v <= b.Max
 }
 
-func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
+func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	gtx.Constraints = layout.Exact(gtx.Constraints.Max)
 
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
@@ -57,7 +63,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	}.Add(gtx.Ops)
 	for _, ev := range gtx.Queue.Events(ui.Match) {
 		if ev, ok := ev.(pointer.Event); ok {
-			*ui.MousePosition = ev.Position
+			ui.MousePosition = ev.Position
 		}
 	}
 
@@ -82,12 +88,12 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 		Max: image.Pt(int(gutter.Max), gtx.Constraints.Max.Y),
 	}.Op())
 
-	mousePosition := *ui.MousePosition
+	mousePosition := ui.MousePosition
 	mouseInDisasm := disasm.Contains(mousePosition.X)
 	mouseInSource := source.Contains(mousePosition.X)
 	highlightDisasmIndex := -1
 	if mouseInDisasm {
-		highlightDisasmIndex = int(mousePosition.Y) / lineHeight
+		highlightDisasmIndex = int(mousePosition.Y-ui.ScrollAsm) / lineHeight
 	}
 	var highlightRanges []Range
 
@@ -100,7 +106,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	headText.Font.Weight = text.Heavy
 
 	// relations underlay
-	top := 0
+	top := int(ui.ScrollSrc)
 	var highlightPath *clip.PathSpec
 	var highlightColor color.NRGBA
 	for i, src := range ui.Match.Source {
@@ -131,7 +137,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 					pin := float32(top)
 					for i, r := range ranges {
 						if mouseInDisasm {
-							if float32(r.From*lineHeight) <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight) {
+							if float32(r.From*lineHeight)+ui.ScrollAsm <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.ScrollAsm {
 								highlight = true
 								highlightRanges = ranges
 							}
@@ -139,14 +145,14 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 						const S = 0.1
 						p.CubeTo(
 							f32.Pt(gutter.Lerp(0.5-S), pin),
-							f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)),
-							f32.Pt(gutter.Min, float32(r.From*lineHeight)))
-						p.LineTo(f32.Pt(disasm.Min, float32(r.From*lineHeight)))
-						p.LineTo(f32.Pt(disasm.Min, float32(r.To*lineHeight)))
-						p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)))
+							f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.ScrollAsm),
+							f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.ScrollAsm))
+						p.LineTo(f32.Pt(disasm.Min, float32(r.From*lineHeight)+ui.ScrollAsm))
+						p.LineTo(f32.Pt(disasm.Min, float32(r.To*lineHeight)+ui.ScrollAsm))
+						p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.ScrollAsm))
 						pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
 						p.CubeTo(
-							f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)),
+							f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.ScrollAsm),
 							f32.Pt(gutter.Lerp(0.5-S), pin),
 							f32.Pt(gutter.Max, pin))
 					}
@@ -177,9 +183,8 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	disasmGtx.Constraints = layout.Exact(image.Point{X: gtx.Constraints.Max.X / 2, Y: gtx.Constraints.Max.Y})
 	disasmGtx.Constraints.Min.X = 0
 	for i, ix := range ui.Match.Code {
-
-		stack := op.Offset(image.Pt(int(disasm.Min)+pad/2, i*lineHeight)).Push(gtx.Ops)
-		lineText.Text = ix.Text
+		stack := op.Offset(image.Pt(int(disasm.Min)+pad/2, i*lineHeight+int(ui.ScrollAsm))).Push(gtx.Ops)
+		lineText.Text = strconv.Itoa(i) + ":" + ix.Text
 		if highlightDisasmIndex == i {
 			lineText.Font.Weight = text.Heavy
 		} else {
@@ -192,7 +197,8 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 		if ix.RefOffset != 0 {
 			lineWidth := gtx.Metric.Dp(1)
 			align := float32(lineWidth%2) / 2
-			stack := op.Affine(f32.Affine2D{}.Offset(f32.Pt(jump.Max+align, float32(i*lineHeight)+align))).Push(gtx.Ops)
+			stack := op.Affine(f32.Affine2D{}.Offset(
+				f32.Pt(jump.Max+align, float32(i*lineHeight)+align+ui.ScrollAsm))).Push(gtx.Ops)
 
 			var path clip.Path
 			path.Begin(gtx.Ops)
@@ -222,7 +228,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	// source
-	top = 0
+	top = int(ui.ScrollSrc)
 	for i, src := range ui.Match.Source {
 		if i > 0 {
 			top += lineHeight
@@ -254,6 +260,55 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 
 				top += lineHeight
 			}
+		}
+	}
+	sourceContentHeight := top - int(ui.ScrollSrc)
+
+	{
+		// overflow := gtx.Constraints.Max.Y / 3
+		overflow := lineHeight
+		contentTop := float32(-overflow)
+		contentBot := float32(len(ui.Match.Code)*lineHeight + overflow)
+		viewTop := -ui.ScrollAsm
+		viewBot := -ui.ScrollAsm + float32(gtx.Constraints.Max.Y)
+
+		stack := op.Offset(image.Pt(int(jump.Min)-pad, 0)).Push(gtx.Ops)
+		gtx := gtx
+		gtx.Constraints = layout.Exact(gtx.Constraints.Max)
+		gtx.Constraints.Max.X = pad
+		gtx.Constraints.Min.X = pad
+		material.Scrollbar(ui.Theme, &ui.ScrollbarAsm).Layout(gtx, layout.Vertical,
+			(viewTop-contentTop)/(contentBot-contentTop),
+			(viewBot-contentTop)/(contentBot-contentTop),
+		)
+		stack.Pop()
+
+		if distance := ui.ScrollbarAsm.ScrollDistance(); distance != 0 {
+			ui.ScrollAsm -= distance * (contentBot - contentTop)
+		}
+	}
+
+	{
+		// overflow := gtx.Constraints.Max.Y / 3
+		overflow := lineHeight
+		contentTop := float32(-overflow)
+		contentBot := float32(sourceContentHeight + overflow)
+		viewTop := -ui.ScrollSrc
+		viewBot := -ui.ScrollSrc + float32(gtx.Constraints.Max.Y)
+
+		stack := op.Offset(image.Pt(int(source.Max), 0)).Push(gtx.Ops)
+		gtx := gtx
+		gtx.Constraints = layout.Exact(gtx.Constraints.Max)
+		gtx.Constraints.Max.X = pad
+		gtx.Constraints.Min.X = pad
+		material.Scrollbar(ui.Theme, &ui.ScrollbarSrc).Layout(gtx, layout.Vertical,
+			(viewTop-contentTop)/(contentBot-contentTop),
+			(viewBot-contentTop)/(contentBot-contentTop),
+		)
+		stack.Pop()
+
+		if distance := ui.ScrollbarSrc.ScrollDistance(); distance != 0 {
+			ui.ScrollSrc -= distance * (contentBot - contentTop)
 		}
 	}
 
