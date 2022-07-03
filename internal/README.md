@@ -1,0 +1,1 @@
+Code copied from Go source.
