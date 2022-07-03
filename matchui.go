@@ -85,6 +85,10 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	mousePosition := *ui.MousePosition
 	mouseInDisasm := disasm.Contains(mousePosition.X)
 	mouseInSource := source.Contains(mousePosition.X)
+	var highlightDisasmIndex int
+	if mouseInDisasm {
+		highlightDisasmIndex = int(mousePosition.Y) / lineHeight
+	}
 
 	lineText := material.Label(ui.Theme, ui.TextHeight, "")
 	lineText.Font.Variant = "Mono"
@@ -175,15 +179,16 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 		lineText.Layout(disasmGtx)
 		stack.Pop()
 
+		// jump line
 		if ix.RefOffset != 0 {
 			stack := op.Offset(image.Pt(int(jump.Max), i*lineHeight)).Push(gtx.Ops)
 
 			var path clip.Path
 			path.Begin(gtx.Ops)
-			path.MoveTo(f32.Pt(0, float32(lineHeight/2)))
-			path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight/2)))
-			path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight/2+ix.RefOffset*lineHeight)))
-			path.LineTo(f32.Pt(float32(-jumpStep/2), float32(lineHeight/2+ix.RefOffset*lineHeight)))
+			path.MoveTo(f32.Pt(float32(pad/2), float32(lineHeight*2/3)))
+			path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight*2/3)))
+			path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight/3+ix.RefOffset*lineHeight)))
+			path.LineTo(f32.Pt(float32(-jumpStep/2), float32(lineHeight/3+ix.RefOffset*lineHeight)))
 			// draw arrow
 			path.Line(f32.Pt(0, float32(lineHeight/4)))
 			path.Line(f32.Pt(float32(lineHeight/3), float32(-lineHeight/4)))
@@ -191,7 +196,11 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 			path.Line(f32.Pt(0, float32(lineHeight/4)))
 
 			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, 0.8)
-			paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: 2}.Op())
+			width := float32(2)
+			if highlightDisasmIndex == i || highlightDisasmIndex == i+ix.RefOffset {
+				width = 8
+			}
+			paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: width}.Op())
 
 			stack.Pop()
 		}
