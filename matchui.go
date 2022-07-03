@@ -85,7 +85,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	mousePosition := *ui.MousePosition
 	mouseInDisasm := disasm.Contains(mousePosition.X)
 	mouseInSource := source.Contains(mousePosition.X)
-	var highlightDisasmIndex int
+	highlightDisasmIndex := -1
 	if mouseInDisasm {
 		highlightDisasmIndex = int(mousePosition.Y) / lineHeight
 	}
