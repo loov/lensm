@@ -95,12 +95,13 @@ func Parse(opts Options) (*Output, error) {
 		neededLines := make(map[string]*LineSet)
 
 		file, _, _ := dis.PCLN().PCToLine(sym.Addr)
-		pcToIndex := map[uint64]int{}
+		needRefPCs := map[uint64]struct{}{}
 
 		sym := Match{
 			Name: sym.Name,
 			File: file,
 		}
+		initialIx := []Instruction{}
 		dis.Decode(symStart, symEnd, relocs, false, func(pc, size uint64, file string, line int, text string) {
 			// TODO: find a better way to calculate the jump target
 			var refPC uint64
@@ -117,8 +118,10 @@ func Parse(opts Options) (*Output, error) {
 				}
 			}
 
-			pcToIndex[pc] = len(sym.Code)
-			sym.Code = append(sym.Code, Instruction{
+			if refPC != 0 {
+				needRefPCs[refPC] = struct{}{}
+			}
+			initialIx = append(initialIx, Instruction{
 				PC:    pc,
 				Text:  text,
 				File:  file,
@@ -135,6 +138,16 @@ func Parse(opts Options) (*Output, error) {
 				lineset.Add(line)
 			}
 		})
+
+		pcToIndex := map[uint64]int{}
+		for _, ix := range initialIx {
+			if _, ok := needRefPCs[ix.PC]; ok {
+				// add empty line
+				sym.Code = append(sym.Code, Instruction{})
+			}
+			pcToIndex[ix.PC] = len(sym.Code)
+			sym.Code = append(sym.Code, ix)
+		}
 
 		// TODO: use better jump line layouting algorithm
 		stackLevel := 1
