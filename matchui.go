@@ -307,10 +307,13 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		if -ui.ScrollAsm < contentTop {
 			ui.ScrollAsm = -contentTop
 		}
-		// TODO: fix bottom scroll limiting
-		// if -ui.ScrollAsm+float32(gtx.Constraints.Max.Y) > contentBot {
-		// 	ui.ScrollAsm = float32(gtx.Constraints.Max.Y) - contentBot
-		// }
+		if -ui.ScrollAsm+float32(gtx.Constraints.Max.Y) > contentBot {
+			if contentBot < float32(gtx.Constraints.Max.Y) {
+				ui.ScrollAsm = -contentTop
+			} else {
+				ui.ScrollAsm = float32(gtx.Constraints.Max.Y) - contentBot
+			}
+		}
 		stack.Pop()
 	}
 
@@ -350,11 +353,13 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		if -ui.ScrollSrc < contentTop {
 			ui.ScrollSrc = -contentTop
 		}
-		// TODO: fix bottom scroll limiting
-		// if -ui.ScrollSrc+float32(gtx.Constraints.Max.Y) > contentBot {
-		// 	ui.ScrollSrc = float32(gtx.Constraints.Max.Y) - contentBot
-		// }
-
+		if -ui.ScrollSrc+float32(gtx.Constraints.Max.Y) > contentBot {
+			if contentBot < float32(gtx.Constraints.Max.Y) {
+				ui.ScrollSrc = -contentTop
+			} else {
+				ui.ScrollSrc = float32(gtx.Constraints.Max.Y) - contentBot
+			}
+		}
 		stack.Pop()
 	}
 

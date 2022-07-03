@@ -228,8 +228,8 @@ func (ui *UI) selectMatch(target *Match) {
 		return
 	}
 	ui.Selected = target
-	ui.MatchUI.ScrollAsm = 0
-	ui.MatchUI.ScrollSrc = 0
+	ui.MatchUI.ScrollAsm = 100000
+	ui.MatchUI.ScrollSrc = 100000
 }
 
 func (ui *UI) layoutCode(gtx layout.Context, match *Match) layout.Dimensions {
