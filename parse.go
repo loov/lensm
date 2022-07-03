@@ -330,16 +330,16 @@ func (rs *LineSet) Ranges(context int) []Range {
 
 	all := []Range{}
 
-	current := Range{From: rs.Needed[0] - context, To: rs.Needed[0] + context}
+	current := Range{From: rs.Needed[0] - context, To: rs.Needed[0] + context + 1}
 	if current.From < 1 {
 		current.From = 1
 	}
 	for _, line := range rs.Needed {
 		if line-context <= current.To {
-			current.To = line + context
+			current.To = line + context + 1
 		} else {
 			all = append(all, current)
-			current = Range{From: line - context, To: line + context}
+			current = Range{From: line - context, To: line + context + 1}
 		}
 	}
 	all = append(all, current)
