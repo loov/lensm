@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"sort"
@@ -204,7 +205,8 @@ func LoadSources(needed map[string]*LineSet, symbolFile string, context int) []S
 	for file, set := range needed {
 		data, err := os.ReadFile(file)
 		if err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "unable to load source from %q: %v\n", file, err)
+			continue
 		}
 		lines := strings.Split(string(data), "\n")
 		source := Source{

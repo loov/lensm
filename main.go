@@ -37,19 +37,34 @@ func Fibonacci(n int) int {
 	return Fibonacci(n-1) + Fibonacci(n-2)
 }
 
+var _ = Fibonacci(0)
+
 func main() {
-	flag.Parse()
 	text := flag.Bool("text", false, "show text output")
+	filter := flag.String("filter", "", "filter the symbol by regexp")
+	context := flag.Int("context", 3, "source line context")
+	maxMatches := flag.Int("max-matches", 10, "maximum number of matches to parse")
+	flag.Parse()
+	exename := flag.Arg(0)
+
+	if exename == "" || *filter == "" {
+		fmt.Fprintln(os.Stderr, "lensm -filter main <exename>")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	re, err := regexp.Compile(*filter)
+	if err != nil {
+		panic(err)
+	}
 
 	out, err := Parse(Options{
-		Exe: flag.Arg(0),
-		// Filter:     regexp.MustCompile("gioui.org.*decode"),
-		Filter:     regexp.MustCompile("Fibonacci"),
-		Context:    3,
-		MaxSymbols: 5,
+		Exe:        exename,
+		Filter:     re,
+		Context:    *context,
+		MaxSymbols: *maxMatches,
 	})
 	if err != nil {
-		Fibonacci(3)
 		panic(err)
 	}
 
@@ -146,9 +161,12 @@ func (ui *UI) Layout(gtx layout.Context) {
 	layout.Flex{
 		Axis: layout.Horizontal,
 	}.Layout(gtx,
-		layout.Flexed(0.3, func(gtx layout.Context) layout.Dimensions {
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			size := gtx.Constraints.Max
-			gtx.Constraints = layout.Exact(size)
+			gtx.Constraints = layout.Exact(image.Point{
+				X: gtx.Metric.Sp(10 * 20),
+				Y: gtx.Constraints.Max.Y,
+			})
 			paint.FillShape(gtx.Ops, secondaryBackground, clip.Rect{Max: size}.Op())
 			return ui.layoutMatches(gtx)
 		}),
@@ -197,10 +215,20 @@ func (ui *UI) layoutMatches(gtx layout.Context) layout.Dimensions {
 func (ui *UI) layoutMatch(gtx layout.Context, match *Match) layout.Dimensions {
 	return material.Clickable(gtx, &match.Select, func(gtx layout.Context) layout.Dimensions {
 		style := material.Body2(ui.Theme, match.Name)
+		style.MaxLines = 1
+		style.TextSize = unit.Sp(10)
 		if match == ui.Selected {
 			style.Font.Weight = text.Heavy
 		}
-		return style.Layout(gtx) // layout.UniformInset(unit.Dp(8)).Layout(gtx, style.Layout)
+		tgtx := gtx
+		tgtx.Constraints.Max.X = 100000
+		dims := style.Layout(tgtx) // layout.UniformInset(unit.Dp(8)).Layout(gtx, style.Layout)
+		return layout.Dimensions{
+			Size: image.Point{
+				X: gtx.Constraints.Max.X,
+				Y: dims.Size.Y,
+			},
+		}
 	})
 }
 

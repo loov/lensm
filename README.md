@@ -9,5 +9,5 @@ go install loov.dev/lensm@main
 ## Usage
 
 ```
-lensm program.exe
+lensm -filter Fibonacci lensm
 ```
