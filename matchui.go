@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"gioui.org/f32"
+	"gioui.org/gesture"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -22,7 +23,9 @@ import (
 
 type MatchUIState struct {
 	ScrollAsm float32
+	scrollAsm gesture.Scroll
 	ScrollSrc float32
+	scrollSrc gesture.Scroll
 
 	ScrollbarAsm widget.Scrollbar
 	ScrollbarSrc widget.Scrollbar
@@ -57,13 +60,17 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	gtx.Constraints = layout.Exact(gtx.Constraints.Max)
 
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
+
 	pointer.InputOp{
 		Tag:   ui.Match,
 		Types: pointer.Move,
 	}.Add(gtx.Ops)
 	for _, ev := range gtx.Queue.Events(ui.Match) {
 		if ev, ok := ev.(pointer.Event); ok {
-			ui.MousePosition = ev.Position
+			switch ev.Type {
+			case pointer.Move:
+				ui.MousePosition = ev.Position
+			}
 		}
 	}
 
@@ -265,6 +272,11 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	sourceContentHeight := top - int(ui.ScrollSrc)
 
 	{
+		stack := clip.Rect{
+			Min: image.Pt(int(jump.Min)-pad, 0),
+			Max: image.Pt(int(disasm.Max), gtx.Constraints.Max.Y),
+		}.Push(gtx.Ops)
+
 		// overflow := gtx.Constraints.Max.Y / 3
 		overflow := lineHeight
 		contentTop := float32(-overflow)
@@ -272,23 +284,42 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		viewTop := -ui.ScrollAsm
 		viewBot := -ui.ScrollAsm + float32(gtx.Constraints.Max.Y)
 
-		stack := op.Offset(image.Pt(int(jump.Min)-pad, 0)).Push(gtx.Ops)
-		gtx := gtx
-		gtx.Constraints = layout.Exact(gtx.Constraints.Max)
-		gtx.Constraints.Max.X = pad
-		gtx.Constraints.Min.X = pad
-		material.Scrollbar(ui.Theme, &ui.ScrollbarAsm).Layout(gtx, layout.Vertical,
-			(viewTop-contentTop)/(contentBot-contentTop),
-			(viewBot-contentTop)/(contentBot-contentTop),
-		)
-		stack.Pop()
+		ui.scrollAsm.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
+
+		{
+			stack := op.Offset(image.Pt(int(jump.Min)-pad, 0)).Push(gtx.Ops)
+			gtx := gtx
+			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
+			material.Scrollbar(ui.Theme, &ui.ScrollbarAsm).Layout(gtx, layout.Vertical,
+				(viewTop-contentTop)/(contentBot-contentTop),
+				(viewBot-contentTop)/(contentBot-contentTop),
+			)
+			stack.Pop()
+		}
 
 		if distance := ui.ScrollbarAsm.ScrollDistance(); distance != 0 {
 			ui.ScrollAsm -= distance * (contentBot - contentTop)
 		}
+		if distance := ui.scrollAsm.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
+			ui.ScrollAsm -= float32(distance)
+		}
+
+		if -ui.ScrollAsm < contentTop {
+			ui.ScrollAsm = -contentTop
+		}
+		// TODO: fix bottom scroll limiting
+		// if -ui.ScrollAsm+float32(gtx.Constraints.Max.Y) > contentBot {
+		// 	ui.ScrollAsm = float32(gtx.Constraints.Max.Y) - contentBot
+		// }
+		stack.Pop()
 	}
 
 	{
+		stack := clip.Rect{
+			Min: image.Pt(int(source.Min), 0),
+			Max: image.Pt(int(source.Max)+pad, gtx.Constraints.Max.Y),
+		}.Push(gtx.Ops)
+
 		// overflow := gtx.Constraints.Max.Y / 3
 		overflow := lineHeight
 		contentTop := float32(-overflow)
@@ -296,20 +327,35 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		viewTop := -ui.ScrollSrc
 		viewBot := -ui.ScrollSrc + float32(gtx.Constraints.Max.Y)
 
-		stack := op.Offset(image.Pt(int(source.Max), 0)).Push(gtx.Ops)
-		gtx := gtx
-		gtx.Constraints = layout.Exact(gtx.Constraints.Max)
-		gtx.Constraints.Max.X = pad
-		gtx.Constraints.Min.X = pad
-		material.Scrollbar(ui.Theme, &ui.ScrollbarSrc).Layout(gtx, layout.Vertical,
-			(viewTop-contentTop)/(contentBot-contentTop),
-			(viewBot-contentTop)/(contentBot-contentTop),
-		)
-		stack.Pop()
+		ui.scrollSrc.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
+
+		{
+			stack := op.Offset(image.Pt(int(source.Max), 0)).Push(gtx.Ops)
+			gtx := gtx
+			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
+			material.Scrollbar(ui.Theme, &ui.ScrollbarSrc).Layout(gtx, layout.Vertical,
+				(viewTop-contentTop)/(contentBot-contentTop),
+				(viewBot-contentTop)/(contentBot-contentTop),
+			)
+			stack.Pop()
+		}
 
 		if distance := ui.ScrollbarSrc.ScrollDistance(); distance != 0 {
 			ui.ScrollSrc -= distance * (contentBot - contentTop)
 		}
+		if distance := ui.scrollSrc.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
+			ui.ScrollSrc -= float32(distance)
+		}
+
+		if -ui.ScrollSrc < contentTop {
+			ui.ScrollSrc = -contentTop
+		}
+		// TODO: fix bottom scroll limiting
+		// if -ui.ScrollSrc+float32(gtx.Constraints.Max.Y) > contentBot {
+		// 	ui.ScrollSrc = float32(gtx.Constraints.Max.Y) - contentBot
+		// }
+
+		stack.Pop()
 	}
 
 	return layout.Dimensions{
