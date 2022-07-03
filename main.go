@@ -98,7 +98,7 @@ func main() {
 	go func() {
 		w := app.NewWindow(
 			app.Title("lensm"),
-			app.Size(unit.Dp(800), unit.Dp(600)),
+			app.Size(unit.Dp(1400), unit.Dp(900)),
 		)
 		if err := ui.Run(w); err != nil {
 			log.Println(err)
