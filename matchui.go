@@ -169,7 +169,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	}
 	if highlightPath != nil {
 		paint.FillShape(gtx.Ops, highlightColor, clip.Outline{Path: *highlightPath}.Op())
-		paint.FillShape(gtx.Ops, color.NRGBA{A: 0x40}, clip.Stroke{Path: *highlightPath, Width: 2}.Op())
+		paint.FillShape(gtx.Ops, color.NRGBA{A: 0x40}, clip.Stroke{Path: *highlightPath, Width: 1}.Op())
 	}
 
 	// disassembly
@@ -190,7 +190,9 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 
 		// jump line
 		if ix.RefOffset != 0 {
-			stack := op.Offset(image.Pt(int(jump.Max), i*lineHeight)).Push(gtx.Ops)
+			lineWidth := gtx.Metric.Dp(1)
+			align := float32(lineWidth%2) / 2
+			stack := op.Affine(f32.Affine2D{}.Offset(f32.Pt(jump.Max+align, float32(i*lineHeight)+align))).Push(gtx.Ops)
 
 			var path clip.Path
 			path.Begin(gtx.Ops)
@@ -204,13 +206,13 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 			path.Line(f32.Pt(float32(-lineHeight/3), float32(-lineHeight/4)))
 			path.Line(f32.Pt(0, float32(lineHeight/4)))
 
-			width := float32(2)
+			width := float32(lineWidth)
 			alpha := float32(0.7)
 			if highlightDisasmIndex >= 0 && (highlightDisasmIndex == i || highlightDisasmIndex == i+ix.RefOffset) {
-				width = 8
+				width *= 3
 				alpha = 1
 			} else if rangesContains(highlightRanges, i, i+ix.RefOffset) {
-				width = 8
+				width *= 3
 			}
 			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)
 			paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: width}.Op())
