@@ -89,6 +89,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	if mouseInDisasm {
 		highlightDisasmIndex = int(mousePosition.Y) / lineHeight
 	}
+	var highlightRanges []Range
 
 	lineText := material.Label(ui.Theme, ui.TextHeight, "")
 	lineText.Font.Variant = "Mono"
@@ -117,6 +118,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 					if mouseInSource {
 						if float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight) {
 							highlight = true
+							highlightRanges = ranges
 						}
 					}
 
@@ -131,6 +133,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 						if mouseInDisasm {
 							if float32(r.From*lineHeight) <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight) {
 								highlight = true
+								highlightRanges = ranges
 							}
 						}
 						const S = 0.1
@@ -195,11 +198,15 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 			path.Line(f32.Pt(float32(-lineHeight/3), float32(-lineHeight/4)))
 			path.Line(f32.Pt(0, float32(lineHeight/4)))
 
-			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, 0.8)
 			width := float32(2)
-			if highlightDisasmIndex == i || highlightDisasmIndex == i+ix.RefOffset {
+			alpha := float32(0.7)
+			if highlightDisasmIndex >= 0 && (highlightDisasmIndex == i || highlightDisasmIndex == i+ix.RefOffset) {
+				width = 8
+				alpha = 1
+			} else if rangesContains(highlightRanges, i, i+ix.RefOffset) {
 				width = 8
 			}
+			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)
 			paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: width}.Op())
 
 			stack.Pop()
@@ -240,4 +247,13 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{
 		Size: gtx.Constraints.Max,
 	}
+}
+
+func rangesContains(ranges []Range, a, b int) bool {
+	for _, r := range ranges {
+		if (r.From <= a && a < r.To) || (r.From <= b && b < r.To) {
+			return true
+		}
+	}
+	return false
 }
