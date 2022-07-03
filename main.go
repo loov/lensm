@@ -394,7 +394,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	disasmGtx.Constraints = layout.Exact(image.Point{X: gtx.Constraints.Max.X / 2, Y: gtx.Constraints.Max.Y})
 	disasmGtx.Constraints.Min.X = 0
 	for i, ix := range ui.Match.Code {
-		stack := op.Offset(image.Pt(int(disasm.Min), i*lineHeight)).Push(gtx.Ops)
+		stack := op.Offset(image.Pt(int(disasm.Min)+pad/2, i*lineHeight)).Push(gtx.Ops)
 		lineText.Text = ix.Text
 		lineText.Layout(disasmGtx)
 		stack.Pop()
