@@ -229,6 +229,20 @@ type MatchUI struct {
 	MousePosition *f32.Point
 }
 
+type Bounds struct{ Min, Max float32 }
+
+func BoundsWidth(min, width int) Bounds {
+	return Bounds{Min: float32(min), Max: float32(min + width)}
+}
+
+func (b Bounds) Lerp(p float32) float32 {
+	return b.Min + p*(b.Max-b.Min)
+}
+
+func (b Bounds) Contains(v float32) bool {
+	return b.Min <= v && v <= b.Max
+}
+
 func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	gtx.Constraints = layout.Exact(gtx.Constraints.Max)
 
@@ -244,12 +258,28 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	// The layout has the following sections:
-	// JumpLinks
+	// pad | Jump | pad/2 | Disasm | pad | Gutter | pad | Source | pad
 
-	center := gtx.Constraints.Max.X / 2
+	lineHeight := gtx.Metric.Sp(ui.LineHeight)
+	pad := lineHeight
+	jumpStep := lineHeight / 2
+	jumpWidth := jumpStep * ui.Match.CodeMaxStack
+	gutterWidth := lineHeight * 8
+	blocksWidth := (gtx.Constraints.Max.X - gutterWidth - jumpWidth - 4*pad - pad/2)
+
+	jump := BoundsWidth(pad, jumpWidth)
+	disasm := BoundsWidth(int(jump.Max)+pad/2, blocksWidth*3/10)
+	gutter := BoundsWidth(int(disasm.Max)+pad, gutterWidth)
+	source := BoundsWidth(int(gutter.Max)+pad, blocksWidth*7/10)
+
+	paint.FillShape(gtx.Ops, color.NRGBA{A: 0x10}, clip.Rect{
+		Min: image.Pt(int(gutter.Min), 0),
+		Max: image.Pt(int(gutter.Max), gtx.Constraints.Max.Y),
+	}.Op())
 
 	mousePosition := *ui.MousePosition
-	mouseInDisasm := mousePosition.X < float32(center)
+	mouseInDisasm := disasm.Contains(mousePosition.X)
+	mouseInSource := source.Contains(mousePosition.X)
 
 	lineText := material.Label(ui.Theme, ui.TextHeight, "")
 	lineText.Font.Variant = "Mono"
@@ -259,14 +289,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	headText.Font.Variant = "Mono"
 	headText.Font.Weight = text.Heavy
 
-	lineHeight := gtx.Metric.Sp(ui.LineHeight)
-
-	gutter := lineHeight/2*ui.Match.CodeMaxStack + lineHeight
-
 	// relations underlay
-	sourceGtx := gtx
-	sourceGtx.Constraints = layout.Exact(image.Point{X: gtx.Constraints.Max.X / 2, Y: gtx.Constraints.Max.Y})
-	sourceGtx.Constraints.Min.X = 0
 	top := 0
 	for i, src := range ui.Match.Source {
 		if i > 0 {
@@ -280,7 +303,7 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 			for off, ranges := range block.Disasm {
 				if len(ranges) > 0 {
 					highlight := false
-					if !mouseInDisasm {
+					if mouseInSource {
 						if float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight) {
 							highlight = true
 						}
@@ -288,10 +311,10 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 
 					var p clip.Path
 					p.Begin(gtx.Ops)
-					p.MoveTo(f32.Pt(float32(center), float32(top+lineHeight)))
-					p.LineTo(f32.Pt(float32(gtx.Constraints.Max.X), float32(top+lineHeight)))
-					p.LineTo(f32.Pt(float32(gtx.Constraints.Max.X), float32(top)))
-					p.LineTo(f32.Pt(float32(center), float32(top)))
+					p.MoveTo(f32.Pt(gutter.Max, float32(top+lineHeight)))
+					p.LineTo(f32.Pt(source.Max, float32(top+lineHeight)))
+					p.LineTo(f32.Pt(source.Max, float32(top)))
+					p.LineTo(f32.Pt(gutter.Max, float32(top)))
 					pin := float32(top)
 					for i, r := range ranges {
 						if mouseInDisasm {
@@ -299,18 +322,19 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 								highlight = true
 							}
 						}
+						const S = 0.1
 						p.CubeTo(
-							f32.Pt(float32(center-50), pin),
-							f32.Pt(float32(center-50), float32(r.From*lineHeight)),
-							f32.Pt(float32(center-150), float32(r.From*lineHeight)))
-						p.LineTo(f32.Pt(float32(gutter), float32(r.From*lineHeight)))
-						p.LineTo(f32.Pt(float32(gutter), float32(r.To*lineHeight)))
-						p.LineTo(f32.Pt(float32(center-150), float32(r.To*lineHeight)))
+							f32.Pt(gutter.Lerp(0.5-S), pin),
+							f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)),
+							f32.Pt(gutter.Min, float32(r.From*lineHeight)))
+						p.LineTo(f32.Pt(disasm.Min, float32(r.From*lineHeight)))
+						p.LineTo(f32.Pt(disasm.Min, float32(r.To*lineHeight)))
+						p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)))
 						pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
 						p.CubeTo(
-							f32.Pt(float32(center-50), float32(r.To*lineHeight)),
-							f32.Pt(float32(center-50), pin),
-							f32.Pt(float32(center), pin))
+							f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)),
+							f32.Pt(gutter.Lerp(0.5-S), pin),
+							f32.Pt(source.Min, pin))
 					}
 					alpha := float32(0.4)
 					if highlight {
@@ -329,16 +353,20 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	disasmGtx.Constraints = layout.Exact(image.Point{X: gtx.Constraints.Max.X / 2, Y: gtx.Constraints.Max.Y})
 	disasmGtx.Constraints.Min.X = 0
 	for i, ix := range ui.Match.Code {
-		stack := op.Offset(image.Pt(gutter, i*lineHeight)).Push(gtx.Ops)
+		stack := op.Offset(image.Pt(int(disasm.Min), i*lineHeight)).Push(gtx.Ops)
 		lineText.Text = ix.Text
 		lineText.Layout(disasmGtx)
+		stack.Pop()
+
 		if ix.RefOffset != 0 {
+			stack := op.Offset(image.Pt(int(jump.Max), i*lineHeight)).Push(gtx.Ops)
+
 			var path clip.Path
 			path.Begin(gtx.Ops)
-			path.MoveTo(f32.Pt(float32(-lineHeight/2), float32(lineHeight/2)))
-			path.LineTo(f32.Pt(float32(-lineHeight/2-lineHeight/2*ix.RefStack), float32(lineHeight/2)))
-			path.LineTo(f32.Pt(float32(-lineHeight/2-lineHeight/2*ix.RefStack), float32(lineHeight/2+ix.RefOffset*lineHeight)))
-			path.LineTo(f32.Pt(float32(-lineHeight), float32(lineHeight/2+ix.RefOffset*lineHeight)))
+			path.MoveTo(f32.Pt(0, float32(lineHeight/2)))
+			path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight/2)))
+			path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight/2+ix.RefOffset*lineHeight)))
+			path.LineTo(f32.Pt(float32(-jumpStep/2), float32(lineHeight/2+ix.RefOffset*lineHeight)))
 			// draw arrow
 			path.Line(f32.Pt(0, float32(lineHeight/4)))
 			path.Line(f32.Pt(float32(lineHeight/3), float32(-lineHeight/4)))
@@ -347,8 +375,9 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 
 			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, 0.8)
 			paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: 2}.Op())
+
+			stack.Pop()
 		}
-		stack.Pop()
 	}
 
 	// source
@@ -357,9 +386,9 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 		if i > 0 {
 			top += lineHeight
 		}
-		stack := op.Offset(image.Pt(center, top)).Push(gtx.Ops)
+		stack := op.Offset(image.Pt(int(source.Min), top)).Push(gtx.Ops)
 		headText.Text = src.File
-		headText.Layout(sourceGtx)
+		headText.Layout(gtx)
 		stack.Pop()
 		top += lineHeight
 		for i, block := range src.Blocks {
@@ -367,14 +396,14 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 				top += lineHeight
 			}
 			for off, line := range block.Lines {
-				stack := op.Offset(image.Pt(center, top)).Push(gtx.Ops)
+				stack := op.Offset(image.Pt(int(source.Min), top)).Push(gtx.Ops)
 				lineText.Text = strconv.Itoa(block.From + off)
-				lineText.Layout(sourceGtx)
+				lineText.Layout(gtx)
 				stack.Pop()
 
-				stack = op.Offset(image.Pt(center+gtx.Metric.Sp(30), top)).Push(gtx.Ops)
+				stack = op.Offset(image.Pt(int(source.Min)+gtx.Metric.Sp(30), top)).Push(gtx.Ops)
 				lineText.Text = line
-				lineText.Layout(sourceGtx)
+				lineText.Layout(gtx)
 				stack.Pop()
 
 				top += lineHeight
