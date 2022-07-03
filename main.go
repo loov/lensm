@@ -319,6 +319,8 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 
 	// relations underlay
 	top := 0
+	var highlightPath *clip.PathSpec
+	var highlightColor color.NRGBA
 	for i, src := range ui.Match.Source {
 		if i > 0 {
 			top += lineHeight
@@ -362,18 +364,28 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 						p.CubeTo(
 							f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)),
 							f32.Pt(gutter.Lerp(0.5-S), pin),
-							f32.Pt(source.Min, pin))
+							f32.Pt(gutter.Max, pin))
 					}
 					alpha := float32(0.4)
+					pathSpec := p.End()
 					if highlight {
 						alpha = 0.8
 					}
 					relationColor := f32color.HSLA(float32(math.Mod(float64((i+1)*(off+1))*math.Phi, 1)), 0.9, 0.8, alpha)
-					paint.FillShape(gtx.Ops, relationColor, clip.Outline{Path: p.End()}.Op())
+					if !highlight {
+						paint.FillShape(gtx.Ops, relationColor, clip.Outline{Path: pathSpec}.Op())
+					} else {
+						highlightPath = &pathSpec
+						highlightColor = relationColor
+					}
 				}
 				top += lineHeight
 			}
 		}
+	}
+	if highlightPath != nil {
+		paint.FillShape(gtx.Ops, highlightColor, clip.Outline{Path: *highlightPath}.Op())
+		paint.FillShape(gtx.Ops, color.NRGBA{A: 0x40}, clip.Stroke{Path: *highlightPath, Width: 2}.Op())
 	}
 
 	// disassembly
