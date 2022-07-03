@@ -25,6 +25,11 @@ func NRGBAHex(hex uint32) color.NRGBA {
 	}
 }
 
+// Gray8 returns the corresponding gray value.
+func Gray8(v byte) color.NRGBA {
+	return color.NRGBA{R: v, G: v, B: v, A: 0xFF}
+}
+
 // RGB returns color based on RGB in range 0..1
 func RGB(r, g, b float32) color.NRGBA {
 	return color.NRGBA{R: sat8(r), G: sat8(g), B: sat8(b), A: 0xFF}

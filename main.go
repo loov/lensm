@@ -300,7 +300,8 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	gutter := BoundsWidth(int(disasm.Max)+pad, gutterWidth)
 	source := BoundsWidth(int(gutter.Max)+pad, blocksWidth*7/10)
 
-	paint.FillShape(gtx.Ops, color.NRGBA{A: 0x10}, clip.Rect{
+	// draw gutter
+	paint.FillShape(gtx.Ops, f32color.Gray8(0xE8), clip.Rect{
 		Min: image.Pt(int(gutter.Min), 0),
 		Max: image.Pt(int(gutter.Max), gtx.Constraints.Max.Y),
 	}.Op())
