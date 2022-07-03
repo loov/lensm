@@ -28,17 +28,28 @@ import (
 	"loov.dev/lensm/internal/f32color"
 )
 
+const N = 44
+
+func Fibonacci(n int) int {
+	if n <= 1 {
+		return n
+	}
+	return Fibonacci(n-1) + Fibonacci(n-2)
+}
+
 func main() {
 	flag.Parse()
 	text := flag.Bool("text", false, "show text output")
 
 	out, err := Parse(Options{
-		Exe:        flag.Arg(0),
-		Filter:     regexp.MustCompile("gioui.org.*decode"),
+		Exe: flag.Arg(0),
+		// Filter:     regexp.MustCompile("gioui.org.*decode"),
+		Filter:     regexp.MustCompile("Fibonacci"),
 		Context:    3,
 		MaxSymbols: 5,
 	})
 	if err != nil {
+		Fibonacci(3)
 		panic(err)
 	}
 
@@ -97,8 +108,8 @@ type UI struct {
 	Matches  widget.List
 	Selected *Match
 
-	ScrollDisasm  widget.Scrollbar
-	ScrollSource  widget.Scrollbar
+	ScrollAsm     widget.Scrollbar
+	ScrollSrc     widget.Scrollbar
 	MousePosition f32.Point
 }
 
@@ -125,7 +136,6 @@ func (ui *UI) Run(w *app.Window) error {
 			}
 		}
 	}
-	return nil
 }
 
 func (ui *UI) Layout(gtx layout.Context) {
@@ -198,8 +208,8 @@ func (ui *UI) layoutCode(gtx layout.Context, match *Match) layout.Dimensions {
 	return MatchUI{
 		Theme:         ui.Theme,
 		Match:         ui.Selected,
-		ScrollDisasm:  &ui.ScrollDisasm,
-		ScrollSource:  &ui.ScrollSource,
+		ScrollAsm:     &ui.ScrollAsm,
+		ScrollSrc:     &ui.ScrollSrc,
 		TextHeight:    unit.Sp(12),
 		LineHeight:    unit.Sp(14),
 		MousePosition: &ui.MousePosition,
@@ -210,8 +220,8 @@ type MatchUI struct {
 	Theme *material.Theme
 	Match *Match
 
-	ScrollDisasm *widget.Scrollbar
-	ScrollSource *widget.Scrollbar
+	ScrollAsm *widget.Scrollbar
+	ScrollSrc *widget.Scrollbar
 
 	TextHeight unit.Sp
 	LineHeight unit.Sp
@@ -232,6 +242,9 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 			*ui.MousePosition = ev.Position
 		}
 	}
+
+	// The layout has the following sections:
+	// JumpLinks
 
 	center := gtx.Constraints.Max.X / 2
 

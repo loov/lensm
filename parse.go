@@ -60,7 +60,8 @@ type SourceBlock struct {
 	Disasm [][]Range // for each line, a range index in Match.Code
 }
 
-var rxRefPC = regexp.MustCompile(`\s0x[0-9a-fA-F]+$`)
+var rxRefAbs = regexp.MustCompile(`\s0x[0-9a-fA-F]+$`)
+var rxRefRel = regexp.MustCompile(`\s\-?[0-9]+\(PC\)$`)
 
 func Parse(opts Options) (*Output, error) {
 	f, err := objfile.Open(opts.Exe)
@@ -100,10 +101,18 @@ func Parse(opts Options) (*Output, error) {
 			File: file,
 		}
 		dis.Decode(symStart, symEnd, relocs, false, func(pc, size uint64, file string, line int, text string) {
+			// TODO: find a better way to calculate the jump target
 			var refPC uint64
-			if match := rxRefPC.FindString(text); match != "" {
+			if match := rxRefAbs.FindString(text); match != "" {
 				if target, err := strconv.ParseInt(match[3:], 16, 64); err == nil {
 					refPC = uint64(target)
+				}
+			} else if match := rxRefRel.FindString(text); match != "" {
+				// TODO: this calculation seems incorrect
+				if target, err := strconv.ParseInt(match[1:len(match)-4], 10, 64); err == nil {
+					refPC = uint64(int64(pc) + target*4)
+				} else {
+					panic(err)
 				}
 			}
 
