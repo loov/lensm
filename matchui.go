@@ -177,8 +177,14 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 	disasmGtx.Constraints = layout.Exact(image.Point{X: gtx.Constraints.Max.X / 2, Y: gtx.Constraints.Max.Y})
 	disasmGtx.Constraints.Min.X = 0
 	for i, ix := range ui.Match.Code {
+
 		stack := op.Offset(image.Pt(int(disasm.Min)+pad/2, i*lineHeight)).Push(gtx.Ops)
 		lineText.Text = ix.Text
+		if highlightDisasmIndex == i {
+			lineText.Font.Weight = text.Heavy
+		} else {
+			lineText.Font.Weight = text.Normal
+		}
 		lineText.Layout(disasmGtx)
 		stack.Pop()
 
@@ -230,6 +236,11 @@ func (ui MatchUI) Layout(gtx layout.Context) layout.Dimensions {
 			}
 			for off, line := range block.Lines {
 				stack := op.Offset(image.Pt(int(source.Min), top)).Push(gtx.Ops)
+				if mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight) {
+					lineText.Font.Weight = text.Heavy
+				} else {
+					lineText.Font.Weight = text.Normal
+				}
 				lineText.Text = strconv.Itoa(block.From + off)
 				lineText.Layout(gtx)
 				stack.Pop()
