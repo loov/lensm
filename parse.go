@@ -149,26 +149,78 @@ func Parse(opts Options) (*Output, error) {
 			sym.Code = append(sym.Code, ix)
 		}
 
-		// TODO: use better jump line layouting algorithm
-		stackLevel := 1
-		stackJump := []uint64{}
+		type jumpInterval struct {
+			index    int
+			ix       *Instruction
+			min, max uint64
+		}
+
+		jumps := []jumpInterval{}
 		for i := range sym.Code {
 			ix := &sym.Code[i]
-			if target, ok := pcToIndex[ix.RefPC]; ok {
-				stackLevel++
-				if sym.CodeMaxStack < stackLevel {
-					sym.CodeMaxStack = stackLevel
+			if ix.RefPC != 0 {
+				target, ok := pcToIndex[ix.RefPC]
+				if !ok {
+					continue
 				}
 				ix.RefOffset = target - i
-				ix.RefStack = stackLevel
-				at, _ := slices.BinarySearch(stackJump, ix.RefPC)
-				stackJump = slices.Insert(stackJump, at, ix.RefPC)
-			}
-			for len(stackJump) > 0 && stackJump[0] <= ix.PC {
-				stackJump = stackJump[1:]
-				stackLevel--
+
+				if ix.PC <= ix.RefPC {
+					jumps = append(jumps, jumpInterval{
+						index: i,
+						ix:    ix,
+						min:   ix.PC,
+						max:   ix.RefPC,
+					})
+				} else {
+					jumps = append(jumps, jumpInterval{
+						index: i,
+						ix:    ix,
+						min:   ix.RefPC,
+						max:   ix.PC,
+					})
+				}
 			}
 		}
+
+		sort.Slice(jumps, func(i, k int) bool {
+			if jumps[i].min == jumps[k].min {
+				return jumps[i].max > jumps[k].max
+			}
+			return jumps[i].min < jumps[k].min
+		})
+
+		stackLayers := []uint64{}
+		insertToStack := func(ix *Instruction, max uint64) {
+			found := false
+			for k, pc := range stackLayers {
+				if pc == 0 {
+					stackLayers[k] = max
+					ix.RefStack = k
+					found = true
+					break
+				}
+			}
+			if !found {
+				sym.CodeMaxStack = len(stackLayers)
+				ix.RefStack = len(stackLayers)
+				stackLayers = append(stackLayers, max)
+			}
+		}
+
+		for _, jump := range jumps {
+			for i, pc := range stackLayers {
+				if pc <= jump.min {
+					stackLayers[i] = 0
+				}
+			}
+			insertToStack(jump.ix, jump.max)
+		}
+		for i := range sym.Code {
+			ix := &sym.Code[i]
+			ix.RefStack = sym.CodeMaxStack - ix.RefStack + 1
+		}
+		sym.CodeMaxStack++
 
 		// remove trailing interrupts from funcs
 		for len(sym.Code) > 0 && strings.HasPrefix(sym.Code[len(sym.Code)-1].Text, "INT ") {
