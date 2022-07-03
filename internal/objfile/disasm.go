@@ -89,11 +89,6 @@ func (e *Entry) Disasm() (*Disasm, error) {
 	return d, nil
 }
 
-func (d *Disasm) Syms() []Sym       { return d.syms }
-func (d *Disasm) TextStart() uint64 { return d.textStart }
-func (d *Disasm) TextEnd() uint64   { return d.textEnd }
-func (d *Disasm) PCLN() Liner       { return d.pcln }
-
 // lookup finds the symbol name containing addr.
 func (d *Disasm) lookup(addr uint64) (name string, base uint64) {
 	i := sort.Search(len(d.syms), func(i int) bool { return addr < d.syms[i].Addr })
