@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sync"
 
 	"gioui.org/app"
 	"gioui.org/font/gofont"
@@ -93,19 +94,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	ui := NewUI(*font)
-	ui.Output = out
+	windows := &Windows{}
 
-	// This creates a new application window and starts the UI.
+	ui := NewUI(windows, *font)
+	ui.Output = out
+	windows.Open("lensm", image.Pt(1400, 900), ui.Run)
+
 	go func() {
-		w := app.NewWindow(
-			app.Title("lensm"),
-			app.Size(unit.Dp(1400), unit.Dp(900)),
-		)
-		if err := ui.Run(w); err != nil {
-			log.Println(err)
-			os.Exit(1)
-		}
+		windows.Wait()
 		os.Exit(0)
 	}()
 
@@ -113,13 +109,39 @@ func main() {
 	app.Main()
 }
 
+type Windows struct {
+	active sync.WaitGroup
+}
+
+func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Window) error) {
+	windows.active.Add(1)
+	go func() {
+		defer windows.active.Done()
+
+		window := app.NewWindow(
+			app.Title(title),
+			app.Size(unit.Dp(sizeDp.X), unit.Dp(sizeDp.Y)),
+		)
+		if err := run(window); err != nil {
+			log.Println(err)
+		}
+	}()
+}
+
+func (windows *Windows) Wait() {
+	windows.active.Wait()
+}
+
 type UI struct {
-	Theme *material.Theme
+	Windows *Windows
+	Theme   *material.Theme
 
 	Output   *Output
 	Matches  widget.List
 	Selected *Match
 	MatchUI  MatchUIState
+
+	OpenInNew widget.Clickable
 }
 
 func fontCollection(path string) []text.FontFace {
@@ -140,8 +162,9 @@ func fontCollection(path string) []text.FontFace {
 	return append(collection, fface)
 }
 
-func NewUI(userfont string) *UI {
+func NewUI(windows *Windows, userfont string) *UI {
 	ui := &UI{}
+	ui.Windows = windows
 	ui.Theme = material.NewTheme(fontCollection(userfont))
 	ui.Matches.List.Axis = layout.Vertical
 	return ui
@@ -170,6 +193,10 @@ func (ui *UI) Layout(gtx layout.Context) {
 		ui.selectMatch(&ui.Output.Matches[0])
 	}
 
+	for ui.OpenInNew.Clicked() {
+		ui.openInNew(gtx)
+	}
+
 	layout.Flex{
 		Axis: layout.Horizontal,
 	}.Layout(gtx,
@@ -195,11 +222,60 @@ func (ui *UI) Layout(gtx layout.Context) {
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints = layout.Exact(gtx.Constraints.Max)
 			if ui.Selected == nil {
-				return material.H4(ui.Theme, "nothing selected").Layout(gtx)
+				return material.H4(ui.Theme, "no matches").Layout(gtx)
 			}
-			return ui.layoutCode(gtx, ui.Selected)
+			return layout.Stack{
+				Alignment: layout.SE,
+			}.Layout(gtx,
+				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+					return ui.layoutCode(gtx, ui.Selected)
+				}),
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					button := material.IconButton(ui.Theme, &ui.OpenInNew, OpenInNewIcon, "Open in separate window")
+					button.Size = 16
+					button.Inset = layout.UniformInset(12)
+					return layout.UniformInset(2).Layout(gtx, button.Layout)
+				}),
+			)
 		}),
 	)
+}
+
+func WidgetWindow(widget layout.Widget) func(*app.Window) error {
+	return func(w *app.Window) error {
+		var ops op.Ops
+		for {
+			select {
+			case e := <-w.Events():
+				switch e := e.(type) {
+				case system.FrameEvent:
+					gtx := layout.NewContext(&ops, e)
+					widget(gtx)
+					e.Frame(gtx.Ops)
+
+				case system.DestroyEvent:
+					return e.Err
+				}
+			}
+		}
+	}
+}
+
+func (ui *UI) openInNew(gtx layout.Context) {
+	state := ui.MatchUI
+	style := MatchUIStyle{
+		Theme:        ui.Theme,
+		Match:        ui.Selected,
+		MatchUIState: &state,
+
+		TextHeight: unit.Sp(12),
+		LineHeight: unit.Sp(14),
+	}
+
+	size := gtx.Constraints.Max
+	size.X = int(float32(size.X) / gtx.Metric.PxPerDp)
+	size.Y = int(float32(size.Y) / gtx.Metric.PxPerDp)
+	ui.Windows.Open(ui.Selected.Name, size, WidgetWindow(style.Layout))
 }
 
 func (ui *UI) layoutMatches(gtx layout.Context) layout.Dimensions {
