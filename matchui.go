@@ -1,10 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"math"
-	"strconv"
 
 	"gioui.org/f32"
 	"gioui.org/gesture"
@@ -47,6 +47,8 @@ type Bounds struct{ Min, Max float32 }
 func BoundsWidth(min, width int) Bounds {
 	return Bounds{Min: float32(min), Max: float32(min + width)}
 }
+
+func (b Bounds) Width() float32 { return b.Max - b.Min }
 
 func (b Bounds) Lerp(p float32) float32 {
 	return b.Min + p*(b.Max-b.Min)
@@ -103,14 +105,6 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		highlightDisasmIndex = int(mousePosition.Y-ui.ScrollAsm) / lineHeight
 	}
 	var highlightRanges []Range
-
-	lineText := material.Label(ui.Theme, ui.TextHeight, "")
-	lineText.Font.Variant = "Mono"
-	lineText.MaxLines = 1
-	headText := material.Label(ui.Theme, ui.TextHeight, "")
-	headText.MaxLines = 1
-	headText.Font.Variant = "Mono"
-	headText.Font.Weight = text.Heavy
 
 	// relations underlay
 	top := int(ui.ScrollSrc)
@@ -186,19 +180,18 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	// disassembly
-	disasmGtx := gtx
-	disasmGtx.Constraints = layout.Exact(image.Point{X: gtx.Constraints.Max.X / 2, Y: gtx.Constraints.Max.Y})
-	disasmGtx.Constraints.Min.X = 0
+	disasmClip := clip.Rect{
+		Min: image.Pt(int(jump.Min), 0),
+		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
+	}.Push(gtx.Ops)
 	for i, ix := range ui.Match.Code {
-		stack := op.Offset(image.Pt(int(disasm.Min)+pad/2, i*lineHeight+int(ui.ScrollAsm))).Push(gtx.Ops)
-		lineText.Text = ix.Text
-		if highlightDisasmIndex == i {
-			lineText.Font.Weight = text.Heavy
-		} else {
-			lineText.Font.Weight = text.Normal
-		}
-		lineText.Layout(disasmGtx)
-		stack.Pop()
+		SourceLine{
+			TopLeft:    image.Pt(int(disasm.Min)+pad/2, i*lineHeight+int(ui.ScrollAsm)),
+			Text:       ix.Text,
+			TextHeight: ui.TextHeight,
+			Bold:       highlightDisasmIndex == i,
+			Color:      f32color.Black,
+		}.Layout(ui.Theme, gtx)
 
 		// jump line
 		if ix.RefOffset != 0 {
@@ -233,42 +226,44 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			stack.Pop()
 		}
 	}
+	disasmClip.Pop()
 
 	// source
+	sourceClip := clip.Rect{
+		Min: image.Pt(int(source.Min), 0),
+		Max: image.Pt(int(source.Max), gtx.Constraints.Max.Y),
+	}.Push(gtx.Ops)
 	top = int(ui.ScrollSrc)
 	for i, src := range ui.Match.Source {
 		if i > 0 {
 			top += lineHeight
 		}
-		stack := op.Offset(image.Pt(int(source.Min), top)).Push(gtx.Ops)
-		headText.Text = src.File
-		headText.Layout(gtx)
-		stack.Pop()
+		SourceLine{
+			TopLeft:    image.Pt(int(source.Min), top),
+			Text:       src.File,
+			TextHeight: ui.TextHeight,
+			Bold:       highlightDisasmIndex == i,
+			Color:      f32color.Black,
+		}.Layout(ui.Theme, gtx)
 		top += lineHeight
 		for i, block := range src.Blocks {
 			if i > 0 {
 				top += lineHeight
 			}
 			for off, line := range block.Lines {
-				stack := op.Offset(image.Pt(int(source.Min), top)).Push(gtx.Ops)
-				if mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight) {
-					lineText.Font.Weight = text.Heavy
-				} else {
-					lineText.Font.Weight = text.Normal
-				}
-				lineText.Text = strconv.Itoa(block.From + off)
-				lineText.Layout(gtx)
-				stack.Pop()
-
-				stack = op.Offset(image.Pt(int(source.Min)+gtx.Metric.Sp(30), top)).Push(gtx.Ops)
-				lineText.Text = line
-				lineText.Layout(gtx)
-				stack.Pop()
-
+				highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
+				SourceLine{
+					TopLeft:    image.Pt(int(source.Min), top),
+					Text:       fmt.Sprintf("%-4d %s", block.From+off, line),
+					TextHeight: ui.TextHeight,
+					Bold:       highlight,
+					Color:      f32color.Black,
+				}.Layout(ui.Theme, gtx)
 				top += lineHeight
 			}
 		}
 	}
+	sourceClip.Pop()
 	sourceContentHeight := top - int(ui.ScrollSrc)
 
 	{
@@ -375,4 +370,32 @@ func rangesContains(ranges []Range, a, b int) bool {
 		}
 	}
 	return false
+}
+
+type SourceLine struct {
+	TopLeft    image.Point
+	Width      int
+	Text       string
+	TextHeight unit.Sp
+	Bold       bool
+	Color      color.NRGBA
+}
+
+func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
+	gtx.Constraints.Min.X = 0
+	gtx.Constraints.Max.X = math.MaxInt
+	gtx.Constraints.Min.Y = 0
+	gtx.Constraints.Max.Y = math.MaxInt
+
+	defer op.Offset(line.TopLeft).Push(gtx.Ops).Pop()
+	if line.Width > 0 {
+		defer clip.Rect{Max: image.Pt(line.Width, gtx.Metric.Sp(line.TextHeight))}.Push(gtx.Ops).Pop()
+	}
+
+	font := text.Font{Variant: "Mono"}
+	if line.Bold {
+		font.Weight = text.Heavy
+	}
+	paint.ColorOp{Color: line.Color}.Add(gtx.Ops)
+	widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, font, line.TextHeight, line.Text)
 }
