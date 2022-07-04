@@ -57,8 +57,8 @@ type Source struct {
 
 type SourceBlock struct {
 	Range
-	Lines  []string
-	Disasm [][]Range // for each line, a range index in Match.Code
+	Lines   []string
+	Related [][]Range // for each line, a range index in Match.Code
 }
 
 var rxRefAbs = regexp.MustCompile(`\s0x[0-9a-fA-F]+$`)
@@ -250,10 +250,10 @@ func Parse(opts Options) (*Output, error) {
 			src := &sym.Source[i]
 			for k := range src.Blocks {
 				block := &src.Blocks[k]
-				block.Disasm = make([][]Range, len(block.Lines))
+				block.Related = make([][]Range, len(block.Lines))
 				for line := block.From; line <= block.To; line++ { // todo check: line <= block.To
 					if refs, ok := lineRefs[fileLine{file: src.File, line: line}]; ok {
-						block.Disasm[line-block.From] = refs.RangesZero()
+						block.Related[line-block.From] = refs.RangesZero()
 					}
 				}
 			}

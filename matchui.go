@@ -77,7 +77,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	// The layout has the following sections:
-	// pad | Jump | pad/2 | Disasm | pad | Gutter | pad | Source | pad
+	// pad | Jump | pad/2 | Related | pad | Gutter | pad | Source | pad
 
 	lineHeight := gtx.Metric.Sp(ui.LineHeight)
 	pad := lineHeight
@@ -87,8 +87,8 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	blocksWidth := (gtx.Constraints.Max.X - gutterWidth - jumpWidth - 4*pad - pad/2)
 
 	jump := BoundsWidth(pad, jumpWidth)
-	disasm := BoundsWidth(int(jump.Max)+pad/2, blocksWidth*3/10)
-	gutter := BoundsWidth(int(disasm.Max)+pad, gutterWidth)
+	asm := BoundsWidth(int(jump.Max)+pad/2, blocksWidth*3/10)
+	gutter := BoundsWidth(int(asm.Max)+pad, gutterWidth)
 	source := BoundsWidth(int(gutter.Max)+pad, blocksWidth*7/10)
 
 	// draw gutter
@@ -98,11 +98,11 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}.Op())
 
 	mousePosition := ui.MousePosition
-	mouseInDisasm := disasm.Contains(mousePosition.X)
+	mouseInAsm := asm.Contains(mousePosition.X)
 	mouseInSource := source.Contains(mousePosition.X)
-	highlightDisasmIndex := -1
-	if mouseInDisasm {
-		highlightDisasmIndex = int(mousePosition.Y-ui.ScrollAsm) / lineHeight
+	highlightAsmIndex := -1
+	if mouseInAsm {
+		highlightAsmIndex = int(mousePosition.Y-ui.ScrollAsm) / lineHeight
 	}
 	var highlightRanges []Range
 
@@ -119,7 +119,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			if i > 0 {
 				top += lineHeight
 			}
-			for off, ranges := range block.Disasm {
+			for off, ranges := range block.Related {
 				if len(ranges) > 0 {
 					highlight := false
 					if mouseInSource {
@@ -137,7 +137,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 					p.LineTo(f32.Pt(gutter.Max, float32(top)))
 					pin := float32(top)
 					for i, r := range ranges {
-						if mouseInDisasm {
+						if mouseInAsm {
 							if float32(r.From*lineHeight)+ui.ScrollAsm <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.ScrollAsm {
 								highlight = true
 								highlightRanges = ranges
@@ -148,8 +148,8 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 							f32.Pt(gutter.Lerp(0.5-S), pin),
 							f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.ScrollAsm),
 							f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.ScrollAsm))
-						p.LineTo(f32.Pt(disasm.Min, float32(r.From*lineHeight)+ui.ScrollAsm))
-						p.LineTo(f32.Pt(disasm.Min, float32(r.To*lineHeight)+ui.ScrollAsm))
+						p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.ScrollAsm))
+						p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.ScrollAsm))
 						p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.ScrollAsm))
 						pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
 						p.CubeTo(
@@ -179,17 +179,17 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		paint.FillShape(gtx.Ops, color.NRGBA{A: 0x40}, clip.Stroke{Path: *highlightPath, Width: 1}.Op())
 	}
 
-	// disassembly
-	disasmClip := clip.Rect{
+	// assembly
+	asmClip := clip.Rect{
 		Min: image.Pt(int(jump.Min), 0),
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
 	for i, ix := range ui.Match.Code {
 		SourceLine{
-			TopLeft:    image.Pt(int(disasm.Min)+pad/2, i*lineHeight+int(ui.ScrollAsm)),
+			TopLeft:    image.Pt(int(asm.Min)+pad/2, i*lineHeight+int(ui.ScrollAsm)),
 			Text:       ix.Text,
 			TextHeight: ui.TextHeight,
-			Bold:       highlightDisasmIndex == i,
+			Bold:       highlightAsmIndex == i,
 			Color:      f32color.Black,
 		}.Layout(ui.Theme, gtx)
 
@@ -214,7 +214,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 
 			width := float32(lineWidth)
 			alpha := float32(0.7)
-			if highlightDisasmIndex >= 0 && (highlightDisasmIndex == i || highlightDisasmIndex == i+ix.RefOffset) {
+			if highlightAsmIndex >= 0 && (highlightAsmIndex == i || highlightAsmIndex == i+ix.RefOffset) {
 				width *= 3
 				alpha = 1
 			} else if rangesContains(highlightRanges, i, i+ix.RefOffset) {
@@ -226,7 +226,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			stack.Pop()
 		}
 	}
-	disasmClip.Pop()
+	asmClip.Pop()
 
 	// source
 	sourceClip := clip.Rect{
@@ -242,7 +242,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			TopLeft:    image.Pt(int(source.Min), top),
 			Text:       src.File,
 			TextHeight: ui.TextHeight,
-			Bold:       highlightDisasmIndex == i,
+			Bold:       highlightAsmIndex == i,
 			Color:      f32color.Black,
 		}.Layout(ui.Theme, gtx)
 		top += lineHeight
@@ -269,7 +269,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	{
 		stack := clip.Rect{
 			Min: image.Pt(int(jump.Min)-pad, 0),
-			Max: image.Pt(int(disasm.Max), gtx.Constraints.Max.Y),
+			Max: image.Pt(int(asm.Max), gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
 
 		// overflow := gtx.Constraints.Max.Y / 3
