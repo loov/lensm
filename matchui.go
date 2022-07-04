@@ -22,15 +22,18 @@ import (
 )
 
 type MatchUIState struct {
-	ScrollAsm float32
-	scrollAsm gesture.Scroll
-	ScrollSrc float32
-	scrollSrc gesture.Scroll
+	asm struct {
+		scroll  float32
+		gesture gesture.Scroll
+		bar     widget.Scrollbar
+	}
+	src struct {
+		scroll  float32
+		gesture gesture.Scroll
+		bar     widget.Scrollbar
+	}
 
-	ScrollbarAsm widget.Scrollbar
-	ScrollbarSrc widget.Scrollbar
-
-	MousePosition f32.Point
+	mousePosition f32.Point
 }
 
 type MatchUIStyle struct {
@@ -71,7 +74,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		if ev, ok := ev.(pointer.Event); ok {
 			switch ev.Type {
 			case pointer.Move:
-				ui.MousePosition = ev.Position
+				ui.mousePosition = ev.Position
 			}
 		}
 	}
@@ -97,17 +100,17 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Max: image.Pt(int(gutter.Max), gtx.Constraints.Max.Y),
 	}.Op())
 
-	mousePosition := ui.MousePosition
+	mousePosition := ui.mousePosition
 	mouseInAsm := asm.Contains(mousePosition.X)
 	mouseInSource := source.Contains(mousePosition.X)
 	highlightAsmIndex := -1
 	if mouseInAsm {
-		highlightAsmIndex = int(mousePosition.Y-ui.ScrollAsm) / lineHeight
+		highlightAsmIndex = int(mousePosition.Y-ui.asm.scroll) / lineHeight
 	}
 	var highlightRanges []Range
 
 	// relations underlay
-	top := int(ui.ScrollSrc)
+	top := int(ui.src.scroll)
 	var highlightPath *clip.PathSpec
 	var highlightColor color.NRGBA
 	for i, src := range ui.Match.Source {
@@ -138,7 +141,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 					pin := float32(top)
 					for i, r := range ranges {
 						if mouseInAsm {
-							if float32(r.From*lineHeight)+ui.ScrollAsm <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.ScrollAsm {
+							if float32(r.From*lineHeight)+ui.asm.scroll <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.asm.scroll {
 								highlight = true
 								highlightRanges = ranges
 							}
@@ -146,14 +149,14 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 						const S = 0.1
 						p.CubeTo(
 							f32.Pt(gutter.Lerp(0.5-S), pin),
-							f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.ScrollAsm),
-							f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.ScrollAsm))
-						p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.ScrollAsm))
-						p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.ScrollAsm))
-						p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.ScrollAsm))
+							f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.asm.scroll),
+							f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.asm.scroll))
+						p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.asm.scroll))
+						p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.asm.scroll))
+						p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.asm.scroll))
 						pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
 						p.CubeTo(
-							f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.ScrollAsm),
+							f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.asm.scroll),
 							f32.Pt(gutter.Lerp(0.5-S), pin),
 							f32.Pt(gutter.Max, pin))
 					}
@@ -186,7 +189,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}.Push(gtx.Ops)
 	for i, ix := range ui.Match.Code {
 		SourceLine{
-			TopLeft:    image.Pt(int(asm.Min)+pad/2, i*lineHeight+int(ui.ScrollAsm)),
+			TopLeft:    image.Pt(int(asm.Min)+pad/2, i*lineHeight+int(ui.asm.scroll)),
 			Text:       ix.Text,
 			TextHeight: ui.TextHeight,
 			Bold:       highlightAsmIndex == i,
@@ -198,7 +201,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			lineWidth := gtx.Metric.Dp(1)
 			align := float32(lineWidth%2) / 2
 			stack := op.Affine(f32.Affine2D{}.Offset(
-				f32.Pt(jump.Max+align, float32(i*lineHeight)+align+ui.ScrollAsm))).Push(gtx.Ops)
+				f32.Pt(jump.Max+align, float32(i*lineHeight)+align+ui.asm.scroll))).Push(gtx.Ops)
 
 			var path clip.Path
 			path.Begin(gtx.Ops)
@@ -233,7 +236,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Min: image.Pt(int(source.Min), 0),
 		Max: image.Pt(int(source.Max), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
-	top = int(ui.ScrollSrc)
+	top = int(ui.src.scroll)
 	for i, src := range ui.Match.Source {
 		if i > 0 {
 			top += lineHeight
@@ -264,7 +267,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		}
 	}
 	sourceClip.Pop()
-	sourceContentHeight := top - int(ui.ScrollSrc)
+	sourceContentHeight := top - int(ui.src.scroll)
 
 	{
 		stack := clip.Rect{
@@ -276,37 +279,37 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		overflow := lineHeight
 		contentTop := float32(-overflow)
 		contentBot := float32(len(ui.Match.Code)*lineHeight + overflow)
-		viewTop := -ui.ScrollAsm
-		viewBot := -ui.ScrollAsm + float32(gtx.Constraints.Max.Y)
+		viewTop := -ui.asm.scroll
+		viewBot := -ui.asm.scroll + float32(gtx.Constraints.Max.Y)
 
-		ui.scrollAsm.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
+		ui.asm.gesture.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
 
 		{
 			stack := op.Offset(image.Pt(int(jump.Min)-pad, 0)).Push(gtx.Ops)
 			gtx := gtx
 			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
-			material.Scrollbar(ui.Theme, &ui.ScrollbarAsm).Layout(gtx, layout.Vertical,
+			material.Scrollbar(ui.Theme, &ui.asm.bar).Layout(gtx, layout.Vertical,
 				(viewTop-contentTop)/(contentBot-contentTop),
 				(viewBot-contentTop)/(contentBot-contentTop),
 			)
 			stack.Pop()
 		}
 
-		if distance := ui.ScrollbarAsm.ScrollDistance(); distance != 0 {
-			ui.ScrollAsm -= distance * (contentBot - contentTop)
+		if distance := ui.asm.bar.ScrollDistance(); distance != 0 {
+			ui.asm.scroll -= distance * (contentBot - contentTop)
 		}
-		if distance := ui.scrollAsm.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
-			ui.ScrollAsm -= float32(distance)
+		if distance := ui.asm.gesture.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
+			ui.asm.scroll -= float32(distance)
 		}
 
-		if -ui.ScrollAsm < contentTop {
-			ui.ScrollAsm = -contentTop
+		if -ui.asm.scroll < contentTop {
+			ui.asm.scroll = -contentTop
 		}
-		if -ui.ScrollAsm+float32(gtx.Constraints.Max.Y) > contentBot {
+		if -ui.asm.scroll+float32(gtx.Constraints.Max.Y) > contentBot {
 			if contentBot < float32(gtx.Constraints.Max.Y) {
-				ui.ScrollAsm = -contentTop
+				ui.asm.scroll = -contentTop
 			} else {
-				ui.ScrollAsm = float32(gtx.Constraints.Max.Y) - contentBot
+				ui.asm.scroll = float32(gtx.Constraints.Max.Y) - contentBot
 			}
 		}
 		stack.Pop()
@@ -322,37 +325,37 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		overflow := lineHeight
 		contentTop := float32(-overflow)
 		contentBot := float32(sourceContentHeight + overflow)
-		viewTop := -ui.ScrollSrc
-		viewBot := -ui.ScrollSrc + float32(gtx.Constraints.Max.Y)
+		viewTop := -ui.src.scroll
+		viewBot := -ui.src.scroll + float32(gtx.Constraints.Max.Y)
 
-		ui.scrollSrc.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
+		ui.src.gesture.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
 
 		{
 			stack := op.Offset(image.Pt(int(source.Max), 0)).Push(gtx.Ops)
 			gtx := gtx
 			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
-			material.Scrollbar(ui.Theme, &ui.ScrollbarSrc).Layout(gtx, layout.Vertical,
+			material.Scrollbar(ui.Theme, &ui.src.bar).Layout(gtx, layout.Vertical,
 				(viewTop-contentTop)/(contentBot-contentTop),
 				(viewBot-contentTop)/(contentBot-contentTop),
 			)
 			stack.Pop()
 		}
 
-		if distance := ui.ScrollbarSrc.ScrollDistance(); distance != 0 {
-			ui.ScrollSrc -= distance * (contentBot - contentTop)
+		if distance := ui.src.bar.ScrollDistance(); distance != 0 {
+			ui.src.scroll -= distance * (contentBot - contentTop)
 		}
-		if distance := ui.scrollSrc.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
-			ui.ScrollSrc -= float32(distance)
+		if distance := ui.src.gesture.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
+			ui.src.scroll -= float32(distance)
 		}
 
-		if -ui.ScrollSrc < contentTop {
-			ui.ScrollSrc = -contentTop
+		if -ui.src.scroll < contentTop {
+			ui.src.scroll = -contentTop
 		}
-		if -ui.ScrollSrc+float32(gtx.Constraints.Max.Y) > contentBot {
+		if -ui.src.scroll+float32(gtx.Constraints.Max.Y) > contentBot {
 			if contentBot < float32(gtx.Constraints.Max.Y) {
-				ui.ScrollSrc = -contentTop
+				ui.src.scroll = -contentTop
 			} else {
-				ui.ScrollSrc = float32(gtx.Constraints.Max.Y) - contentBot
+				ui.src.scroll = float32(gtx.Constraints.Max.Y) - contentBot
 			}
 		}
 		stack.Pop()
