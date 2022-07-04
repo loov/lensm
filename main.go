@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"io/ioutil"
 	"log"
 	"os"
 	"regexp"
 
 	"gioui.org/app"
 	"gioui.org/font/gofont"
+	"gioui.org/font/opentype"
 	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -37,6 +39,7 @@ func main() {
 	text := flag.Bool("text", false, "show text output")
 	filter := flag.String("filter", "", "filter the symbol by regexp")
 	context := flag.Int("context", 3, "source line context")
+	font := flag.String("font", "", "user font")
 	maxMatches := flag.Int("max-matches", 10, "maximum number of matches to parse")
 	flag.Parse()
 	exename := flag.Arg(0)
@@ -90,7 +93,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	ui := NewUI()
+	ui := NewUI(*font)
 	ui.Output = out
 
 	// This creates a new application window and starts the UI.
@@ -119,9 +122,27 @@ type UI struct {
 	MatchUI  MatchUIState
 }
 
-func NewUI() *UI {
+func fontCollection(path string) []text.FontFace {
+	collection := gofont.Collection()
+	if path == "" {
+		return collection
+	}
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse font: %v", err))
+	}
+	face, err := opentype.Parse(b)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse font: %v", err))
+	}
+	fnt := text.Font{Variant: "Mono", Weight: text.Normal}
+	fface := text.FontFace{Font: fnt, Face: face}
+	return append(collection, fface)
+}
+
+func NewUI(userfont string) *UI {
 	ui := &UI{}
-	ui.Theme = material.NewTheme(gofont.Collection())
+	ui.Theme = material.NewTheme(fontCollection(userfont))
 	ui.Matches.List.Axis = layout.Vertical
 	return ui
 }
