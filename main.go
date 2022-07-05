@@ -25,19 +25,7 @@ import (
 	"gioui.org/widget/material"
 )
 
-const N = 44
-
-func Fibonacci(n int) int {
-	if n <= 1 {
-		return n
-	}
-	return Fibonacci(n-1) + Fibonacci(n-2)
-}
-
-var _ = Fibonacci(0)
-
 func main() {
-	text := flag.Bool("text", false, "show text output")
 	filter := flag.String("filter", "", "filter the symbol by regexp")
 	context := flag.Int("context", 3, "source line context")
 	font := flag.String("font", "", "user font")
@@ -64,34 +52,6 @@ func main() {
 	})
 	if err != nil {
 		panic(err)
-	}
-
-	if *text {
-		for _, symbol := range out.Matches {
-			fmt.Printf("\n\n// func %v (%v)\n", symbol.Name, symbol.File)
-			for _, ix := range symbol.Code {
-				if ix.RefPC != 0 {
-					fmt.Printf("    %-60v %v@%3v %08x --> %08x\n", ix.Text, ix.File, ix.Line, ix.PC, ix.RefPC)
-				} else {
-					fmt.Printf("    %-60v %v@%3v %08x\n", ix.Text, ix.File, ix.Line, ix.PC)
-				}
-			}
-
-			fmt.Printf("// CONTEXT\n")
-			for _, source := range symbol.Source {
-				fmt.Printf("// FILE  %v\n", source.File)
-				for i, block := range source.Blocks {
-					if i > 0 {
-						fmt.Printf("...:\n")
-					}
-					for line, text := range block.Lines {
-						fmt.Printf("%3d:  %v\n", block.From+line, text)
-					}
-				}
-			}
-		}
-		fmt.Println("MORE", out.More)
-		os.Exit(0)
 	}
 
 	windows := &Windows{}
