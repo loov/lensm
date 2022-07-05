@@ -96,10 +96,12 @@ type UI struct {
 	Windows *Windows
 	Theme   *material.Theme
 
-	Output   *Output
-	Matches  widget.List
-	Selected *Match
-	MatchUI  MatchUIState
+	Output      *Output
+	MatchesEnum widget.Enum
+	Matches     widget.List
+	Selected    *Match
+
+	MatchUI MatchUIState
 
 	OpenInNew widget.Clickable
 }
@@ -244,10 +246,12 @@ func (ui *UI) layoutMatches(gtx layout.Context) layout.Dimensions {
 		n += 1
 	}
 
-	for i := range ui.Output.Matches {
-		match := &ui.Output.Matches[i]
-		for match.Select.Clicked() {
-			ui.selectMatch(match)
+	if ui.MatchesEnum.Changed() {
+		for i := range ui.Output.Matches {
+			match := &ui.Output.Matches[i]
+			if match.Name == ui.MatchesEnum.Value {
+				ui.selectMatch(match)
+			}
 		}
 	}
 
@@ -261,22 +265,33 @@ func (ui *UI) layoutMatches(gtx layout.Context) layout.Dimensions {
 }
 
 func (ui *UI) layoutMatch(gtx layout.Context, match *Match) layout.Dimensions {
-	return material.Clickable(gtx, &match.Select, func(gtx layout.Context) layout.Dimensions {
+	focus, isFocused := ui.MatchesEnum.Focused()
+	hover, isHovered := ui.MatchesEnum.Hovered()
+
+	isFocused = isFocused && focus == match.Name
+	isHovered = isHovered && hover == match.Name
+
+	return ui.MatchesEnum.Layout(gtx, match.Name, func(gtx layout.Context) layout.Dimensions {
 		style := material.Body2(ui.Theme, match.Name)
 		style.MaxLines = 1
 		style.TextSize = unit.Sp(10)
 		if match == ui.Selected {
 			style.Font.Weight = text.Heavy
 		}
+
 		tgtx := gtx
 		tgtx.Constraints.Max.X = 100000
+		rec := op.Record(gtx.Ops)
 		dims := style.Layout(tgtx) // layout.UniformInset(unit.Dp(8)).Layout(gtx, style.Layout)
-		return layout.Dimensions{
-			Size: image.Point{
-				X: gtx.Constraints.Max.X,
-				Y: dims.Size.Y,
-			},
+		call := rec.Stop()
+
+		if isFocused || isHovered {
+			paint.FillShape(gtx.Ops, hoverBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
 		}
+
+		dims.Size.X = gtx.Constraints.Max.X
+		call.Add(gtx.Ops)
+		return dims
 	})
 }
 
@@ -300,6 +315,7 @@ func (ui *UI) layoutCode(gtx layout.Context, match *Match) layout.Dimensions {
 }
 
 var (
+	hoverBackground     = color.NRGBA{R: 0xA0, G: 0xA0, B: 0xE0, A: 0xFF}
 	secondaryBackground = color.NRGBA{R: 0xF0, G: 0xF0, B: 0xF0, A: 0xFF}
 	splitterColor       = color.NRGBA{R: 0x80, G: 0x80, B: 0x80, A: 0xFF}
 )

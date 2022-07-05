@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"gioui.org/widget"
 	"golang.org/x/exp/slices"
 
 	"loov.dev/lensm/internal/objfile"
@@ -34,9 +33,6 @@ type Match struct {
 	CodeMaxStack int
 
 	Source []Source
-
-	// UI
-	Select widget.Clickable
 }
 
 type Instruction struct {
