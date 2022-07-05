@@ -368,3 +368,12 @@ func (rs *LineSet) RangesZero() []Range {
 }
 
 type Range struct{ From, To int }
+
+func RangesContains(ranges []Range, a, b int) bool {
+	for _, r := range ranges {
+		if (r.From <= a && a < r.To) || (r.From <= b && b < r.To) {
+			return true
+		}
+	}
+	return false
+}

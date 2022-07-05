@@ -1,4 +1,4 @@
-package lensm
+package main
 
 const N = 44
 

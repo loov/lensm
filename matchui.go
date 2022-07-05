@@ -13,7 +13,6 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -43,22 +42,6 @@ type MatchUIStyle struct {
 
 	TextHeight unit.Sp
 	LineHeight unit.Sp
-}
-
-type Bounds struct{ Min, Max float32 }
-
-func BoundsWidth(min, width int) Bounds {
-	return Bounds{Min: float32(min), Max: float32(min + width)}
-}
-
-func (b Bounds) Width() float32 { return b.Max - b.Min }
-
-func (b Bounds) Lerp(p float32) float32 {
-	return b.Min + p*(b.Max-b.Min)
-}
-
-func (b Bounds) Contains(v float32) bool {
-	return b.Min <= v && v <= b.Max
 }
 
 func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
@@ -220,7 +203,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			if highlightAsmIndex >= 0 && (highlightAsmIndex == i || highlightAsmIndex == i+ix.RefOffset) {
 				width *= 3
 				alpha = 1
-			} else if rangesContains(highlightRanges, i, i+ix.RefOffset) {
+			} else if RangesContains(highlightRanges, i, i+ix.RefOffset) {
 				width *= 3
 			}
 			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)
@@ -364,41 +347,4 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{
 		Size: gtx.Constraints.Max,
 	}
-}
-
-func rangesContains(ranges []Range, a, b int) bool {
-	for _, r := range ranges {
-		if (r.From <= a && a < r.To) || (r.From <= b && b < r.To) {
-			return true
-		}
-	}
-	return false
-}
-
-type SourceLine struct {
-	TopLeft    image.Point
-	Width      int
-	Text       string
-	TextHeight unit.Sp
-	Bold       bool
-	Color      color.NRGBA
-}
-
-func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
-	gtx.Constraints.Min.X = 0
-	gtx.Constraints.Max.X = math.MaxInt
-	gtx.Constraints.Min.Y = 0
-	gtx.Constraints.Max.Y = math.MaxInt
-
-	defer op.Offset(line.TopLeft).Push(gtx.Ops).Pop()
-	if line.Width > 0 {
-		defer clip.Rect{Max: image.Pt(line.Width, gtx.Metric.Sp(line.TextHeight))}.Push(gtx.Ops).Pop()
-	}
-
-	font := text.Font{Variant: "Mono"}
-	if line.Bold {
-		font.Weight = text.Heavy
-	}
-	paint.ColorOp{Color: line.Color}.Add(gtx.Ops)
-	widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, font, line.TextHeight, line.Text)
 }
