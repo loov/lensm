@@ -14,6 +14,7 @@ import (
 	"gioui.org/app"
 	"gioui.org/font/gofont"
 	"gioui.org/font/opentype"
+	"gioui.org/io/key"
 	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -241,9 +242,53 @@ func (ui *UI) openInNew(gtx layout.Context) {
 }
 
 func (ui *UI) layoutMatches(gtx layout.Context) layout.Dimensions {
+	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
+	key.InputOp{Tag: &ui.MatchesEnum, Keys: "↓|↑"}.Add(gtx.Ops)
+
 	n := len(ui.Output.Matches)
 	if ui.Output.More {
 		n += 1
+	}
+
+	focusChange := 0
+	for _, ev := range gtx.Queue.Events(&ui.MatchesEnum) {
+		if ev, ok := ev.(key.Event); ok {
+			if ev.State != key.Press {
+				continue
+			}
+			switch ev.Name {
+			case key.NameDownArrow:
+				focusChange++
+			case key.NameUpArrow:
+				focusChange--
+			}
+		}
+	}
+	if focusChange != 0 && len(ui.Output.Matches) > 0 {
+		selectedIndex := -1
+		for i := range ui.Output.Matches {
+			match := &ui.Output.Matches[i]
+			if match.Name == ui.MatchesEnum.Value {
+				selectedIndex = i
+				break
+			}
+		}
+		if selectedIndex < 0 {
+			if focusChange > 0 {
+				selectedIndex = -1
+			} else {
+				selectedIndex = len(ui.Output.Matches)
+			}
+		}
+
+		target := selectedIndex + focusChange
+		if target < 0 {
+			target = 0
+		} else if target >= len(ui.Output.Matches) {
+			target = len(ui.Output.Matches) - 1
+		}
+		match := &ui.Output.Matches[target]
+		ui.selectMatch(match)
 	}
 
 	if ui.MatchesEnum.Changed() {
@@ -299,6 +344,7 @@ func (ui *UI) selectMatch(target *Match) {
 	if ui.Selected == target {
 		return
 	}
+	ui.MatchesEnum.Value = target.Name
 	ui.Selected = target
 	ui.MatchUI.asm.scroll = 100000
 	ui.MatchUI.src.scroll = 100000
