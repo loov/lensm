@@ -27,10 +27,12 @@ import (
 )
 
 func main() {
+	textSize := flag.Int("text-size", 12, "default font size")
 	filter := flag.String("filter", "", "filter the symbol by regexp")
 	context := flag.Int("context", 3, "source line context")
 	font := flag.String("font", "", "user font")
 	maxMatches := flag.Int("max-matches", 10, "maximum number of matches to parse")
+
 	flag.Parse()
 	exename := flag.Arg(0)
 
@@ -57,7 +59,10 @@ func main() {
 
 	windows := &Windows{}
 
-	ui := NewUI(windows, *font)
+	theme := material.NewTheme(fontCollection(*font))
+	theme.TextSize = unit.Sp(*textSize)
+
+	ui := NewUI(windows, theme)
 	ui.Output = out
 	windows.Open("lensm", image.Pt(1400, 900), ui.Run)
 
@@ -89,24 +94,6 @@ func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Win
 	}()
 }
 
-func (windows *Windows) Wait() {
-	windows.active.Wait()
-}
-
-type UI struct {
-	Windows *Windows
-	Theme   *material.Theme
-
-	Output      *Output
-	MatchesEnum widget.Enum
-	Matches     widget.List
-	Selected    *Match
-
-	MatchUI MatchUIState
-
-	OpenInNew widget.Clickable
-}
-
 func fontCollection(path string) []text.FontFace {
 	collection := gofont.Collection()
 	if path == "" {
@@ -125,10 +112,28 @@ func fontCollection(path string) []text.FontFace {
 	return append(collection, fface)
 }
 
-func NewUI(windows *Windows, userfont string) *UI {
+func (windows *Windows) Wait() {
+	windows.active.Wait()
+}
+
+type UI struct {
+	Windows *Windows
+	Theme   *material.Theme
+
+	Output      *Output
+	MatchesEnum widget.Enum
+	Matches     widget.List
+	Selected    *Match
+
+	MatchUI MatchUIState
+
+	OpenInNew widget.Clickable
+}
+
+func NewUI(windows *Windows, theme *material.Theme) *UI {
 	ui := &UI{}
 	ui.Windows = windows
-	ui.Theme = material.NewTheme(fontCollection(userfont))
+	ui.Theme = theme
 	ui.Matches.List.Axis = layout.Vertical
 	return ui
 }
@@ -231,8 +236,8 @@ func (ui *UI) openInNew(gtx layout.Context) {
 		Match:        ui.Selected,
 		MatchUIState: &state,
 
-		TextHeight: unit.Sp(12),
-		LineHeight: unit.Sp(14),
+		TextHeight: ui.Theme.TextSize,
+		LineHeight: ui.Theme.TextSize * 14 / 12,
 	}
 
 	size := gtx.Constraints.Max
@@ -355,8 +360,8 @@ func (ui *UI) layoutCode(gtx layout.Context, match *Match) layout.Dimensions {
 		Theme:        ui.Theme,
 		Match:        ui.Selected,
 		MatchUIState: &ui.MatchUI,
-		TextHeight:   unit.Sp(12),
-		LineHeight:   unit.Sp(14),
+		TextHeight:   ui.Theme.TextSize,
+		LineHeight:   ui.Theme.TextSize * 14 / 12,
 	}.Layout(gtx)
 }
 
