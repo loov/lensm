@@ -3,7 +3,7 @@ module loov.dev/lensm
 go 1.18
 
 require (
-	gioui.org v0.0.0-20220702185126-0057e871d070
+	gioui.org v0.0.0-20220707073643-b4acc239cd5b
 	golang.org/x/arch v0.0.0-20220412001346-fc48f9fe4c15
 	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
 	golang.org/x/exp/shiny v0.0.0-20220613132600-b0d781184e0d
