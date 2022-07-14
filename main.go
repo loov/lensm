@@ -14,7 +14,6 @@ import (
 	"gioui.org/app"
 	"gioui.org/font/gofont"
 	"gioui.org/font/opentype"
-	"gioui.org/io/key"
 	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -120,10 +119,9 @@ type UI struct {
 	Windows *Windows
 	Theme   *material.Theme
 
-	Output      *Output
-	MatchesEnum widget.Enum
-	Matches     widget.List
-	Selected    *Match
+	Output   *Output
+	Matches  SelectList
+	Selected *Match
 
 	MatchUI MatchUIState
 
@@ -134,7 +132,7 @@ func NewUI(windows *Windows, theme *material.Theme) *UI {
 	ui := &UI{}
 	ui.Windows = windows
 	ui.Theme = theme
-	ui.Matches.List.Axis = layout.Vertical
+	ui.Matches = VerticalSelectList(unit.Dp(theme.TextSize) + 4)
 	return ui
 }
 
@@ -158,7 +156,7 @@ func (ui *UI) Run(w *app.Window) error {
 
 func (ui *UI) Layout(gtx layout.Context) {
 	if ui.Selected == nil && len(ui.Output.Matches) > 0 {
-		ui.selectMatch(&ui.Output.Matches[0])
+		ui.selectIndex(0)
 	}
 
 	for ui.OpenInNew.Clicked() {
@@ -247,110 +245,33 @@ func (ui *UI) openInNew(gtx layout.Context) {
 }
 
 func (ui *UI) layoutMatches(gtx layout.Context) layout.Dimensions {
-	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
-	key.InputOp{Tag: &ui.MatchesEnum, Keys: "↓|↑"}.Add(gtx.Ops)
-
-	n := len(ui.Output.Matches)
-	if ui.Output.More {
-		n += 1
-	}
-
-	focusChange := 0
-	for _, ev := range gtx.Queue.Events(&ui.MatchesEnum) {
-		if ev, ok := ev.(key.Event); ok {
-			if ev.State != key.Press {
-				continue
-			}
-			switch ev.Name {
-			case key.NameDownArrow:
-				focusChange++
-			case key.NameUpArrow:
-				focusChange--
-			}
-		}
-	}
-	if focusChange != 0 && len(ui.Output.Matches) > 0 {
-		selectedIndex := -1
-		for i := range ui.Output.Matches {
-			match := &ui.Output.Matches[i]
-			if match.Name == ui.MatchesEnum.Value {
-				selectedIndex = i
-				break
-			}
-		}
-		if selectedIndex < 0 {
-			if focusChange > 0 {
-				selectedIndex = -1
-			} else {
-				selectedIndex = len(ui.Output.Matches)
-			}
-		}
-
-		target := selectedIndex + focusChange
-		if target < 0 {
-			target = 0
-		} else if target >= len(ui.Output.Matches) {
-			target = len(ui.Output.Matches) - 1
-		}
-		match := &ui.Output.Matches[target]
-		ui.selectMatch(match)
-	}
-
-	if ui.MatchesEnum.Changed() {
-		for i := range ui.Output.Matches {
-			match := &ui.Output.Matches[i]
-			if match.Name == ui.MatchesEnum.Value {
-				ui.selectMatch(match)
-			}
-		}
-	}
-
-	return material.List(ui.Theme, &ui.Matches).Layout(gtx, n,
-		func(gtx layout.Context, index int) layout.Dimensions {
-			if index >= len(ui.Output.Matches) {
-				return material.Body2(ui.Theme, "... too many matches ...").Layout(gtx)
-			}
-			return ui.layoutMatch(gtx, &ui.Output.Matches[index])
-		})
+	dims := ui.Matches.Layout(ui.Theme, gtx, len(ui.Output.Matches),
+		StringListItem(ui.Theme, &ui.Matches, func(index int) string {
+			return ui.Output.Matches[index].Name
+		}))
+	ui.selectIndex(ui.Matches.Selected)
+	return dims
 }
 
-func (ui *UI) layoutMatch(gtx layout.Context, match *Match) layout.Dimensions {
-	focus, isFocused := ui.MatchesEnum.Focused()
-	hover, isHovered := ui.MatchesEnum.Hovered()
-
-	isFocused = isFocused && focus == match.Name
-	isHovered = isHovered && hover == match.Name
-
-	return ui.MatchesEnum.Layout(gtx, match.Name, func(gtx layout.Context) layout.Dimensions {
-		style := material.Body2(ui.Theme, match.Name)
-		style.MaxLines = 1
-		style.TextSize = unit.Sp(10)
-		if match == ui.Selected {
-			style.Font.Weight = text.Heavy
-		}
-
-		tgtx := gtx
-		tgtx.Constraints.Max.X = 100000
-		rec := op.Record(gtx.Ops)
-		dims := style.Layout(tgtx) // layout.UniformInset(unit.Dp(8)).Layout(gtx, style.Layout)
-		call := rec.Stop()
-
-		if isFocused || isHovered {
-			paint.FillShape(gtx.Ops, hoverBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
-		}
-
-		dims.Size.X = gtx.Constraints.Max.X
-		call.Add(gtx.Ops)
-		return dims
-	})
-}
-
-func (ui *UI) selectMatch(target *Match) {
-	if ui.Selected == target {
+func (ui *UI) selectIndex(target int) {
+	if target < 0 || target >= len(ui.Output.Matches) {
+		ui.Selected = nil
+		ui.Matches.Selected = -1
+		ui.resetScroll()
 		return
 	}
-	ui.MatchesEnum.Value = target.Name
-	ui.Selected = target
+
+	match := &ui.Output.Matches[target]
+	ui.Matches.Selected = target
+	if ui.Selected == match {
+		return
+	}
+
+	ui.Selected = match
+	ui.resetScroll()
+}
+
+func (ui *UI) resetScroll() {
 	ui.MatchUI.asm.scroll = 100000
 	ui.MatchUI.src.scroll = 100000
 }
