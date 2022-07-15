@@ -20,7 +20,9 @@ import (
 	"loov.dev/lensm/internal/f32color"
 )
 
-type MatchUIState struct {
+type CodeUI struct {
+	*Code
+
 	asm struct {
 		scroll  float32
 		gesture gesture.Scroll
@@ -35,25 +37,37 @@ type MatchUIState struct {
 	mousePosition f32.Point
 }
 
-type MatchUIStyle struct {
+func (ui *CodeUI) Loaded() bool {
+	return ui.Code != nil
+}
+
+func (ui *CodeUI) ResetScroll() {
+	ui.asm.scroll = 100000
+	ui.src.scroll = 100000
+}
+
+type CodeUIStyle struct {
+	*CodeUI
+
 	Theme *material.Theme
-	Match *Match
-	*MatchUIState
 
 	TextHeight unit.Sp
 	LineHeight unit.Sp
 }
 
-func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
+func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	gtx.Constraints = layout.Exact(gtx.Constraints.Max)
+	if ui.Code == nil {
+		return layout.Dimensions{Size: gtx.Constraints.Max}
+	}
 
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
 	pointer.InputOp{
-		Tag:   ui.Match,
+		Tag:   ui.Code,
 		Types: pointer.Move,
 	}.Add(gtx.Ops)
-	for _, ev := range gtx.Queue.Events(ui.Match) {
+	for _, ev := range gtx.Queue.Events(ui.Code) {
 		if ev, ok := ev.(pointer.Event); ok {
 			switch ev.Type {
 			case pointer.Move:
@@ -68,9 +82,9 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	lineHeight := gtx.Metric.Sp(ui.LineHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
-	jumpWidth := jumpStep * ui.Match.CodeMaxStack
+	jumpWidth := jumpStep * ui.Code.IxMaxJump
 	gutterWidth := lineHeight * 8
-	blocksWidth := (gtx.Constraints.Max.X - gutterWidth - jumpWidth - 4*pad - pad/2)
+	blocksWidth := gtx.Constraints.Max.X - gutterWidth - jumpWidth - 4*pad - pad/2
 
 	jump := BoundsWidth(pad, jumpWidth)
 	asm := BoundsWidth(int(jump.Max)+pad/2, blocksWidth*3/10)
@@ -90,13 +104,13 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	if mouseInAsm {
 		highlightAsmIndex = int(mousePosition.Y-ui.asm.scroll) / lineHeight
 	}
-	var highlightRanges []Range
+	var highlightRanges []LineRange
 
 	// relations underlay
 	top := int(ui.src.scroll)
 	var highlightPath *clip.PathSpec
 	var highlightColor color.NRGBA
-	for i, src := range ui.Match.Source {
+	for i, src := range ui.Code.Source {
 		if i > 0 {
 			top += lineHeight
 		}
@@ -170,7 +184,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Min: image.Pt(int(jump.Min), 0),
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
-	for i, ix := range ui.Match.Code {
+	for i, ix := range ui.Code.Ixs {
 		SourceLine{
 			TopLeft:    image.Pt(int(asm.Min)+pad/2, i*lineHeight+int(ui.asm.scroll)),
 			Text:       ix.Text,
@@ -203,7 +217,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			if highlightAsmIndex >= 0 && (highlightAsmIndex == i || highlightAsmIndex == i+ix.RefOffset) {
 				width *= 3
 				alpha = 1
-			} else if RangesContains(highlightRanges, i, i+ix.RefOffset) {
+			} else if LineRangesContain(highlightRanges, i, i+ix.RefOffset) {
 				width *= 3
 			}
 			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)
@@ -220,7 +234,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Max: image.Pt(int(source.Max), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
 	top = int(ui.src.scroll)
-	for i, src := range ui.Match.Source {
+	for i, src := range ui.Code.Source {
 		if i > 0 {
 			top += lineHeight
 		}
@@ -261,7 +275,7 @@ func (ui MatchUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		// overflow := gtx.Constraints.Max.Y / 3
 		overflow := lineHeight
 		contentTop := float32(-overflow)
-		contentBot := float32(len(ui.Match.Code)*lineHeight + overflow)
+		contentBot := float32(len(ui.Code.Ixs)*lineHeight + overflow)
 		viewTop := -ui.asm.scroll
 		viewBot := -ui.asm.scroll + float32(gtx.Constraints.Max.Y)
 

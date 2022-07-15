@@ -18,7 +18,8 @@ import (
 	"gioui.org/widget/material"
 )
 
-func VerticalSelectList(itemHeight unit.Dp) SelectList {
+// NewVerticalSelectList creates a new select list with the specified item height.
+func NewVerticalSelectList(itemHeight unit.Dp) SelectList {
 	return SelectList{
 		List: widget.List{
 			List: layout.List{
@@ -29,6 +30,7 @@ func VerticalSelectList(itemHeight unit.Dp) SelectList {
 	}
 }
 
+// SelectList draws a list where items can be selected.
 type SelectList struct {
 	widget.List
 
@@ -40,8 +42,10 @@ type SelectList struct {
 	focused bool
 }
 
+// Focused returns true when the list is in focus.
 func (list *SelectList) Focused() bool { return list.focused }
 
+// Layout draws the list.
 func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length int, element layout.ListElement) layout.Dimensions {
 	return FocusBorder(th, list.focused).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		size := gtx.Constraints.Max
@@ -174,6 +178,7 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 	})
 }
 
+// StringListItem creates a string item drawer that reacts to hover and selection.
 func StringListItem(th *material.Theme, state *SelectList, item func(int) string) layout.ListElement {
 	return func(gtx layout.Context, index int) layout.Dimensions {
 		defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()

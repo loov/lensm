@@ -15,6 +15,7 @@ import (
 	"gioui.org/widget/material"
 )
 
+// SourceLine is a single-line of text.
 type SourceLine struct {
 	TopLeft    image.Point
 	Width      int
@@ -24,6 +25,7 @@ type SourceLine struct {
 	Color      color.NRGBA
 }
 
+// Layout draws the text.
 func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 	gtx.Constraints.Min.X = 0
 	gtx.Constraints.Max.X = math.MaxInt
@@ -41,4 +43,20 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 	}
 	paint.ColorOp{Color: line.Color}.Add(gtx.Ops)
 	widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, font, line.TextHeight, line.Text)
+}
+
+type VerticalLine struct {
+	Width unit.Dp
+	Color color.NRGBA
+}
+
+func (line VerticalLine) Layout(gtx layout.Context) layout.Dimensions {
+	size := image.Point{
+		X: gtx.Metric.Dp(line.Width),
+		Y: gtx.Constraints.Max.Y,
+	}
+	paint.FillShape(gtx.Ops, line.Color, clip.Rect{Max: size}.Op())
+	return layout.Dimensions{
+		Size: size,
+	}
 }
