@@ -80,16 +80,7 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 	if !ui.Code.Loaded() || ui.Code.Name != ui.Symbols.Selected {
 		selected := ui.Symbols.SelectedSymbol
 		if selected != nil {
-			code, ok := ui.Cache[selected]
-			if !ok {
-				var err error
-				code, err = Disassemble(selected.Exe.Disasm, selected, Options{Context: ui.Config.Context})
-				ui.Cache[selected] = code
-				if err != nil {
-					fmt.Fprintln(os.Stderr, code)
-				}
-			}
-			ui.Code.Code = code
+			ui.Code.Code = ui.loadSymbol(selected)
 		}
 	}
 
@@ -113,6 +104,8 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 					return CodeUIStyle{
 						CodeUI: &ui.Code,
 
+						TryOpen: ui.tryOpen,
+
 						Theme:      ui.Theme,
 						TextHeight: ui.Theme.TextSize,
 						LineHeight: ui.Theme.TextSize * 1.2,
@@ -127,6 +120,49 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 			)
 		}),
 	)
+}
+
+func (ui *ExeUI) loadSymbol(sym *Symbol) *Code {
+	code, ok := ui.Cache[sym]
+	if !ok {
+		var err error
+		code, err = Disassemble(sym.Exe.Disasm, sym, Options{Context: ui.Config.Context})
+		ui.Cache[sym] = code
+		if err != nil {
+			fmt.Fprintln(os.Stderr, code)
+		}
+	}
+	return code
+}
+
+func (ui *ExeUI) tryOpen(gtx layout.Context, call string) {
+	var sym *Symbol
+	for _, target := range ui.Exe.Symbols {
+		if target.Name == call {
+			sym = target
+			break
+		}
+	}
+	if sym == nil {
+		return
+	}
+
+	load := ui.loadSymbol(sym)
+	ui.Symbols.Selected = load.Name
+	ui.Symbols.SelectedSymbol = sym
+	ui.Symbols.List.Selected = -1
+	for i, fil := range ui.Symbols.Filtered {
+		if fil == sym {
+			ui.Symbols.List.Selected = i
+			break
+		}
+	}
+
+	ui.Code.Code = load
+
+	if ui.Symbols.Selected == "" {
+		ui.Symbols.SelectIndex(0)
+	}
 }
 
 func (ui *ExeUI) openInNew(gtx layout.Context) {

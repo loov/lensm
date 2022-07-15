@@ -49,7 +49,8 @@ func (ui *CodeUI) ResetScroll() {
 type CodeUIStyle struct {
 	*CodeUI
 
-	Theme *material.Theme
+	TryOpen func(gtx layout.Context, symbol string)
+	Theme   *material.Theme
 
 	TextHeight unit.Sp
 	LineHeight unit.Sp
@@ -63,15 +64,18 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
+	mouseClicked := false
 	pointer.InputOp{
 		Tag:   ui.Code,
-		Types: pointer.Move,
+		Types: pointer.Move | pointer.Press,
 	}.Add(gtx.Ops)
 	for _, ev := range gtx.Queue.Events(ui.Code) {
 		if ev, ok := ev.(pointer.Event); ok {
 			switch ev.Type {
 			case pointer.Move:
 				ui.mousePosition = ev.Position
+			case pointer.Press:
+				mouseClicked = true
 			}
 		}
 	}
@@ -82,7 +86,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	lineHeight := gtx.Metric.Sp(ui.LineHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
-	jumpWidth := jumpStep * ui.Code.IxMaxJump
+	jumpWidth := jumpStep * ui.Code.MaxJump
 	gutterWidth := lineHeight * 8
 	blocksWidth := gtx.Constraints.Max.X - gutterWidth - jumpWidth - 4*pad - pad/2
 
@@ -105,6 +109,16 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		highlightAsmIndex = int(mousePosition.Y-ui.asm.scroll) / lineHeight
 	}
 	var highlightRanges []LineRange
+
+	if InRange(highlightAsmIndex, len(ui.Code.Insts)) {
+		ix := &ui.Code.Insts[highlightAsmIndex]
+		if ui.TryOpen != nil && ix.Call != "" {
+			pointer.CursorPointer.Add(gtx.Ops)
+			if mouseClicked {
+				ui.TryOpen(gtx, ix.Call)
+			}
+		}
+	}
 
 	// relations underlay
 	top := int(ui.src.scroll)
@@ -184,11 +198,12 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Min: image.Pt(int(jump.Min), 0),
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
-	for i, ix := range ui.Code.Ixs {
+	for i, ix := range ui.Code.Insts {
 		SourceLine{
 			TopLeft:    image.Pt(int(asm.Min)+pad/2, i*lineHeight+int(ui.asm.scroll)),
 			Text:       ix.Text,
 			TextHeight: ui.TextHeight,
+			Italic:     ix.Call != "",
 			Bold:       highlightAsmIndex == i,
 			Color:      f32color.Black,
 		}.Layout(ui.Theme, gtx)
@@ -275,7 +290,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		// overflow := gtx.Constraints.Max.Y / 3
 		overflow := lineHeight
 		contentTop := float32(-overflow)
-		contentBot := float32(len(ui.Code.Ixs)*lineHeight + overflow)
+		contentBot := float32(len(ui.Code.Insts)*lineHeight + overflow)
 		viewTop := -ui.asm.scroll
 		viewBot := -ui.asm.scroll + float32(gtx.Constraints.Max.Y)
 

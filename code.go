@@ -19,14 +19,14 @@ type Code struct {
 	Name string
 	File string
 
-	Ixs       []Ix
-	IxMaxJump int
+	Insts   []Inst
+	MaxJump int
 
 	Source []Source
 }
 
-// Ix represents a single instruction.
-type Ix struct {
+// Inst represents a single instruction.
+type Inst struct {
 	PC   uint64
 	Text string
 	File string
@@ -35,6 +35,8 @@ type Ix struct {
 	RefPC     uint64
 	RefOffset int
 	RefStack  int
+
+	Call string
 }
 
 type Source struct {
@@ -45,11 +47,12 @@ type Source struct {
 type SourceBlock struct {
 	LineRange
 	Lines   []string
-	Related [][]LineRange // for each line, a range index in Code.Ixs
+	Related [][]LineRange // for each line, a range index in Code.Insts
 }
 
 var rxRefAbs = regexp.MustCompile(`\s0x[\da-fA-F]+$`)
 var rxRefRel = regexp.MustCompile(`\s-?\d+\(PC\)$`)
+var rxCall = regexp.MustCompile(`^CALL\s+([\w\d\/\.\(\)\*]+)\(SB\)`)
 
 // Disassemble disassembles the specified symbol.
 func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) {
@@ -62,11 +65,12 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 		Name: sym.Name,
 		File: file,
 	}
-	var instructions []Ix
+	var instructions []Inst
 	dis.Decode(sym.Addr, sym.Addr+uint64(sym.Size), sym.Relocs, false,
 		func(pc, size uint64, file string, line int, text string) {
 			// TODO: find a better way to calculate the jump target
 			var refPC uint64
+			var call string
 			if match := rxRefAbs.FindString(text); match != "" {
 				if target, err := strconv.ParseInt(match[3:], 16, 64); err == nil {
 					refPC = uint64(target)
@@ -78,16 +82,19 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 				} else {
 					panic(err)
 				}
+			} else if match := rxCall.FindStringSubmatch(text); len(match) > 0 {
+				call = match[1]
 			}
 
 			if refPC != 0 {
 				needRefPCs[refPC] = struct{}{}
 			}
-			instructions = append(instructions, Ix{
+			instructions = append(instructions, Inst{
 				PC:    pc,
 				Text:  text,
 				File:  file,
 				Line:  line,
+				Call:  call,
 				RefPC: refPC,
 			})
 
@@ -105,21 +112,21 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 	for _, ix := range instructions {
 		if _, ok := needRefPCs[ix.PC]; ok {
 			// add empty line
-			code.Ixs = append(code.Ixs, Ix{})
+			code.Insts = append(code.Insts, Inst{})
 		}
-		pcToIndex[ix.PC] = len(code.Ixs)
-		code.Ixs = append(code.Ixs, ix)
+		pcToIndex[ix.PC] = len(code.Insts)
+		code.Insts = append(code.Insts, ix)
 	}
 
 	type jumpInterval struct {
 		index    int
-		ix       *Ix
+		ix       *Inst
 		min, max uint64
 	}
 
 	var jumps []jumpInterval
-	for i := range code.Ixs {
-		ix := &code.Ixs[i]
+	for i := range code.Insts {
+		ix := &code.Insts[i]
 		if ix.RefPC != 0 {
 			target, ok := pcToIndex[ix.RefPC]
 			if !ok {
@@ -153,7 +160,7 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 	})
 
 	var stackLayers []uint64
-	insertToStack := func(ix *Ix, max uint64) {
+	insertToStack := func(ix *Inst, max uint64) {
 		found := false
 		for k, pc := range stackLayers {
 			if pc == 0 {
@@ -164,7 +171,7 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 			}
 		}
 		if !found {
-			code.IxMaxJump = len(stackLayers)
+			code.MaxJump = len(stackLayers)
 			ix.RefStack = len(stackLayers)
 			stackLayers = append(stackLayers, max)
 		}
@@ -178,17 +185,17 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 		}
 		insertToStack(jump.ix, jump.max)
 	}
-	for i := range code.Ixs {
-		ix := &code.Ixs[i]
-		ix.RefStack = code.IxMaxJump - ix.RefStack + 1
+	for i := range code.Insts {
+		ix := &code.Insts[i]
+		ix.RefStack = code.MaxJump - ix.RefStack + 1
 	}
-	code.IxMaxJump++
+	code.MaxJump++
 
 	// remove trailing interrupts from funcs
-	for len(code.Ixs) > 0 &&
-		strings.HasPrefix(code.Ixs[len(code.Ixs)-1].Text, "INT ") ||
-		code.Ixs[len(code.Ixs)-1].Text == "?" {
-		code.Ixs = code.Ixs[:len(code.Ixs)-1]
+	for len(code.Insts) > 0 &&
+		strings.HasPrefix(code.Insts[len(code.Insts)-1].Text, "INT ") ||
+		code.Insts[len(code.Insts)-1].Text == "?" {
+		code.Insts = code.Insts[:len(code.Insts)-1]
 	}
 
 	// load sources
@@ -201,7 +208,7 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 	}
 
 	lineRefs := map[fileLine]*LineSet{}
-	for i, ix := range code.Ixs {
+	for i, ix := range code.Insts {
 		k := fileLine{file: ix.File, line: ix.Line}
 		n, ok := lineRefs[k]
 		if !ok {

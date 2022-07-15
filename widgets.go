@@ -21,6 +21,7 @@ type SourceLine struct {
 	Width      int
 	Text       string
 	TextHeight unit.Sp
+	Italic     bool
 	Bold       bool
 	Color      color.NRGBA
 }
@@ -38,6 +39,9 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 	}
 
 	font := text.Font{Variant: "Mono"}
+	if line.Italic {
+		font.Style = text.Italic
+	}
 	if line.Bold {
 		font.Weight = text.Heavy
 	}
