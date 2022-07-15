@@ -19,3 +19,5 @@ reload the executable and information when it changes.
 ```
 lensm -watch -filter Fibonacci lensm
 ```
+
+Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
