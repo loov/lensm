@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"loov.dev/lensm/internal/buildcfg"
+	"loov.dev/lensm/internal/go/buildcfg"
 )
 
 func Flagcount(name, usage string, val *int) {

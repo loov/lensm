@@ -19,8 +19,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"loov.dev/lensm/internal/bio"
-	"loov.dev/lensm/internal/goobj"
+	"loov.dev/lensm/internal/go/bio"
+	"loov.dev/lensm/internal/go/goobj"
 )
 
 /*

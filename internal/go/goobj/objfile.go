@@ -24,8 +24,8 @@ import (
 	"fmt"
 	"unsafe"
 
-	"loov.dev/lensm/internal/bio"
-	"loov.dev/lensm/internal/unsafeheader"
+	"loov.dev/lensm/internal/go/bio"
+	"loov.dev/lensm/internal/go/unsafeheader"
 )
 
 // New object file format.

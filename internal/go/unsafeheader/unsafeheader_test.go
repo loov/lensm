@@ -10,7 +10,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"loov.dev/lensm/internal/unsafeheader"
+	"loov.dev/lensm/internal/go/unsafeheader"
 )
 
 // TestTypeMatchesReflectType ensures that the name and layout of the

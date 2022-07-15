@@ -25,7 +25,7 @@ import (
 	"golang.org/x/arch/ppc64/ppc64asm"
 	"golang.org/x/arch/x86/x86asm"
 
-	"loov.dev/lensm/internal/src"
+	"loov.dev/lensm/internal/go/src"
 )
 
 // Disasm is a disassembler for a given File.

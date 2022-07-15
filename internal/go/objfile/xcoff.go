@@ -12,7 +12,7 @@ import (
 	"io"
 	"unicode"
 
-	"loov.dev/lensm/internal/xcoff"
+	"loov.dev/lensm/internal/go/xcoff"
 )
 
 type xcoffFile struct {

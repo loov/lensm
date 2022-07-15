@@ -4,7 +4,7 @@
 
 package objabi
 
-import "loov.dev/lensm/internal/buildcfg"
+import "loov.dev/lensm/internal/go/buildcfg"
 
 // For the linkers. Must match Go definitions.
 

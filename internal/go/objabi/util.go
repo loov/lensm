@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"loov.dev/lensm/internal/buildcfg"
+	"loov.dev/lensm/internal/go/buildcfg"
 )
 
 const (

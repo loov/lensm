@@ -3,7 +3,7 @@ package main
 import (
 	"sort"
 
-	"loov.dev/lensm/internal/objfile"
+	"loov.dev/lensm/internal/go/objfile"
 )
 
 // Exe contains information about the object file.

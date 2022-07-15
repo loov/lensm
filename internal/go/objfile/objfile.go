@@ -13,7 +13,7 @@ import (
 	"os"
 	"sort"
 
-	"loov.dev/lensm/internal/archive"
+	"loov.dev/lensm/internal/go/archive"
 )
 
 type rawFile interface {

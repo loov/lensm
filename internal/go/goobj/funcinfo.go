@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"loov.dev/lensm/internal/objabi"
+	"loov.dev/lensm/internal/go/objabi"
 )
 
 // CUFileIndex is used to index the filenames that are stored in the

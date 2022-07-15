@@ -1,1 +1,1 @@
-Code copied from Go source.
+`go` folder contains code vendored from [Go project](https://go.googlesource.com/go/).

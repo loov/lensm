@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"loov.dev/lensm/internal/buildcfg"
+	"loov.dev/lensm/internal/go/buildcfg"
 )
 
 // WorkingDir returns the current working directory

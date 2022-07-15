@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"loov.dev/lensm/internal/objfile"
+	"loov.dev/lensm/internal/go/objfile"
 )
 
 type Options struct {

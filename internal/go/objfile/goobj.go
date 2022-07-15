@@ -14,10 +14,10 @@ import (
 	"io"
 	"os"
 
-	"loov.dev/lensm/internal/archive"
-	"loov.dev/lensm/internal/goobj"
-	"loov.dev/lensm/internal/objabi"
-	"loov.dev/lensm/internal/sys"
+	"loov.dev/lensm/internal/go/archive"
+	"loov.dev/lensm/internal/go/goobj"
+	"loov.dev/lensm/internal/go/objabi"
+	"loov.dev/lensm/internal/go/sys"
 )
 
 type goobjFile struct {

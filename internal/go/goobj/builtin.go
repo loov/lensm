@@ -4,7 +4,7 @@
 
 package goobj
 
-import "loov.dev/lensm/internal/buildcfg"
+import "loov.dev/lensm/internal/go/buildcfg"
 
 // Builtin (compiler-generated) function references appear
 // frequently. We assign special indices for them, so they
