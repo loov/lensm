@@ -15,6 +15,7 @@ import (
 func main() {
 	textSize := flag.Int("text-size", 12, "default font size")
 	filter := flag.String("filter", "", "filter the symbol by regexp")
+	watch := flag.Bool("watch", false, "auto reload executable")
 	context := flag.Int("context", 3, "source line context")
 	font := flag.String("font", "", "user font")
 
@@ -27,13 +28,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	exe, err := LoadExe(exePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load executable: %v\n", err)
-		flag.Usage()
-		os.Exit(1)
-	}
-
 	windows := &Windows{}
 
 	theme := material.NewTheme(LoadFonts(*font))
@@ -42,10 +36,10 @@ func main() {
 	ui := NewExeUI(windows, theme)
 	ui.Config = ExeUIConfig{
 		Exe:     exePath,
+		Watch:   *watch,
 		Context: *context,
 	}
 	ui.Symbols.SetFilter(*filter)
-	ui.SetExe(exe)
 
 	windows.Open("lensm", image.Pt(1400, 900), ui.Run)
 

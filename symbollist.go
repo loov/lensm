@@ -64,6 +64,7 @@ func (ui *SymbolSelectionList) updateFiltered() {
 		for i, sym := range ui.Filtered {
 			if sym.Name == ui.Selected {
 				ui.List.Selected = i
+				ui.SelectedSymbol = sym
 				// TODO, maybe scroll into view?
 				break
 			}

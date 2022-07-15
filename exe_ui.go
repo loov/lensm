@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"time"
 
 	"gioui.org/app"
 	"gioui.org/io/system"
@@ -15,6 +16,7 @@ import (
 
 type ExeUIConfig struct {
 	Exe     string
+	Watch   bool
 	Context int
 }
 
@@ -23,6 +25,8 @@ type ExeUI struct {
 	Theme   *material.Theme
 
 	Config ExeUIConfig
+
+	LoadError error
 
 	// Currently loaded executable.
 	Exe     *Exe
@@ -47,8 +51,69 @@ func NewExeUI(windows *Windows, theme *material.Theme) *ExeUI {
 
 func (ui *ExeUI) Run(w *app.Window) error {
 	var ops op.Ops
+
+	exited := make(chan struct{})
+	defer close(exited)
+
+	exeLoaded := make(chan *Exe, 1)
+	exeLoadError := make(chan error, 1)
+
+	loadFinished := func(exe *Exe, err error) {
+		if err == nil {
+			select {
+			case <-exeLoaded:
+			default:
+			}
+			exeLoaded <- exe
+		} else {
+			select {
+			case <-exeLoadError:
+			default:
+			}
+			exeLoadError <- err
+		}
+	}
+
+	go func() {
+		var lastModTime time.Time
+		tick := time.NewTicker(100 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			func() {
+				stat, err := os.Stat(ui.Config.Exe)
+				if err != nil {
+					loadFinished(nil, err)
+					return
+				}
+				if stat.ModTime().Equal(lastModTime) {
+					return
+				}
+				lastModTime = stat.ModTime()
+
+				exe, err := LoadExe(ui.Config.Exe)
+				loadFinished(exe, err)
+			}()
+
+			if !ui.Config.Watch {
+				break
+			}
+
+			select {
+			case <-tick.C:
+			case <-exited:
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
+		case err := <-exeLoadError:
+			ui.LoadError = err
+			w.Invalidate()
+		case exe := <-exeLoaded:
+			ui.SetExe(exe)
+			w.Invalidate()
 		case e := <-w.Events():
 			switch e := e.(type) {
 			case system.FrameEvent:
@@ -66,6 +131,14 @@ func (ui *ExeUI) Run(w *app.Window) error {
 func (ui *ExeUI) SetExe(exe *Exe) {
 	ui.Exe = exe
 	ui.Symbols.SetSymbols(exe.Symbols)
+	ui.Cache = map[*Symbol]*Code{}
+	if ui.Symbols.Selected != "" {
+		for _, sym := range exe.Symbols {
+			if sym.Name == ui.Symbols.Selected {
+				ui.Code.Code = ui.loadSymbol(sym)
+			}
+		}
+	}
 }
 
 func (ui *ExeUI) Layout(gtx layout.Context) {
@@ -96,6 +169,10 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 		}),
 		layout.Rigid(VerticalLine{Width: 1, Color: splitterColor}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			if ui.LoadError != nil {
+				return material.Body1(ui.Theme, ui.LoadError.Error()).Layout(gtx)
+			}
+
 			gtx.Constraints = layout.Exact(gtx.Constraints.Max)
 			return layout.Stack{
 				Alignment: layout.SE,
