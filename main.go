@@ -56,6 +56,11 @@ func main() {
 		panic(err)
 	}
 
+	exe, err := ParseExe(exename)
+	if err != nil {
+		panic(err)
+	}
+
 	windows := &Windows{}
 
 	theme := material.NewTheme(fontCollection(*font))
@@ -63,6 +68,7 @@ func main() {
 
 	ui := NewUI(windows, theme)
 	ui.Output = out
+	ui.SetExe(exe)
 	windows.Open("lensm", image.Pt(1400, 900), ui.Run)
 
 	go func() {
@@ -126,6 +132,10 @@ type UI struct {
 	MatchUI MatchUIState
 
 	OpenInNew widget.Clickable
+
+	// new stuff
+	Exe     *Executable
+	Symbols *SymbolList
 }
 
 func NewUI(windows *Windows, theme *material.Theme) *UI {
@@ -133,6 +143,7 @@ func NewUI(windows *Windows, theme *material.Theme) *UI {
 	ui.Windows = windows
 	ui.Theme = theme
 	ui.Matches = VerticalSelectList(unit.Dp(theme.TextSize) + 4)
+	ui.Symbols = NewSymbolList(theme)
 	return ui
 }
 
@@ -154,6 +165,11 @@ func (ui *UI) Run(w *app.Window) error {
 	}
 }
 
+func (ui *UI) SetExe(exe *Executable) {
+	ui.Exe = exe
+	ui.Symbols.SetSymbols(exe.Syms)
+}
+
 func (ui *UI) Layout(gtx layout.Context) {
 	if ui.Selected == nil && len(ui.Output.Matches) > 0 {
 		ui.selectIndex(0)
@@ -166,6 +182,14 @@ func (ui *UI) Layout(gtx layout.Context) {
 	layout.Flex{
 		Axis: layout.Horizontal,
 	}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Dimensions{}
+			gtx.Constraints = layout.Exact(image.Point{
+				X: gtx.Metric.Sp(10 * 20),
+				Y: gtx.Constraints.Max.Y,
+			})
+			return ui.Symbols.Layout(ui.Theme, gtx)
+		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			size := gtx.Constraints.Max
 			gtx.Constraints = layout.Exact(image.Point{
