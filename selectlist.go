@@ -65,6 +65,9 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 		grabbed := false
 
 		itemHeight := gtx.Metric.Dp(list.ItemHeight)
+		if itemHeight == 0 {
+			itemHeight = gtx.Metric.Sp(th.TextSize)
+		}
 
 		pointerClicked := false
 		pointerHovered := false
