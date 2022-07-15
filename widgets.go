@@ -57,7 +57,23 @@ type VerticalLine struct {
 func (line VerticalLine) Layout(gtx layout.Context) layout.Dimensions {
 	size := image.Point{
 		X: gtx.Metric.Dp(line.Width),
-		Y: gtx.Constraints.Max.Y,
+		Y: gtx.Constraints.Min.Y,
+	}
+	paint.FillShape(gtx.Ops, line.Color, clip.Rect{Max: size}.Op())
+	return layout.Dimensions{
+		Size: size,
+	}
+}
+
+type HorizontalLine struct {
+	Height unit.Dp
+	Color  color.NRGBA
+}
+
+func (line HorizontalLine) Layout(gtx layout.Context) layout.Dimensions {
+	size := image.Point{
+		X: gtx.Constraints.Min.X,
+		Y: gtx.Metric.Dp(line.Height),
 	}
 	paint.FillShape(gtx.Ops, line.Color, clip.Rect{Max: size}.Op())
 	return layout.Dimensions{

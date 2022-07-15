@@ -180,7 +180,9 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 					}
 					txt := material.Body1(ui.Theme, ui.Code.Code.Name)
 					txt.TextSize *= 1.2
-					return txt.Layout(gtx)
+
+					inset := layout.Inset{Top: 4, Left: 4, Right: 4, Bottom: 2}
+					return inset.Layout(gtx, txt.Layout)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					if ui.LoadError != nil || !ui.Code.Loaded() {
@@ -188,9 +190,11 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 					}
 					txt := material.Body1(ui.Theme, "file: "+ui.Code.Code.File)
 					txt.Font.Style = text.Italic
-					txt.TextSize *= 1.1
-					return txt.Layout(gtx)
+
+					inset := layout.Inset{Top: 2, Left: 4, Right: 4, Bottom: 4}
+					return inset.Layout(gtx, txt.Layout)
 				}),
+				layout.Rigid(HorizontalLine{Height: 1, Color: splitterColor}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					if ui.LoadError != nil {
 						return layout.Dimensions{}
