@@ -219,7 +219,9 @@ func Parse(opts Options) (*Output, error) {
 		sym.CodeMaxStack++
 
 		// remove trailing interrupts from funcs
-		for len(sym.Code) > 0 && strings.HasPrefix(sym.Code[len(sym.Code)-1].Text, "INT ") {
+		for len(sym.Code) > 0 &&
+			strings.HasPrefix(sym.Code[len(sym.Code)-1].Text, "INT ") ||
+			sym.Code[len(sym.Code)-1].Text == "?" {
 			sym.Code = sym.Code[:len(sym.Code)-1]
 		}
 
