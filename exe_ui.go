@@ -10,6 +10,7 @@ import (
 	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/text"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
@@ -169,30 +170,54 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 		}),
 		layout.Rigid(VerticalLine{Width: 1, Color: splitterColor}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			if ui.LoadError != nil {
-				return material.Body1(ui.Theme, ui.LoadError.Error()).Layout(gtx)
-			}
-
-			gtx.Constraints = layout.Exact(gtx.Constraints.Max)
-			return layout.Stack{
-				Alignment: layout.SE,
-			}.Layout(gtx,
-				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-					return CodeUIStyle{
-						CodeUI: &ui.Code,
-
-						TryOpen: ui.tryOpen,
-
-						Theme:      ui.Theme,
-						TextHeight: ui.Theme.TextSize,
-						LineHeight: ui.Theme.TextSize * 1.2,
-					}.Layout(gtx)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if ui.LoadError != nil {
+						return material.Body1(ui.Theme, ui.LoadError.Error()).Layout(gtx)
+					}
+					if !ui.Code.Loaded() {
+						return layout.Dimensions{}
+					}
+					txt := material.Body1(ui.Theme, ui.Code.Code.Name)
+					txt.TextSize *= 1.2
+					return txt.Layout(gtx)
 				}),
-				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-					button := material.IconButton(ui.Theme, &ui.OpenInNew, OpenInNewIcon, "Open in separate window")
-					button.Size = 16
-					button.Inset = layout.UniformInset(12)
-					return layout.UniformInset(2).Layout(gtx, button.Layout)
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if ui.LoadError != nil || !ui.Code.Loaded() {
+						return layout.Dimensions{}
+					}
+					txt := material.Body1(ui.Theme, "file: "+ui.Code.Code.File)
+					txt.Font.Style = text.Italic
+					txt.TextSize *= 1.1
+					return txt.Layout(gtx)
+				}),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					if ui.LoadError != nil {
+						return layout.Dimensions{}
+					}
+
+					gtx.Constraints = layout.Exact(gtx.Constraints.Max)
+					return layout.Stack{
+						Alignment: layout.SE,
+					}.Layout(gtx,
+						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+							return CodeUIStyle{
+								CodeUI: &ui.Code,
+
+								TryOpen: ui.tryOpen,
+
+								Theme:      ui.Theme,
+								TextHeight: ui.Theme.TextSize,
+								LineHeight: ui.Theme.TextSize * 1.2,
+							}.Layout(gtx)
+						}),
+						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+							button := material.IconButton(ui.Theme, &ui.OpenInNew, OpenInNewIcon, "Open in separate window")
+							button.Size = 16
+							button.Inset = layout.UniformInset(12)
+							return layout.UniformInset(2).Layout(gtx, button.Layout)
+						}),
+					)
 				}),
 			)
 		}),
