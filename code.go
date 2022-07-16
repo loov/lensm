@@ -193,8 +193,8 @@ func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) 
 
 	// remove trailing interrupts from funcs
 	for len(code.Insts) > 0 &&
-		strings.HasPrefix(code.Insts[len(code.Insts)-1].Text, "INT ") ||
-		code.Insts[len(code.Insts)-1].Text == "?" {
+		(strings.HasPrefix(code.Insts[len(code.Insts)-1].Text, "INT ") ||
+			code.Insts[len(code.Insts)-1].Text == "?") {
 		code.Insts = code.Insts[:len(code.Insts)-1]
 	}
 
