@@ -269,6 +269,8 @@ func (ui *ExeUI) tryOpen(gtx layout.Context, call string) {
 	if ui.Symbols.Selected == "" {
 		ui.Symbols.SelectIndex(0)
 	}
+
+	ui.Code.ResetScroll()
 }
 
 func (ui *ExeUI) openInNew(gtx layout.Context) {
