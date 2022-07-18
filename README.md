@@ -21,3 +21,7 @@ lensm -watch -filter Fibonacci lensm
 ```
 
 Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
+
+## Why?
+
+I wrote a blog post at https://www.storj.io/blog/lensm on why and how the core functionality works.
