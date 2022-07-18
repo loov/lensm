@@ -130,6 +130,9 @@ func (ui *ExeUI) Run(w *app.Window) error {
 }
 
 func (ui *ExeUI) SetExe(exe *Exe) {
+	if ui.Exe != nil {
+		_ = ui.Exe.Close()
+	}
 	ui.Exe = exe
 	ui.Symbols.SetSymbols(exe.Symbols)
 	ui.Cache = map[*Symbol]*Code{}
