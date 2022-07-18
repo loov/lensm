@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"time"
 
 	"gioui.org/f32"
 	"gioui.org/gesture"
@@ -27,6 +28,7 @@ type CodeUI struct {
 		scroll  float32
 		gesture gesture.Scroll
 		bar     widget.Scrollbar
+		anim    ScrollAnimation
 	}
 	src struct {
 		scroll  float32
@@ -101,6 +103,10 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Max: image.Pt(int(gutter.Max), gtx.Constraints.Max.Y),
 	}.Op())
 
+	if scroll, ok := ui.asm.anim.Update(gtx); ok {
+		ui.asm.scroll = scroll
+	}
+
 	mousePosition := ui.mousePosition
 	mouseInAsm := asm.Contains(mousePosition.X)
 	mouseInSource := source.Contains(mousePosition.X)
@@ -116,6 +122,14 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			pointer.CursorPointer.Add(gtx.Ops)
 			if mouseClicked {
 				ui.TryOpen(gtx, ix.Call)
+			}
+		}
+		if ix.Call == "" && ix.RefOffset != 0 {
+			pointer.CursorPointer.Add(gtx.Ops)
+			if mouseClicked {
+				// TODO: smooth scroll
+				// highlightAsmIndex -= ix.RefOffset
+				ui.asm.anim.Start(gtx, ui.asm.scroll, ui.asm.scroll-float32(ix.RefOffset*lineHeight), 150*time.Millisecond)
 			}
 		}
 	}
@@ -316,6 +330,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 
 		if -ui.asm.scroll < contentTop {
 			ui.asm.scroll = -contentTop
+			ui.asm.anim.Stop()
 		}
 		if -ui.asm.scroll+float32(gtx.Constraints.Max.Y) > contentBot {
 			if contentBot < float32(gtx.Constraints.Max.Y) {
@@ -323,6 +338,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			} else {
 				ui.asm.scroll = float32(gtx.Constraints.Max.Y) - contentBot
 			}
+			ui.asm.anim.Stop()
 		}
 		stack.Pop()
 	}

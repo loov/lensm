@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"time"
 
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -79,4 +80,48 @@ func (line HorizontalLine) Layout(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{
 		Size: size,
 	}
+}
+
+type ScrollAnimation struct {
+	active   bool
+	from, to float32
+	duration time.Duration
+	start    time.Time
+}
+
+func (anim *ScrollAnimation) Start(gtx layout.Context, from, to float32, duration time.Duration) {
+	anim.active = true
+	anim.from = from
+	anim.to = to
+	anim.duration = duration
+	anim.start = gtx.Now
+	op.InvalidateOp{}.Add(gtx.Ops)
+}
+
+func (anim *ScrollAnimation) Stop() { anim.active = false }
+
+func (anim *ScrollAnimation) Update(gtx layout.Context) (float32, bool) {
+	if !anim.active {
+		return anim.to, false
+	}
+	op.InvalidateOp{}.Add(gtx.Ops)
+
+	elapsed := gtx.Now.Sub(anim.start)
+	if elapsed > anim.duration {
+		anim.active = false
+		return anim.to, true
+	}
+
+	progress := float32(elapsed) / float32(anim.duration)
+	progress = easeInOutCubic(progress)
+
+	pos := anim.from + progress*(anim.to-anim.from)
+	return pos, true
+}
+
+func easeInOutCubic(t float32) float32 {
+	if t < .5 {
+		return 4 * t * t * t
+	}
+	return (t-1)*(2*t-2)*(2*t-2) + 1
 }
