@@ -1,5 +1,7 @@
 # lensm
 
+[![go-recipes](https://raw.githubusercontent.com/nikolaydubina/go-recipes/main/badge.svg?raw=true)](https://github.com/nikolaydubina/go-recipes)
+
 A tool for viewing assembly and source.
 
 ![Screenshot](./screenshot.gif)
