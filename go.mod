@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	gioui.org v0.0.0-20230206180804-32c6a9b10d0b
+	github.com/go-interpreter/wagon v0.6.0
 	golang.org/x/arch v0.2.0
 	golang.org/x/exp v0.0.0-20221012211006-4de253d81b95
 	golang.org/x/exp/shiny v0.0.0-20220827204233-334a2380cb91

@@ -2,7 +2,12 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"sort"
+	"strings"
+
+	"github.com/go-interpreter/wagon/wasm"
 )
 
 var _ Obj = (*WasmObj)(nil)
@@ -19,42 +24,55 @@ func (exe *WasmObj) Symbols() []Symbol { return exe.symbols2 }
 // WasmSymbol contains information about the executable.
 type WasmSymbol struct {
 	obj      *WasmObj
+	name     string
 	sortName string
 }
 
-func (sym *WasmSymbol) Name() string { return sym.Sym.Name }
+func (sym *WasmSymbol) Name() string { return sym.name }
 
 func (exe *WasmObj) Close() error {
 	return nil
 }
 
 func LoadWASM(path string) (*WasmObj, error) {
-	wasm := &WasmObj{}
+	obj := &WasmObj{}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	mod, err := wasm.DecodeModule(bytes.NewReader(data))
+	mod, err := wasm.ReadModule(bytes.NewReader(data),
+		func(name string) (*wasm.Module, error) {
+			return nil, fmt.Errorf("not found %q", name)
+		})
 	if err != nil {
 		return nil, err
 	}
 
-	sort.SliceStable(exe.symbols, func(i, k int) bool {
-		return exe.symbols[i].sortName < exe.symbols[k].sortName
-	})
-	for _, sym := range exe.symbols {
-		exe.symbols2 = append(exe.symbols2, sym)
+	for _, fn := range mod.FunctionIndexSpace {
+		sym := &WasmSymbol{
+			obj:      obj,
+			name:     fn.Name,
+			sortName: strings.ToLower(fn.Name),
+		}
+		obj.symbols = append(obj.symbols, sym)
 	}
 
-	return exe, nil
+	sort.SliceStable(obj.symbols, func(i, k int) bool {
+		return obj.symbols[i].sortName < obj.symbols[k].sortName
+	})
+	for _, sym := range obj.symbols {
+		obj.symbols2 = append(obj.symbols2, sym)
+	}
+
+	return obj, nil
 }
 
-func (sym *WasmObj) Load(opts Options) *Code {
+func (sym *WasmSymbol) Load(opts Options) *Code {
 	return sym.obj.LoadSymbol(sym, opts)
 }
 
-func (exe *WasmObj) LoadSymbol(sym *GoSymbol, opts Options) *Code {
+func (exe *WasmObj) LoadSymbol(sym *WasmSymbol, opts Options) *Code {
 	return &Code{}
 }

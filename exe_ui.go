@@ -53,10 +53,10 @@ func (ui *ExeUI) Run(w *app.Window) error {
 	exited := make(chan struct{})
 	defer close(exited)
 
-	exeLoaded := make(chan *GoObj, 1)
+	exeLoaded := make(chan Obj, 1)
 	exeLoadError := make(chan error, 1)
 
-	loadFinished := func(exe *GoObj, err error) {
+	loadFinished := func(exe Obj, err error) {
 		if err == nil {
 			select {
 			case <-exeLoaded:
@@ -88,7 +88,7 @@ func (ui *ExeUI) Run(w *app.Window) error {
 				}
 				lastModTime = stat.ModTime()
 
-				exe, err := LoadExe(ui.Config.Exe)
+				exe, err := LoadWASM(ui.Config.Exe)
 				loadFinished(exe, err)
 			}()
 

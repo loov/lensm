@@ -67,12 +67,14 @@ func LoadExe(path string) (*GoObj, error) {
 			sortName: sortingName(sym.Name),
 		}
 		exe.symbols = append(exe.symbols, sym)
-		exe.symbols2 = append(exe.symbols2, sym)
 	}
 
 	sort.SliceStable(exe.symbols, func(i, k int) bool {
 		return exe.symbols[i].sortName < exe.symbols[k].sortName
 	})
+	for _, sym := range exe.symbols {
+		exe.symbols2 = append(exe.symbols2, sym)
+	}
 
 	return exe, nil
 }
