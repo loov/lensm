@@ -11,45 +11,6 @@ import (
 	"loov.dev/lensm/internal/go/objfile"
 )
 
-type Options struct {
-	Context int
-}
-
-type Code struct {
-	Name string
-	File string
-
-	Insts   []Inst
-	MaxJump int
-
-	Source []Source
-}
-
-// Inst represents a single instruction.
-type Inst struct {
-	PC   uint64
-	Text string
-	File string
-	Line int
-
-	RefPC     uint64
-	RefOffset int
-	RefStack  int
-
-	Call string
-}
-
-type Source struct {
-	File   string
-	Blocks []SourceBlock
-}
-
-type SourceBlock struct {
-	LineRange
-	Lines   []string
-	Related [][]LineRange // for each line, a range index in Code.Insts
-}
-
 var rxRefAbs = regexp.MustCompile(`\s0x[\da-fA-F]+$`)
 var rxRefRel = regexp.MustCompile(`\s-?\d+\(PC\)$`)
 var rxCall = regexp.MustCompile(`^CALL\s+([\w\d\/\.\(\)\*]+)\(SB\)`)
