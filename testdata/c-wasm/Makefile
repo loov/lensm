@@ -8,7 +8,7 @@ llc:
 
 PHONY := clang
 clang:
-	clang -g --target=wasm32 --no-standard-libraries -Wl,--export-all -Wl,--no-entry -o example-clang.wasm example.c
+	clang -g --target=wasm32 --no-standard-libraries -Wl,--no-entry -o example-clang.wasm example.c
 
 PHONY := odump-clang
 odump:
