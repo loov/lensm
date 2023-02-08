@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"os"
 	"time"
@@ -34,8 +33,7 @@ type ExeUI struct {
 	Symbols *SymbolSelectionList
 
 	// Active code view.
-	Cache map[*Symbol]*Code
-	Code  CodeUI
+	Code CodeUI
 
 	// Other ExeUI elements.
 	OpenInNew widget.Clickable
@@ -46,7 +44,6 @@ func NewExeUI(windows *Windows, theme *material.Theme) *ExeUI {
 	ui.Windows = windows
 	ui.Theme = theme
 	ui.Symbols = NewSymbolList(theme)
-	ui.Cache = make(map[*Symbol]*Code)
 	return ui
 }
 
@@ -135,11 +132,10 @@ func (ui *ExeUI) SetExe(exe *Exe) {
 	}
 	ui.Exe = exe
 	ui.Symbols.SetSymbols(exe.Symbols)
-	ui.Cache = map[*Symbol]*Code{}
 	if ui.Symbols.Selected != "" {
 		for _, sym := range exe.Symbols {
 			if sym.Name == ui.Symbols.Selected {
-				ui.Code.Code = ui.loadSymbol(sym)
+				ui.Code.Code = ui.Exe.LoadSymbol(sym, Options{Context: ui.Config.Context})
 			}
 		}
 	}
@@ -157,7 +153,7 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 	if !ui.Code.Loaded() || ui.Code.Name != ui.Symbols.Selected {
 		selected := ui.Symbols.SelectedSymbol
 		if selected != nil {
-			ui.Code.Code = ui.loadSymbol(selected)
+			ui.Code.Code = ui.Exe.LoadSymbol(selected, Options{Context: ui.Config.Context})
 		}
 	}
 
@@ -231,19 +227,6 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 	)
 }
 
-func (ui *ExeUI) loadSymbol(sym *Symbol) *Code {
-	code, ok := ui.Cache[sym]
-	if !ok {
-		var err error
-		code, err = Disassemble(sym.Exe.Disasm, sym, Options{Context: ui.Config.Context})
-		ui.Cache[sym] = code
-		if err != nil {
-			fmt.Fprintln(os.Stderr, code)
-		}
-	}
-	return code
-}
-
 func (ui *ExeUI) tryOpen(gtx layout.Context, call string) {
 	var sym *Symbol
 	for _, target := range ui.Exe.Symbols {
@@ -256,7 +239,7 @@ func (ui *ExeUI) tryOpen(gtx layout.Context, call string) {
 		return
 	}
 
-	load := ui.loadSymbol(sym)
+	load := ui.Exe.LoadSymbol(sym, Options{Context: ui.Config.Context})
 	ui.Symbols.Selected = load.Name
 	ui.Symbols.SelectedSymbol = sym
 	ui.Symbols.List.Selected = -1

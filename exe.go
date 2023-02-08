@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -13,6 +15,8 @@ type Exe struct {
 	Objfile *objfile.File
 	Disasm  *objfile.Disasm
 	Symbols []*Symbol
+
+	Cache map[*Symbol]*Code
 }
 
 // Symbol contains information about the executable.
@@ -35,14 +39,16 @@ func LoadExe(path string) (*Exe, error) {
 
 	dis, err := f.Disasm()
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 
 	exe := &Exe{
 		Objfile: f,
 		Disasm:  dis,
+		Cache:   make(map[*Symbol]*Code),
 	}
+
 	for _, sym := range dis.Syms() {
 		if sym.Code != 'T' && sym.Code != 't' || sym.Addr < dis.TextStart() {
 			continue
@@ -61,7 +67,21 @@ func LoadExe(path string) (*Exe, error) {
 	return exe, nil
 }
 
-var rxCodeDelimiter = regexp.MustCompile(`[ \*\(\)\.]+`)
+func (exe *Exe) LoadSymbol(sym *Symbol, opts Options) *Code {
+	code, ok := exe.Cache[sym]
+	if !ok {
+		var err error
+		code, err = Disassemble(sym.Exe.Disasm, sym, opts)
+		exe.Cache[sym] = code
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+		}
+	}
+
+	return code
+}
+
+var rxCodeDelimiter = regexp.MustCompile(`[ *().]+`)
 
 func sortingName(sym string) string {
 	sym = strings.ToLower(sym)
