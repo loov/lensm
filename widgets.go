@@ -35,7 +35,8 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 
 	defer op.Offset(line.TopLeft).Push(gtx.Ops).Pop()
 	if line.Width > 0 {
-		defer clip.Rect{Max: image.Pt(line.Width, gtx.Metric.Sp(line.TextHeight))}.Push(gtx.Ops).Pop()
+		maxSize := image.Pt(line.Width, gtx.Metric.Sp(line.TextHeight))
+		defer clip.Rect{Max: maxSize}.Push(gtx.Ops).Pop()
 	}
 
 	font := text.Font{Variant: "Mono"}
