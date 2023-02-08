@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/go-interpreter/wagon/disasm"
 	"github.com/go-interpreter/wagon/wasm"
 )
 
@@ -15,6 +16,8 @@ var _ Symbol = (*WasmSymbol)(nil)
 
 // WasmObj contains information about the object file.
 type WasmObj struct {
+	module *wasm.Module
+
 	symbols  []*WasmSymbol
 	symbols2 []Symbol
 }
@@ -24,11 +27,11 @@ func (exe *WasmObj) Symbols() []Symbol { return exe.symbols2 }
 // WasmSymbol contains information about the executable.
 type WasmSymbol struct {
 	obj      *WasmObj
-	name     string
+	fn       *wasm.Function
 	sortName string
 }
 
-func (sym *WasmSymbol) Name() string { return sym.name }
+func (sym *WasmSymbol) Name() string { return sym.fn.Name }
 
 func (exe *WasmObj) Close() error {
 	return nil
@@ -42,7 +45,7 @@ func LoadWASM(path string) (*WasmObj, error) {
 		return nil, err
 	}
 
-	mod, err := wasm.ReadModule(bytes.NewReader(data),
+	module, err := wasm.ReadModule(bytes.NewReader(data),
 		func(name string) (*wasm.Module, error) {
 			return nil, fmt.Errorf("not found %q", name)
 		})
@@ -50,10 +53,13 @@ func LoadWASM(path string) (*WasmObj, error) {
 		return nil, err
 	}
 
-	for _, fn := range mod.FunctionIndexSpace {
+	obj.module = module
+
+	for _, fn := range module.FunctionIndexSpace {
+		fn := fn
 		sym := &WasmSymbol{
 			obj:      obj,
-			name:     fn.Name,
+			fn:       &fn,
 			sortName: strings.ToLower(fn.Name),
 		}
 		obj.symbols = append(obj.symbols, sym)
@@ -74,5 +80,30 @@ func (sym *WasmSymbol) Load(opts Options) *Code {
 }
 
 func (exe *WasmObj) LoadSymbol(sym *WasmSymbol, opts Options) *Code {
-	return &Code{}
+	dis, err := disasm.NewDisassembly(*sym.fn, exe.module)
+	if err != nil {
+		return &Code{Name: err.Error()}
+	}
+
+	code := &Code{
+		Name: sym.fn.Name,
+	}
+
+	for i, ix := range dis.Code {
+		code.Insts = append(code.Insts, Inst{
+			PC:   uint64(i),
+			Text: wasmInstrToString(ix),
+		})
+	}
+
+	return code
+}
+
+func wasmInstrToString(ix disasm.Instr) string {
+	var str strings.Builder
+	fmt.Fprintf(&str, "%v", ix.Op.Name)
+	for _, im := range ix.Immediates {
+		fmt.Fprintf(&str, " %v", im)
+	}
+	return str.String()
 }
