@@ -3,7 +3,6 @@ package main
 import (
 	"image"
 	"image/color"
-	"math"
 	"time"
 
 	"gioui.org/layout"
@@ -30,9 +29,9 @@ type SourceLine struct {
 // Layout draws the text.
 func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 	gtx.Constraints.Min.X = 0
-	gtx.Constraints.Max.X = math.MaxInt
+	gtx.Constraints.Max.X = maxLineWidth
 	gtx.Constraints.Min.Y = 0
-	gtx.Constraints.Max.Y = math.MaxInt
+	gtx.Constraints.Max.Y = maxLineWidth
 
 	defer op.Offset(line.TopLeft).Push(gtx.Ops).Pop()
 	if line.Width > 0 {

@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"image"
-	"io/ioutil"
 	"log"
+	"os"
 	"sync"
 
 	"gioui.org/app"
@@ -65,7 +65,7 @@ func LoadFonts(userfont string) []text.FontFace {
 	if userfont == "" {
 		return collection
 	}
-	b, err := ioutil.ReadFile(userfont)
+	b, err := os.ReadFile(userfont)
 	if err != nil {
 		panic(fmt.Errorf("failed to parse font: %v", err))
 	}

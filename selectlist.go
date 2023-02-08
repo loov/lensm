@@ -3,7 +3,6 @@ package main
 import (
 	"image"
 	"image/color"
-	"math"
 
 	"gioui.org/f32"
 	"gioui.org/io/key"
@@ -209,7 +208,7 @@ func StringListItem(th *material.Theme, state *SelectList, item func(int) string
 			label.MaxLines = 1
 			label.TextSize = th.TextSize * 8 / 10
 			label.Font.Weight = weight
-			gtx.Constraints.Max.X = math.MaxInt
+			gtx.Constraints.Max.X = maxLineWidth
 			return label.Layout(gtx)
 		})
 	}

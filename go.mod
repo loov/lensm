@@ -1,21 +1,20 @@
 module loov.dev/lensm
 
-go 1.18
+go 1.20
 
 require (
-	gioui.org v0.0.0-20220718084447-e711cbc004b2
-	golang.org/x/arch v0.0.0-20220412001346-fc48f9fe4c15
-	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
-	golang.org/x/exp/shiny v0.0.0-20220613132600-b0d781184e0d
+	gioui.org v0.0.0-20230206180804-32c6a9b10d0b
+	golang.org/x/arch v0.2.0
+	golang.org/x/exp v0.0.0-20221012211006-4de253d81b95
+	golang.org/x/exp/shiny v0.0.0-20220827204233-334a2380cb91
 )
 
 require (
 	gioui.org/cpu v0.0.0-20210817075930-8d6a761490d2 // indirect
 	gioui.org/shader v1.0.6 // indirect
-	github.com/benoitkugler/textlayout v0.1.1 // indirect
-	github.com/gioui/uax v0.2.1-0.20220325163150-e3d987515a12 // indirect
-	github.com/go-text/typesetting v0.0.0-20220411150340-35994bc27a7b // indirect
-	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d // indirect
-	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 // indirect
+	github.com/benoitkugler/textlayout v0.3.0 // indirect
+	github.com/go-text/typesetting v0.0.0-20221214153724-0399769901d5 // indirect
+	golang.org/x/image v0.0.0-20220722155232-062f8c9fd539 // indirect
+	golang.org/x/sys v0.0.0-20220825204002-c680a09ffe64 // indirect
 	golang.org/x/text v0.3.7 // indirect
 )
