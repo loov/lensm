@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"debug/dwarf"
 	"fmt"
 	"os"
 	"sort"
@@ -18,6 +19,7 @@ var _ Symbol = (*WasmSymbol)(nil)
 // WasmObj contains information about the object file.
 type WasmObj struct {
 	module *wasm.Module
+	dwarf  *dwarf.Data
 
 	symbols  []*WasmSymbol
 	symbols2 []Symbol
@@ -53,8 +55,57 @@ func LoadWASM(path string) (*WasmObj, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	obj.module = module
+
+	dwarfdata, err := dwarf.New(
+		module.Custom(".debug_abbrev").Data,
+		nil,
+		nil,
+		module.Custom(".debug_info").Data,
+		module.Custom(".debug_line").Data,
+		nil,
+		module.Custom(".debug_ranges").Data,
+		module.Custom(".debug_str").Data,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	rd := dwarfdata.Reader()
+	for {
+		entry, err := rd.Next()
+		if entry == nil && err == nil {
+			continue
+		}
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
+		if entry.Tag == dwarf.TagCompileUnit {
+			fmt.Println("loading", entry.Field)
+			lrd, err := dwarfdata.LineReader(entry)
+			if err != nil {
+				fmt.Println(err)
+				break
+			}
+
+			for _, fln := range lrd.Files() {
+				fmt.Println(fln)
+			}
+
+			var lineEntry dwarf.LineEntry
+			for lrd.Next(&lineEntry) == nil {
+				fmt.Println(
+					lineEntry.Address,
+					lineEntry.Line,
+					lineEntry.Column,
+					lineEntry.File.Name,
+				)
+			}
+		}
+	}
+
+	obj.dwarf = dwarfdata
 
 	for _, fn := range module.FunctionIndexSpace {
 		fn := fn
