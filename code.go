@@ -55,14 +55,14 @@ var rxRefRel = regexp.MustCompile(`\s-?\d+\(PC\)$`)
 var rxCall = regexp.MustCompile(`^CALL\s+([\w\d\/\.\(\)\*]+)\(SB\)`)
 
 // Disassemble disassembles the specified symbol.
-func Disassemble(dis *objfile.Disasm, sym *Symbol, opts Options) (*Code, error) {
+func Disassemble(dis *objfile.Disasm, sym *GoSymbol, opts Options) (*Code, error) {
 	neededLines := make(map[string]*LineSet)
 
 	file, _, _ := dis.PCLN().PCToLine(sym.Addr)
 	needRefPCs := map[uint64]struct{}{}
 
 	code := &Code{
-		Name: sym.Name,
+		Name: sym.Name(),
 		File: file,
 	}
 	var instructions []Inst

@@ -29,7 +29,7 @@ type ExeUI struct {
 	LoadError error
 
 	// Currently loaded executable.
-	Exe     *Exe
+	Obj     Obj
 	Symbols *SymbolSelectionList
 
 	// Active code view.
@@ -53,10 +53,10 @@ func (ui *ExeUI) Run(w *app.Window) error {
 	exited := make(chan struct{})
 	defer close(exited)
 
-	exeLoaded := make(chan *Exe, 1)
+	exeLoaded := make(chan *GoObj, 1)
 	exeLoadError := make(chan error, 1)
 
-	loadFinished := func(exe *Exe, err error) {
+	loadFinished := func(exe *GoObj, err error) {
 		if err == nil {
 			select {
 			case <-exeLoaded:
@@ -126,15 +126,15 @@ func (ui *ExeUI) Run(w *app.Window) error {
 	}
 }
 
-func (ui *ExeUI) SetExe(exe *Exe) {
-	if ui.Exe != nil {
-		_ = ui.Exe.Close()
+func (ui *ExeUI) SetExe(exe Obj) {
+	if ui.Obj != nil {
+		_ = ui.Obj.Close()
 	}
-	ui.Exe = exe
-	ui.Symbols.SetSymbols(exe.Symbols)
+	ui.Obj = exe
+	ui.Symbols.SetSymbols(exe.Symbols())
 	if ui.Symbols.Selected != "" {
-		for _, sym := range exe.Symbols {
-			if sym.Name == ui.Symbols.Selected {
+		for _, sym := range exe.Symbols() {
+			if sym.Name() == ui.Symbols.Selected {
 				ui.Code.Code = sym.Load(ui.loadOptions())
 			}
 		}
@@ -232,9 +232,9 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 }
 
 func (ui *ExeUI) tryOpen(gtx layout.Context, call string) {
-	var sym *Symbol
-	for _, target := range ui.Exe.Symbols {
-		if target.Name == call {
+	var sym Symbol
+	for _, target := range ui.Obj.Symbols() {
+		if target.Name() == call {
 			sym = target
 			break
 		}

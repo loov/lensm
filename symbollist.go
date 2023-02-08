@@ -15,13 +15,13 @@ import (
 
 // SymbolSelectionList lists symbols for filtering and selection.
 type SymbolSelectionList struct {
-	Symbols     []*Symbol
+	Symbols     []Symbol
 	Filter      widget.Editor
 	FilterError string
-	Filtered    []*Symbol
+	Filtered    []Symbol
 
 	Selected       string
-	SelectedSymbol *Symbol
+	SelectedSymbol Symbol
 
 	List SelectList
 }
@@ -41,12 +41,12 @@ func (ui *SymbolSelectionList) SelectIndex(index int) {
 	}
 
 	ui.List.Selected = index
-	ui.Selected = ui.Filtered[index].Name
+	ui.Selected = ui.Filtered[index].Name()
 	ui.SelectedSymbol = ui.Filtered[index]
 }
 
 // SetSymbols updates the symbol list.
-func (ui *SymbolSelectionList) SetSymbols(symbols []*Symbol) {
+func (ui *SymbolSelectionList) SetSymbols(symbols []Symbol) {
 	ui.Symbols = symbols
 	ui.updateFiltered()
 }
@@ -62,7 +62,7 @@ func (ui *SymbolSelectionList) updateFiltered() {
 	defer func() {
 		ui.List.Selected = -1
 		for i, sym := range ui.Filtered {
-			if sym.Name == ui.Selected {
+			if sym.Name() == ui.Selected {
 				ui.List.Selected = i
 				ui.SelectedSymbol = sym
 				// TODO, maybe scroll into view?
@@ -80,7 +80,7 @@ func (ui *SymbolSelectionList) updateFiltered() {
 
 	ui.Filtered = ui.Filtered[:0]
 	for _, sym := range ui.Symbols {
-		if rx.MatchString(sym.Name) {
+		if rx.MatchString(sym.Name()) {
 			ui.Filtered = append(ui.Filtered, sym)
 		}
 	}
@@ -122,7 +122,7 @@ func (ui *SymbolSelectionList) Layout(th *material.Theme, gtx layout.Context) la
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return ui.List.Layout(th, gtx, len(ui.Filtered),
 				StringListItem(th, &ui.List, func(index int) string {
-					return ui.Filtered[index].Name
+					return ui.Filtered[index].Name()
 				}))
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {

@@ -177,7 +177,7 @@ const (
 	PkgIdxHashed64                      // Short hashed (content-addressable) symbols
 	PkgIdxHashed                        // Hashed (content-addressable) symbols
 	PkgIdxBuiltin                       // Predefined runtime symbols (ex: runtime.newobject)
-	PkgIdxSelf                          // Symbols defined in the current package
+	PkgIdxSelf                          // symbols defined in the current package
 	PkgIdxSpecial  = PkgIdxSelf         // Indices above it has special meanings
 	PkgIdxInvalid  = 0
 	// The index of other referenced packages starts from 1.
