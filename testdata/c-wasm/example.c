@@ -1,4 +1,7 @@
 int internal_add(int a, int b) {
+    if(a > 5) {
+        return a - b;
+    }
     return a + b;
 }
 

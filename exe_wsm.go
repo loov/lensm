@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-interpreter/wagon/disasm"
 	"github.com/go-interpreter/wagon/wasm"
+	"github.com/go-interpreter/wagon/wasm/operators"
 )
 
 var _ Obj = (*WasmObj)(nil)
@@ -90,19 +91,36 @@ func (exe *WasmObj) LoadSymbol(sym *WasmSymbol, opts Options) *Code {
 	}
 
 	for i, ix := range dis.Code {
-		code.Insts = append(code.Insts, Inst{
-			PC:   uint64(i),
-			Text: wasmInstrToString(ix),
-		})
+		code.Insts = append(code.Insts, exe.toInstr(dis, i, ix))
 	}
 
 	return code
 }
 
-func wasmInstrToString(ix disasm.Instr) string {
+func (exe *WasmObj) toInstr(dis *disasm.Disassembly, i int, ix disasm.Instr) Inst {
+	inst := Inst{
+		PC:   uint64(i),
+		Text: ix.Op.Name + " " + exe.immediatesToString(ix.Immediates),
+	}
+
+	switch ix.Op.Code {
+	case operators.Call:
+		target := ix.Immediates[0].(uint32)
+		fn := exe.module.FunctionIndexSpace[target]
+		inst.Text = ix.Op.Name + " " + fn.Name
+		inst.Call = fn.Name
+
+	// TODO: figure out ix.Branches and ix.Block.IfElseIndex (similar)
+	default:
+
+	}
+
+	return inst
+}
+
+func (exe *WasmObj) immediatesToString(xs []interface{}) string {
 	var str strings.Builder
-	fmt.Fprintf(&str, "%v", ix.Op.Name)
-	for _, im := range ix.Immediates {
+	for _, im := range xs {
 		fmt.Fprintf(&str, " %v", im)
 	}
 	return str.String()
