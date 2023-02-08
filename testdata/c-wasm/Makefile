@@ -1,6 +1,6 @@
 PHONY := llc
 llc:
-	clang  --target=wasm32 -emit-llvm -g -c -S example.c
+	clang --target=wasm32 -emit-llvm -g -c -S example.c
 	llc -O0 -march=wasm32 \
 		--filetype=obj \
 		example.s
@@ -8,7 +8,7 @@ llc:
 
 PHONY := clang
 clang:
-	clang --target=wasm32 --no-standard-libraries -Wl,--export-all -Wl,--no-entry -o example-clang.wasm example.c 
+	clang -g --target=wasm32 --no-standard-libraries -Wl,--export-all -Wl,--no-entry -o example-clang.wasm example.c
 
 PHONY := odump-clang
 odump:
