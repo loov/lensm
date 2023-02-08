@@ -67,6 +67,10 @@ func LoadExe(path string) (*Exe, error) {
 	return exe, nil
 }
 
+func (sym *Symbol) Load(opts Options) *Code {
+	return sym.Exe.LoadSymbol(sym, opts)
+}
+
 func (exe *Exe) LoadSymbol(sym *Symbol, opts Options) *Code {
 	code, ok := exe.Cache[sym]
 	if !ok {

@@ -135,10 +135,14 @@ func (ui *ExeUI) SetExe(exe *Exe) {
 	if ui.Symbols.Selected != "" {
 		for _, sym := range exe.Symbols {
 			if sym.Name == ui.Symbols.Selected {
-				ui.Code.Code = ui.Exe.LoadSymbol(sym, Options{Context: ui.Config.Context})
+				ui.Code.Code = sym.Load(ui.loadOptions())
 			}
 		}
 	}
+}
+
+func (ui *ExeUI) loadOptions() Options {
+	return Options{Context: ui.Config.Context}
 }
 
 func (ui *ExeUI) Layout(gtx layout.Context) {
@@ -153,7 +157,7 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 	if !ui.Code.Loaded() || ui.Code.Name != ui.Symbols.Selected {
 		selected := ui.Symbols.SelectedSymbol
 		if selected != nil {
-			ui.Code.Code = ui.Exe.LoadSymbol(selected, Options{Context: ui.Config.Context})
+			ui.Code.Code = selected.Load(ui.loadOptions())
 		}
 	}
 
@@ -239,7 +243,7 @@ func (ui *ExeUI) tryOpen(gtx layout.Context, call string) {
 		return
 	}
 
-	load := ui.Exe.LoadSymbol(sym, Options{Context: ui.Config.Context})
+	load := sym.Load(ui.loadOptions())
 	ui.Symbols.Selected = load.Name
 	ui.Symbols.SelectedSymbol = sym
 	ui.Symbols.List.Selected = -1
