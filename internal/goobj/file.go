@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/go/objfile"
+	"loov.dev/lensm/internal/go/src/objfile"
 )
 
 var _ disasm.File = (*File)(nil)
