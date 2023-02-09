@@ -18,11 +18,12 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
+	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/f32color"
 )
 
 type CodeUI struct {
-	*Code
+	*disasm.Code
 
 	asm struct {
 		scroll  float32
@@ -51,7 +52,7 @@ func (ui *CodeUI) ResetScroll() {
 type CodeUIStyle struct {
 	*CodeUI
 
-	TryOpen func(gtx layout.Context, symbol string)
+	TryOpen func(gtx layout.Context, funcname string)
 	Theme   *material.Theme
 
 	TextHeight unit.Sp
@@ -114,7 +115,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	if mouseInAsm {
 		highlightAsmIndex = int(mousePosition.Y-ui.asm.scroll) / lineHeight
 	}
-	var highlightRanges []LineRange
+	var highlightRanges []disasm.LineRange
 
 	if InRange(highlightAsmIndex, len(ui.Code.Insts)) {
 		ix := &ui.Code.Insts[highlightAsmIndex]
@@ -246,7 +247,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			if highlightAsmIndex >= 0 && (highlightAsmIndex == i || highlightAsmIndex == i+ix.RefOffset) {
 				width *= 3
 				alpha = 1
-			} else if LineRangesContain(highlightRanges, i, i+ix.RefOffset) {
+			} else if disasm.LineRangesContain(highlightRanges, i, i+ix.RefOffset) {
 				width *= 3
 			}
 			jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)

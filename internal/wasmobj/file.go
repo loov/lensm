@@ -1,4 +1,4 @@
-package main
+package wasmobj
 
 import (
 	"bytes"
@@ -8,24 +8,25 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-interpreter/wagon/disasm"
+	wasmdisasm "github.com/go-interpreter/wagon/disasm"
 	"github.com/go-interpreter/wagon/wasm"
 	"github.com/go-interpreter/wagon/wasm/operators"
+
+	"loov.dev/lensm/internal/disasm"
 )
 
-var _ Obj = (*WasmObj)(nil)
-var _ Symbol = (*WasmSymbol)(nil)
+var _ disasm.File = (*WasmObj)(nil)
+var _ disasm.Func = (*WasmSymbol)(nil)
 
 // WasmObj contains information about the object file.
 type WasmObj struct {
 	module *wasm.Module
 	dwarf  *dwarf.Data
 
-	symbols  []*WasmSymbol
-	symbols2 []Symbol
+	funcs []disasm.Func
 }
 
-func (exe *WasmObj) Symbols() []Symbol { return exe.symbols2 }
+func (exe *WasmObj) Funcs() []disasm.Func { return exe.funcs }
 
 // WasmSymbol contains information about the executable.
 type WasmSymbol struct {
@@ -40,7 +41,7 @@ func (exe *WasmObj) Close() error {
 	return nil
 }
 
-func LoadWASM(path string) (*WasmObj, error) {
+func Load(path string) (*WasmObj, error) {
 	obj := &WasmObj{}
 
 	data, err := os.ReadFile(path)
@@ -114,30 +115,27 @@ func LoadWASM(path string) (*WasmObj, error) {
 			fn:       &fn,
 			sortName: strings.ToLower(fn.Name),
 		}
-		obj.symbols = append(obj.symbols, sym)
+		obj.funcs = append(obj.funcs, sym)
 	}
 
-	sort.SliceStable(obj.symbols, func(i, k int) bool {
-		return obj.symbols[i].sortName < obj.symbols[k].sortName
+	sort.SliceStable(obj.funcs, func(i, k int) bool {
+		return strings.ToLower(obj.funcs[i].Name()) < strings.ToLower(obj.funcs[k].Name())
 	})
-	for _, sym := range obj.symbols {
-		obj.symbols2 = append(obj.symbols2, sym)
-	}
 
 	return obj, nil
 }
 
-func (sym *WasmSymbol) Load(opts Options) *Code {
+func (sym *WasmSymbol) Load(opts disasm.Options) *disasm.Code {
 	return sym.obj.LoadSymbol(sym, opts)
 }
 
-func (exe *WasmObj) LoadSymbol(sym *WasmSymbol, opts Options) *Code {
-	dis, err := disasm.NewDisassembly(*sym.fn, exe.module)
+func (exe *WasmObj) LoadSymbol(sym *WasmSymbol, opts disasm.Options) *disasm.Code {
+	dis, err := wasmdisasm.NewDisassembly(*sym.fn, exe.module)
 	if err != nil {
-		return &Code{Name: err.Error()}
+		return &disasm.Code{Name: err.Error()}
 	}
 
-	code := &Code{
+	code := &disasm.Code{
 		Name: sym.fn.Name,
 	}
 
@@ -148,8 +146,8 @@ func (exe *WasmObj) LoadSymbol(sym *WasmSymbol, opts Options) *Code {
 	return code
 }
 
-func (exe *WasmObj) toInstr(dis *disasm.Disassembly, i int, ix disasm.Instr) Inst {
-	inst := Inst{
+func (exe *WasmObj) toInstr(dis *wasmdisasm.Disassembly, i int, ix wasmdisasm.Instr) disasm.Inst {
+	inst := disasm.Inst{
 		PC:   uint64(i),
 		Text: ix.Op.Name + " " + exe.immediatesToString(ix.Immediates),
 	}

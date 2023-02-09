@@ -10,7 +10,7 @@
 // logics, and use this package for the actual reading and writing. Specifically, the
 // code below:
 //
-// - cmd/internal/obj/objfile.go (used by cmd/asm and cmd/compile)
+// - cmd/internal/disasm/objfile.go (used by cmd/asm and cmd/compile)
 // - cmd/internal/objfile/goobj.go (used cmd/nm, cmd/objdump)
 // - cmd/link/internal/loader package (used by cmd/link)
 //

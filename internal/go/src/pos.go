@@ -195,7 +195,7 @@ type PosBase struct {
 	absFilename string // absolute file name, for PC-Line tables
 	symFilename string // cached symbol file name, to avoid repeated string concatenation
 	line, col   uint   // relative line, column number at pos
-	inl         int    // inlining index (see cmd/internal/obj/inl.go)
+	inl         int    // inlining index (see cmd/internal/disasm/inl.go)
 }
 
 // NewFileBase returns a new *PosBase for a file with the given (relative and

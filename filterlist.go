@@ -13,58 +13,62 @@ import (
 	"gioui.org/widget/material"
 )
 
-// SymbolSelectionList lists symbols for filtering and selection.
-type SymbolSelectionList struct {
-	Symbols     []Symbol
+type FilterListItem interface {
+	Name() string
+}
+
+// FilterList lists symbols for filtering and selection.
+type FilterList[T FilterListItem] struct {
+	All         []T
 	Filter      widget.Editor
 	FilterError string
-	Filtered    []Symbol
+	Filtered    []T
 
-	Selected       string
-	SelectedSymbol Symbol
+	Selected     string
+	SelectedItem T
 
 	List SelectList
 }
 
-// NewSymbolList creates a new symbol list with the specified theme.
-func NewSymbolList(theme *material.Theme) *SymbolSelectionList {
-	ui := &SymbolSelectionList{}
+// NewFilterList creates a new list with the specified theme.
+func NewFilterList[T FilterListItem](theme *material.Theme) *FilterList[T] {
+	ui := &FilterList[T]{}
 	ui.Filter.SingleLine = true
 	ui.List = NewVerticalSelectList(unit.Dp(theme.TextSize) + 4)
 	return ui
 }
 
 // SelectIndex selects the specified item.
-func (ui *SymbolSelectionList) SelectIndex(index int) {
+func (ui *FilterList[T]) SelectIndex(index int) {
 	if !InRange(index, len(ui.Filtered)) {
 		return
 	}
 
 	ui.List.Selected = index
 	ui.Selected = ui.Filtered[index].Name()
-	ui.SelectedSymbol = ui.Filtered[index]
+	ui.SelectedItem = ui.Filtered[index]
 }
 
-// SetSymbols updates the symbol list.
-func (ui *SymbolSelectionList) SetSymbols(symbols []Symbol) {
-	ui.Symbols = symbols
+// SetItems updates the full list.
+func (ui *FilterList[T]) SetItems(all []T) {
+	ui.All = all
 	ui.updateFiltered()
 }
 
 // SetFilter sets the filter.
-func (ui *SymbolSelectionList) SetFilter(filter string) {
+func (ui *FilterList[T]) SetFilter(filter string) {
 	ui.Filter.SetText(filter)
 	ui.updateFiltered()
 }
 
 // updateFiltered updates the filtered list from the unfiltered content.
-func (ui *SymbolSelectionList) updateFiltered() {
+func (ui *FilterList[T]) updateFiltered() {
 	defer func() {
 		ui.List.Selected = -1
-		for i, sym := range ui.Filtered {
-			if sym.Name() == ui.Selected {
+		for i, item := range ui.Filtered {
+			if item.Name() == ui.Selected {
 				ui.List.Selected = i
-				ui.SelectedSymbol = sym
+				ui.SelectedItem = item
 				// TODO, maybe scroll into view?
 				break
 			}
@@ -79,15 +83,15 @@ func (ui *SymbolSelectionList) updateFiltered() {
 	}
 
 	ui.Filtered = ui.Filtered[:0]
-	for _, sym := range ui.Symbols {
-		if rx.MatchString(sym.Name()) {
-			ui.Filtered = append(ui.Filtered, sym)
+	for _, item := range ui.All {
+		if rx.MatchString(item.Name()) {
+			ui.Filtered = append(ui.Filtered, item)
 		}
 	}
 }
 
-// Layout draws the symbol selection list.
-func (ui *SymbolSelectionList) Layout(th *material.Theme, gtx layout.Context) layout.Dimensions {
+// Layout draws the list.
+func (ui *FilterList[T]) Layout(th *material.Theme, gtx layout.Context) layout.Dimensions {
 	paint.FillShape(gtx.Ops, secondaryBackground, clip.Rect{Max: gtx.Constraints.Min}.Op())
 
 	defer func() {
@@ -126,7 +130,7 @@ func (ui *SymbolSelectionList) Layout(th *material.Theme, gtx layout.Context) la
 				}))
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			body := material.Body1(th, fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.Symbols)))
+			body := material.Body1(th, fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)))
 			body.TextSize *= 0.8
 			return layout.Center.Layout(gtx, body.Layout)
 		}),
