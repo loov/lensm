@@ -14,7 +14,7 @@ import (
 
 func main() {
 	textSize := flag.Int("text-size", 12, "default font size")
-	filter := flag.String("filter", "", "filter the symbol by regexp")
+	filter := flag.String("filter", "", "filter the functions by regexp")
 	watch := flag.Bool("watch", false, "auto reload executable")
 	context := flag.Int("context", 3, "source line context")
 	font := flag.String("font", "", "user font")
@@ -34,12 +34,12 @@ func main() {
 	theme.TextSize = unit.Sp(*textSize)
 
 	ui := NewExeUI(windows, theme)
-	ui.Config = ExeUIConfig{
-		Exe:     exePath,
+	ui.Config = FileUIConfig{
+		Path:    exePath,
 		Watch:   *watch,
 		Context: *context,
 	}
-	ui.Symbols.SetFilter(*filter)
+	ui.Funcs.SetFilter(*filter)
 
 	windows.Open("lensm", image.Pt(1400, 900), ui.Run)
 

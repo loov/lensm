@@ -144,7 +144,7 @@ func (fc *FileCache) Line(filename string, line int) ([]byte, error) {
 	// the leading src.FileSymPrefix.
 	filename = strings.TrimPrefix(filename, src.FileSymPrefix)
 
-	// Expand literal "$GOROOT" rewritten by obj.AbsFile()
+	// Expand literal "$GOROOT" rewritten by disasm.AbsFile()
 	filename = filepath.Clean(os.ExpandEnv(filename))
 
 	var cf *CachedFile

@@ -12,63 +12,66 @@ import (
 	"gioui.org/text"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+
+	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/goobj"
 )
 
-type ExeUIConfig struct {
-	Exe     string
+type FileUIConfig struct {
+	Path    string
 	Watch   bool
 	Context int
 }
 
-type ExeUI struct {
+type FileUI struct {
 	Windows *Windows
 	Theme   *material.Theme
 
-	Config ExeUIConfig
+	Config FileUIConfig
 
 	LoadError error
 
 	// Currently loaded executable.
-	Obj     Obj
-	Symbols *SymbolSelectionList
+	File  disasm.File
+	Funcs *FilterList[disasm.Func]
 
 	// Active code view.
 	Code CodeUI
 
-	// Other ExeUI elements.
+	// Other FileUI elements.
 	OpenInNew widget.Clickable
 }
 
-func NewExeUI(windows *Windows, theme *material.Theme) *ExeUI {
-	ui := &ExeUI{}
+func NewExeUI(windows *Windows, theme *material.Theme) *FileUI {
+	ui := &FileUI{}
 	ui.Windows = windows
 	ui.Theme = theme
-	ui.Symbols = NewSymbolList(theme)
+	ui.Funcs = NewFilterList[disasm.Func](theme)
 	return ui
 }
 
-func (ui *ExeUI) Run(w *app.Window) error {
+func (ui *FileUI) Run(w *app.Window) error {
 	var ops op.Ops
 
 	exited := make(chan struct{})
 	defer close(exited)
 
-	exeLoaded := make(chan *GoObj, 1)
-	exeLoadError := make(chan error, 1)
+	fileLoaded := make(chan disasm.File, 1)
+	fileLoadError := make(chan error, 1)
 
-	loadFinished := func(exe *GoObj, err error) {
+	loadFinished := func(exe disasm.File, err error) {
 		if err == nil {
 			select {
-			case <-exeLoaded:
+			case <-fileLoaded:
 			default:
 			}
-			exeLoaded <- exe
+			fileLoaded <- exe
 		} else {
 			select {
-			case <-exeLoadError:
+			case <-fileLoadError:
 			default:
 			}
-			exeLoadError <- err
+			fileLoadError <- err
 		}
 	}
 
@@ -78,7 +81,7 @@ func (ui *ExeUI) Run(w *app.Window) error {
 		defer tick.Stop()
 		for {
 			func() {
-				stat, err := os.Stat(ui.Config.Exe)
+				stat, err := os.Stat(ui.Config.Path)
 				if err != nil {
 					loadFinished(nil, err)
 					return
@@ -88,8 +91,8 @@ func (ui *ExeUI) Run(w *app.Window) error {
 				}
 				lastModTime = stat.ModTime()
 
-				exe, err := LoadExe(ui.Config.Exe)
-				loadFinished(exe, err)
+				file, err := goobj.Load(ui.Config.Path)
+				loadFinished(file, err)
 			}()
 
 			if !ui.Config.Watch {
@@ -106,11 +109,11 @@ func (ui *ExeUI) Run(w *app.Window) error {
 
 	for {
 		select {
-		case err := <-exeLoadError:
+		case err := <-fileLoadError:
 			ui.LoadError = err
 			w.Invalidate()
-		case exe := <-exeLoaded:
-			ui.SetExe(exe)
+		case exe := <-fileLoaded:
+			ui.SetFile(exe)
 			w.Invalidate()
 		case e := <-w.Events():
 			switch e := e.(type) {
@@ -126,36 +129,36 @@ func (ui *ExeUI) Run(w *app.Window) error {
 	}
 }
 
-func (ui *ExeUI) SetExe(exe Obj) {
-	if ui.Obj != nil {
-		_ = ui.Obj.Close()
+func (ui *FileUI) SetFile(exe disasm.File) {
+	if ui.File != nil {
+		_ = ui.File.Close()
 	}
-	ui.Obj = exe
-	ui.Symbols.SetSymbols(exe.Symbols())
-	if ui.Symbols.Selected != "" {
-		for _, sym := range exe.Symbols() {
-			if sym.Name() == ui.Symbols.Selected {
-				ui.Code.Code = sym.Load(ui.loadOptions())
+	ui.File = exe
+	ui.Funcs.SetItems(exe.Funcs())
+	if ui.Funcs.Selected != "" {
+		for _, fn := range exe.Funcs() {
+			if fn.Name() == ui.Funcs.Selected {
+				ui.Code.Code = fn.Load(ui.loadOptions())
 			}
 		}
 	}
 }
 
-func (ui *ExeUI) loadOptions() Options {
-	return Options{Context: ui.Config.Context}
+func (ui *FileUI) loadOptions() disasm.Options {
+	return disasm.Options{Context: ui.Config.Context}
 }
 
-func (ui *ExeUI) Layout(gtx layout.Context) {
+func (ui *FileUI) Layout(gtx layout.Context) {
 	for ui.OpenInNew.Clicked() {
 		ui.openInNew(gtx)
 	}
 
-	if ui.Symbols.Selected == "" {
-		ui.Symbols.SelectIndex(0)
+	if ui.Funcs.Selected == "" {
+		ui.Funcs.SelectIndex(0)
 	}
 
-	if !ui.Code.Loaded() || ui.Code.Name != ui.Symbols.Selected {
-		selected := ui.Symbols.SelectedSymbol
+	if !ui.Code.Loaded() || ui.Code.Name != ui.Funcs.Selected {
+		selected := ui.Funcs.SelectedItem
 		if selected != nil {
 			ui.Code.Code = selected.Load(ui.loadOptions())
 		}
@@ -169,7 +172,7 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 				X: gtx.Metric.Sp(10 * 20),
 				Y: gtx.Constraints.Max.Y,
 			})
-			return ui.Symbols.Layout(ui.Theme, gtx)
+			return ui.Funcs.Layout(ui.Theme, gtx)
 		}),
 		layout.Rigid(VerticalLine{Width: 1, Color: splitterColor}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -231,39 +234,39 @@ func (ui *ExeUI) Layout(gtx layout.Context) {
 	)
 }
 
-func (ui *ExeUI) tryOpen(gtx layout.Context, call string) {
-	var sym Symbol
-	for _, target := range ui.Obj.Symbols() {
+func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
+	var fn disasm.Func
+	for _, target := range ui.File.Funcs() {
 		if target.Name() == call {
-			sym = target
+			fn = target
 			break
 		}
 	}
-	if sym == nil {
+	if fn == nil {
 		return
 	}
 
-	load := sym.Load(ui.loadOptions())
-	ui.Symbols.Selected = load.Name
-	ui.Symbols.SelectedSymbol = sym
-	ui.Symbols.List.Selected = -1
-	for i, fil := range ui.Symbols.Filtered {
-		if fil == sym {
-			ui.Symbols.List.Selected = i
+	load := fn.Load(ui.loadOptions())
+	ui.Funcs.Selected = load.Name
+	ui.Funcs.SelectedItem = fn
+	ui.Funcs.List.Selected = -1
+	for i, fil := range ui.Funcs.Filtered {
+		if fil == fn {
+			ui.Funcs.List.Selected = i
 			break
 		}
 	}
 
 	ui.Code.Code = load
 
-	if ui.Symbols.Selected == "" {
-		ui.Symbols.SelectIndex(0)
+	if ui.Funcs.Selected == "" {
+		ui.Funcs.SelectIndex(0)
 	}
 
 	ui.Code.ResetScroll()
 }
 
-func (ui *ExeUI) openInNew(gtx layout.Context) {
+func (ui *FileUI) openInNew(gtx layout.Context) {
 	state := ui.Code
 	style := CodeUIStyle{
 		Theme:  ui.Theme,
