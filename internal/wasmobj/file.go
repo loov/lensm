@@ -15,34 +15,34 @@ import (
 	"loov.dev/lensm/internal/disasm"
 )
 
-var _ disasm.File = (*WasmObj)(nil)
-var _ disasm.Func = (*WasmSymbol)(nil)
+var _ disasm.File = (*File)(nil)
+var _ disasm.Func = (*Func)(nil)
 
-// WasmObj contains information about the object file.
-type WasmObj struct {
+// File contains information about the object file.
+type File struct {
 	module *wasm.Module
 	dwarf  *dwarf.Data
 
 	funcs []disasm.Func
 }
 
-func (exe *WasmObj) Funcs() []disasm.Func { return exe.funcs }
+func (file *File) Funcs() []disasm.Func { return file.funcs }
 
-// WasmSymbol contains information about the executable.
-type WasmSymbol struct {
-	obj      *WasmObj
+// Func contains information about the executable.
+type Func struct {
+	obj      *File
 	fn       *wasm.Function
 	sortName string
 }
 
-func (sym *WasmSymbol) Name() string { return sym.fn.Name }
+func (fn *Func) Name() string { return fn.fn.Name }
 
-func (exe *WasmObj) Close() error {
+func (file *File) Close() error {
 	return nil
 }
 
-func Load(path string) (*WasmObj, error) {
-	obj := &WasmObj{}
+func Load(path string) (*File, error) {
+	obj := &File{}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -110,7 +110,7 @@ func Load(path string) (*WasmObj, error) {
 
 	for _, fn := range module.FunctionIndexSpace {
 		fn := fn
-		sym := &WasmSymbol{
+		sym := &Func{
 			obj:      obj,
 			fn:       &fn,
 			sortName: strings.ToLower(fn.Name),
@@ -125,37 +125,37 @@ func Load(path string) (*WasmObj, error) {
 	return obj, nil
 }
 
-func (sym *WasmSymbol) Load(opts disasm.Options) *disasm.Code {
-	return sym.obj.LoadSymbol(sym, opts)
+func (fn *Func) Load(opts disasm.Options) *disasm.Code {
+	return fn.obj.LoadCode(fn, opts)
 }
 
-func (exe *WasmObj) LoadSymbol(sym *WasmSymbol, opts disasm.Options) *disasm.Code {
-	dis, err := wasmdisasm.NewDisassembly(*sym.fn, exe.module)
+func (file *File) LoadCode(fn *Func, opts disasm.Options) *disasm.Code {
+	dis, err := wasmdisasm.NewDisassembly(*fn.fn, file.module)
 	if err != nil {
 		return &disasm.Code{Name: err.Error()}
 	}
 
 	code := &disasm.Code{
-		Name: sym.fn.Name,
+		Name: fn.fn.Name,
 	}
 
 	for i, ix := range dis.Code {
-		code.Insts = append(code.Insts, exe.toInstr(dis, i, ix))
+		code.Insts = append(code.Insts, file.toInstr(dis, i, ix))
 	}
 
 	return code
 }
 
-func (exe *WasmObj) toInstr(dis *wasmdisasm.Disassembly, i int, ix wasmdisasm.Instr) disasm.Inst {
+func (file *File) toInstr(dis *wasmdisasm.Disassembly, i int, ix wasmdisasm.Instr) disasm.Inst {
 	inst := disasm.Inst{
 		PC:   uint64(i),
-		Text: ix.Op.Name + " " + exe.immediatesToString(ix.Immediates),
+		Text: ix.Op.Name + " " + file.immediatesToString(ix.Immediates),
 	}
 
 	switch ix.Op.Code {
 	case operators.Call:
 		target := ix.Immediates[0].(uint32)
-		fn := exe.module.FunctionIndexSpace[target]
+		fn := file.module.FunctionIndexSpace[target]
 		inst.Text = ix.Op.Name + " " + fn.Name
 		inst.Call = fn.Name
 
@@ -167,7 +167,7 @@ func (exe *WasmObj) toInstr(dis *wasmdisasm.Disassembly, i int, ix wasmdisasm.In
 	return inst
 }
 
-func (exe *WasmObj) immediatesToString(xs []interface{}) string {
+func (file *File) immediatesToString(xs []interface{}) string {
 	var str strings.Builder
 	for _, im := range xs {
 		fmt.Fprintf(&str, " %v", im)
