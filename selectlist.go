@@ -5,13 +5,13 @@ import (
 	"image/color"
 
 	"gioui.org/f32"
+	"gioui.org/font"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -184,7 +184,7 @@ func StringListItem(th *material.Theme, state *SelectList, item func(int) string
 
 		bg := color.NRGBA{}
 		fg := th.Fg
-		weight := text.Normal
+		weight := font.Normal
 
 		switch {
 		case state.Selected == index:
@@ -192,7 +192,7 @@ func StringListItem(th *material.Theme, state *SelectList, item func(int) string
 				bg = th.ContrastBg
 				fg = th.ContrastFg
 			}
-			weight = text.Heavy
+			weight = font.Black
 		case state.Hovered == index:
 			bg = th.ContrastBg
 			bg.A /= 4

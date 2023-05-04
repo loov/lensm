@@ -5,11 +5,11 @@ import (
 	"image/color"
 	"time"
 
+	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -39,15 +39,15 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 		defer clip.Rect{Max: maxSize}.Push(gtx.Ops).Pop()
 	}
 
-	font := text.Font{Variant: "Mono"}
+	f := font.Font{Variant: "Mono"}
 	if line.Italic {
-		font.Style = text.Italic
+		f.Style = font.Italic
 	}
 	if line.Bold {
-		font.Weight = text.Heavy
+		f.Weight = font.Black
 	}
 	paint.ColorOp{Color: line.Color}.Add(gtx.Ops)
-	widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, font, line.TextHeight, line.Text)
+	widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, f, line.TextHeight, line.Text, op.CallOp{})
 }
 
 type VerticalLine struct {

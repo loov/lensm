@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"gioui.org/app"
+	"gioui.org/font"
 	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
-	"gioui.org/text"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
@@ -195,7 +195,7 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 						return layout.Dimensions{}
 					}
 					txt := material.Body1(ui.Theme, "file: "+ui.Code.Code.File)
-					txt.Font.Style = text.Italic
+					txt.Font.Style = font.Italic
 
 					inset := layout.Inset{Top: 2, Left: 4, Right: 4, Bottom: 4}
 					return inset.Layout(gtx, txt.Layout)

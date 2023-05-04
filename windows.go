@@ -8,12 +8,12 @@ import (
 	"sync"
 
 	"gioui.org/app"
+	"gioui.org/font"
 	"gioui.org/font/gofont"
 	"gioui.org/font/opentype"
 	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
-	"gioui.org/text"
 	"gioui.org/unit"
 )
 
@@ -60,7 +60,7 @@ func WidgetWindow(widget layout.Widget) func(*app.Window) error {
 	}
 }
 
-func LoadFonts(userfont string) []text.FontFace {
+func LoadFonts(userfont string) []font.FontFace {
 	collection := gofont.Collection()
 	if userfont == "" {
 		return collection
@@ -73,7 +73,7 @@ func LoadFonts(userfont string) []text.FontFace {
 	if err != nil {
 		panic(fmt.Errorf("failed to parse font: %v", err))
 	}
-	fnt := text.Font{Variant: "Mono", Weight: text.Normal}
-	fface := text.FontFace{Font: fnt, Face: face}
+	fnt := font.Font{Variant: "Mono", Weight: font.Normal}
+	fface := font.FontFace{Font: fnt, Face: face}
 	return append(collection, fface)
 }
