@@ -23,6 +23,8 @@ func main() {
 	context := flag.Int("context", 3, "source line context")
 	font := flag.String("font", "", "user font")
 
+	workInProgressWASM = os.Getenv("LENSM_EXPERIMENT_WASM") != ""
+
 	flag.Parse()
 	exePath := flag.Arg(0)
 

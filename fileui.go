@@ -14,8 +14,11 @@ import (
 	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/goobj"
 	"loov.dev/lensm/internal/wasmobj"
 )
+
+var workInProgressWASM bool
 
 type FileUIConfig struct {
 	Path    string
@@ -91,8 +94,11 @@ func (ui *FileUI) Run(w *app.Window) error {
 				}
 				lastModTime = stat.ModTime()
 
-				file, err := wasmobj.Load(ui.Config.Path)
-				loadFinished(file, err)
+				if workInProgressWASM {
+					loadFinished(wasmobj.Load(ui.Config.Path))
+				} else {
+					loadFinished(goobj.Load(ui.Config.Path))
+				}
 			}()
 
 			if !ui.Config.Watch {
