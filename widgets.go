@@ -39,7 +39,7 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 		defer clip.Rect{Max: maxSize}.Push(gtx.Ops).Pop()
 	}
 
-	f := font.Font{Variant: "Mono"}
+	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Normal}
 	if line.Italic {
 		f.Style = font.Italic
 	}

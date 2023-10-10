@@ -10,6 +10,7 @@ import (
 	"runtime/pprof"
 
 	"gioui.org/app"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 )
@@ -33,7 +34,8 @@ func main() {
 
 	windows := &Windows{}
 
-	theme := material.NewTheme(LoadFonts(*font))
+	theme := material.NewTheme()
+	theme.Shaper = text.NewShaper(text.WithCollection(LoadFonts(*font)))
 	theme.TextSize = unit.Sp(*textSize)
 
 	ui := NewExeUI(windows, theme)

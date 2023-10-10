@@ -73,7 +73,7 @@ func LoadFonts(userfont string) []font.FontFace {
 	if err != nil {
 		panic(fmt.Errorf("failed to parse font: %v", err))
 	}
-	fnt := font.Font{Variant: "Mono", Weight: font.Normal}
+	fnt := font.Font{Typeface: "override-monospace,monospace", Weight: font.Normal}
 	fface := font.FontFace{Font: fnt, Face: face}
 	return append(collection, fface)
 }
