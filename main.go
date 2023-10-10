@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"os"
+	"runtime/pprof"
 
 	"gioui.org/app"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 )
 
 func main() {
+	cpuprofile := flag.String("cpuprofile", "", "enable cpu profiling")
 	textSize := flag.Int("text-size", 12, "default font size")
 	filter := flag.String("filter", "", "filter the functions by regexp")
 	watch := flag.Bool("watch", false, "auto reload executable")
@@ -30,7 +34,8 @@ func main() {
 
 	windows := &Windows{}
 
-	theme := material.NewTheme(LoadFonts(*font))
+	theme := material.NewTheme()
+	theme.Shaper = text.NewShaper(text.WithCollection(LoadFonts(*font)))
 	theme.TextSize = unit.Sp(*textSize)
 
 	ui := NewExeUI(windows, theme)
@@ -44,7 +49,7 @@ func main() {
 	windows.Open("lensm", image.Pt(1400, 900), ui.Run)
 
 	go func() {
-		windows.Wait()
+		profile(*cpuprofile, windows.Wait)
 		os.Exit(0)
 	}()
 
@@ -56,3 +61,15 @@ var (
 	secondaryBackground = color.NRGBA{R: 0xF0, G: 0xF0, B: 0xF0, A: 0xFF}
 	splitterColor       = color.NRGBA{R: 0x80, G: 0x80, B: 0x80, A: 0xFF}
 )
+
+func profile(cpuprofile string, fn func()) {
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+	fn()
+}

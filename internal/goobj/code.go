@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/go/objfile"
+	"loov.dev/lensm/internal/go/src/objfile"
 )
 
 var rxRefAbs = regexp.MustCompile(`\s0x[\da-fA-F]+$`)
