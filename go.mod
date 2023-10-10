@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	gioui.org v0.3.1
-	github.com/tetratelabs/wabin v0.0.0-20220927005300-3b0fbf39a46a
+	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834
 	golang.org/x/arch v0.2.0
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1
 	golang.org/x/exp/shiny v0.0.0-20230713183714-613f0c0eb8a1

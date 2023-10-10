@@ -14,6 +14,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/stretchr/testify v1.8.0 h1:pSgiaMZlXftHpm5L7V1+rVB+AZJydKsMxsQBIJw4PKk=
 github.com/tetratelabs/wabin v0.0.0-20220927005300-3b0fbf39a46a h1:P0R3+CTAT7daT8ig5gh9GEd/eDQ5md1xl4pkYMcwOqg=
 github.com/tetratelabs/wabin v0.0.0-20220927005300-3b0fbf39a46a/go.mod h1:m9ymHTgNSEjuxvw8E7WWe4Pl4hZQHXONY8wE6dMLaRk=
+github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 h1:ZF+QBjOI+tILZjBaFj3HgFonKXUcwgJ4djLb6i42S3Q=
+github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834/go.mod h1:m9ymHTgNSEjuxvw8E7WWe4Pl4hZQHXONY8wE6dMLaRk=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 golang.org/x/arch v0.2.0 h1:W1sUEHXiJTfjaFJ5SLo0N6lZn+0eO5gWD1MFeTGqQEY=
 golang.org/x/arch v0.2.0/go.mod h1:5om86z9Hs0C8fWVUuoMHwpExlXzs5Tkyp9hOrfG7pp8=
