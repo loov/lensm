@@ -9,6 +9,8 @@ package archive
 import (
 	"bufio"
 	"bytes"
+	"loov.dev/lensm/internal/go/src/bio"
+	"loov.dev/lensm/internal/go/src/goobj"
 	"errors"
 	"fmt"
 	"io"
@@ -18,9 +20,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"loov.dev/lensm/internal/go/src/bio"
-	"loov.dev/lensm/internal/go/src/goobj"
 )
 
 /*
@@ -190,7 +189,7 @@ func (r *objReader) readByte() byte {
 	return b
 }
 
-// read reads exactly len(b) bytes from the input file.
+// readFull reads exactly len(b) bytes from the input file.
 // If an error occurs, read returns the error but also
 // records it, so it is safe for callers to ignore the result
 // as long as delaying the report is not a problem.
@@ -369,7 +368,10 @@ func (r *objReader) parseArchive(verbose bool) error {
 			if bytes.Equal(p, goobjHeader) {
 				typ = EntryGoObj
 				o = &GoObj{}
-				r.parseObject(o, size)
+				err := r.parseObject(o, size)
+				if err != nil {
+					return err
+				}
 			} else {
 				typ = EntryNativeObj
 				r.skip(size)

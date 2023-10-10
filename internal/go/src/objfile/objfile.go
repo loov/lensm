@@ -6,14 +6,13 @@
 package objfile
 
 import (
+	"loov.dev/lensm/internal/go/src/archive"
 	"debug/dwarf"
 	"debug/gosym"
 	"fmt"
 	"io"
 	"os"
 	"sort"
-
-	"loov.dev/lensm/internal/go/src/archive"
 )
 
 type rawFile interface {

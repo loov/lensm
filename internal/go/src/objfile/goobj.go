@@ -7,17 +7,16 @@
 package objfile
 
 import (
+	"loov.dev/lensm/internal/go/src/archive"
+	"loov.dev/lensm/internal/go/src/goobj"
+	"loov.dev/lensm/internal/go/src/objabi"
+	"loov.dev/lensm/internal/go/src/sys"
 	"debug/dwarf"
 	"debug/gosym"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-
-	"loov.dev/lensm/internal/go/src/archive"
-	"loov.dev/lensm/internal/go/src/goobj"
-	"loov.dev/lensm/internal/go/src/objabi"
-	"loov.dev/lensm/internal/go/src/sys"
 )
 
 type goobjFile struct {

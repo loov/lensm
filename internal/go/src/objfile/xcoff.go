@@ -9,10 +9,9 @@ package objfile
 import (
 	"debug/dwarf"
 	"fmt"
+	"loov.dev/lensm/internal/go/src/xcoff"
 	"io"
 	"unicode"
-
-	"loov.dev/lensm/internal/go/src/xcoff"
 )
 
 type xcoffFile struct {

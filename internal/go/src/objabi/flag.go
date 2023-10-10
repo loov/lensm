@@ -7,6 +7,7 @@ package objabi
 import (
 	"flag"
 	"fmt"
+	"loov.dev/lensm/internal/go/src/buildcfg"
 	"io"
 	"log"
 	"os"
@@ -14,8 +15,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"loov.dev/lensm/internal/go/src/buildcfg"
 )
 
 func Flagcount(name, usage string, val *int) {

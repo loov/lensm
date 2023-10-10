@@ -7,8 +7,7 @@ package goobj
 import (
 	"bytes"
 	"encoding/binary"
-
-	"loov.dev/lensm/internal/go/src/objabi"
+	"loov.dev/lensm/internal/go/src/abi"
 )
 
 // CUFileIndex is used to index the filenames that are stored in the
@@ -20,8 +19,8 @@ type CUFileIndex uint32
 type FuncInfo struct {
 	Args      uint32
 	Locals    uint32
-	FuncID    objabi.FuncID
-	FuncFlag  objabi.FuncFlag
+	FuncID    abi.FuncID
+	FuncFlag  abi.FuncFlag
 	StartLine int32
 	File      []CUFileIndex
 	InlTree   []InlTreeNode
@@ -90,9 +89,9 @@ func (*FuncInfo) ReadArgs(b []byte) uint32 { return binary.LittleEndian.Uint32(b
 
 func (*FuncInfo) ReadLocals(b []byte) uint32 { return binary.LittleEndian.Uint32(b[4:]) }
 
-func (*FuncInfo) ReadFuncID(b []byte) objabi.FuncID { return objabi.FuncID(b[8]) }
+func (*FuncInfo) ReadFuncID(b []byte) abi.FuncID { return abi.FuncID(b[8]) }
 
-func (*FuncInfo) ReadFuncFlag(b []byte) objabi.FuncFlag { return objabi.FuncFlag(b[9]) }
+func (*FuncInfo) ReadFuncFlag(b []byte) abi.FuncFlag { return abi.FuncFlag(b[9]) }
 
 func (*FuncInfo) ReadStartLine(b []byte) int32 { return int32(binary.LittleEndian.Uint32(b[12:])) }
 

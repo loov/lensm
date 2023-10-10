@@ -11,12 +11,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"loov.dev/lensm/internal/go/src/goexperiment"
 	"log"
 	"os"
 	"reflect"
 	"strings"
-
-	"loov.dev/lensm/internal/go/src/goexperiment"
 )
 
 func main() {
