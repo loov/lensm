@@ -20,7 +20,7 @@ func main() {
 		dir := filepath.Join(goroot, "src/cmd/internal", subdir)
 		copydir(dir, filepath.Join("src", subdir))
 	}
-	for _, subdir := range []string{"abi", "goarch", "buildcfg", "goexperiment", "saferio", "unsafeheader", "xcoff"} {
+	for _, subdir := range []string{"abi", "goarch", "bisect", "buildcfg", "goexperiment", "saferio", "unsafeheader", "xcoff"} {
 		dir := filepath.Join(goroot, "src/internal", subdir)
 		copydir(dir, filepath.Join("src", subdir))
 	}
