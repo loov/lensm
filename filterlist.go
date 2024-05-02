@@ -94,27 +94,29 @@ func (ui *FilterList[T]) updateFiltered() {
 func (ui *FilterList[T]) Layout(th *material.Theme, gtx layout.Context) layout.Dimensions {
 	paint.FillShape(gtx.Ops, secondaryBackground, clip.Rect{Max: gtx.Constraints.Min}.Op())
 
-	defer func() {
-		ui.SelectIndex(ui.List.Selected)
+	ui.SelectIndex(ui.List.Selected)
 
-		changed := false
-		for _, ev := range ui.Filter.Events() {
-			if _, ok := ev.(widget.ChangeEvent); ok {
-				changed = true
-			}
+	changed := false
+	for {
+		ev, ok := ui.Filter.Update(gtx)
+		if !ok {
+			break
 		}
+		if _, ok := ev.(widget.ChangeEvent); ok {
+			changed = true
+		}
+	}
 
-		if changed {
-			ui.updateFiltered()
-			op.InvalidateOp{}.Add(gtx.Ops)
-		}
-	}()
+	if changed {
+		ui.updateFiltered()
+		gtx.Execute(op.InvalidateCmd{})
+	}
 
 	return layout.Flex{
 		Axis: layout.Vertical,
 	}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return FocusBorder(th, ui.Filter.Focused()).Layout(gtx,
+			return FocusBorder(th, gtx.Focused(&ui.Filter)).Layout(gtx,
 				material.Editor(th, &ui.Filter, "Filter (regexp)").Layout)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {

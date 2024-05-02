@@ -6,6 +6,7 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
+	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
@@ -37,32 +38,16 @@ type SelectList struct {
 	Hovered  int
 
 	ItemHeight unit.Dp
-
-	focused bool
 }
-
-// Focused returns true when the list is in focus.
-func (list *SelectList) Focused() bool { return list.focused }
 
 // Layout draws the list.
 func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length int, element layout.ListElement) layout.Dimensions {
-	return FocusBorder(th, list.focused).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return FocusBorder(th, gtx.Focused(list)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		size := gtx.Constraints.Max
 		gtx.Constraints = layout.Exact(size)
 		defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 
-		key.InputOp{
-			Tag: list,
-			Keys: key.NameUpArrow + "|" + key.NameDownArrow + "|" +
-				key.NameHome + "|" + key.NameEnd + "|" +
-				key.NamePageUp + "|" + key.NamePageDown,
-		}.Add(gtx.Ops)
-
-		pointer.InputOp{
-			Tag:          list,
-			Types:        pointer.Press | pointer.Move,
-			ScrollBounds: image.Rectangle{},
-		}.Add(gtx.Ops)
+		event.Op(gtx.Ops, list)
 
 		changed := false
 		grabbed := false
@@ -75,7 +60,25 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 		pointerClicked := false
 		pointerHovered := false
 		pointerPosition := f32.Point{}
-		for _, ev := range gtx.Events(list) {
+		for {
+			// TODO: fix navigation when in filter.
+			ev, ok := gtx.Event(
+				key.FocusFilter{Target: list},
+				key.Filter{Focus: list, Name: key.NameUpArrow},
+				key.Filter{Focus: list, Name: key.NameDownArrow},
+				key.Filter{Focus: list, Name: key.NameHome},
+				key.Filter{Focus: list, Name: key.NameEnd},
+				key.Filter{Focus: list, Name: key.NamePageUp},
+				key.Filter{Focus: list, Name: key.NamePageDown},
+				pointer.Filter{
+					Target: list,
+					Kinds:  pointer.Press | pointer.Move,
+				},
+			)
+			if !ok {
+				break
+			}
+
 			switch ev := ev.(type) {
 			case key.Event:
 				if ev.State == key.Press {
@@ -110,24 +113,17 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 					}
 
 					// if we get input and don't have a focus, then grab it
-					if !list.focused {
-						list.focused = true
-						op.InvalidateOp{}.Add(gtx.Ops)
+					if !gtx.Focused(list) {
+						gtx.Execute(op.InvalidateCmd{})
 					}
 				}
 
-			case key.FocusEvent:
-				if list.focused != ev.Focus {
-					list.focused = ev.Focus
-					op.InvalidateOp{}.Add(gtx.Ops)
-				}
-
 			case pointer.Event:
-				switch ev.Type {
+				switch ev.Kind {
 				case pointer.Press:
-					if !list.focused && !grabbed {
+					if !gtx.Focused(list) && !grabbed {
 						grabbed = true
-						key.FocusOp{Tag: list}.Add(gtx.Ops)
+						gtx.Execute(key.FocusCmd{Tag: list})
 					}
 					pointerClicked = true
 					pointerPosition = ev.Position
@@ -188,7 +184,7 @@ func StringListItem(th *material.Theme, state *SelectList, item func(int) string
 
 		switch {
 		case state.Selected == index:
-			if state.Focused() {
+			if gtx.Focused(state) {
 				bg = th.ContrastBg
 				fg = th.ContrastFg
 			}

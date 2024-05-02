@@ -11,7 +11,6 @@ import (
 	"gioui.org/font"
 	"gioui.org/font/gofont"
 	"gioui.org/font/opentype"
-	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/unit"
@@ -26,7 +25,8 @@ func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Win
 	go func() {
 		defer windows.active.Done()
 
-		window := app.NewWindow(
+		window := new(app.Window)
+		window.Option(
 			app.Title(title),
 			app.Size(unit.Dp(sizeDp.X), unit.Dp(sizeDp.Y)),
 		)
@@ -44,17 +44,15 @@ func WidgetWindow(widget layout.Widget) func(*app.Window) error {
 	return func(w *app.Window) error {
 		var ops op.Ops
 		for {
-			select {
-			case e := <-w.Events():
-				switch e := e.(type) {
-				case system.FrameEvent:
-					gtx := layout.NewContext(&ops, e)
-					widget(gtx)
-					e.Frame(gtx.Ops)
+			e := w.Event()
+			switch e := e.(type) {
+			case app.FrameEvent:
+				gtx := app.NewContext(&ops, e)
+				widget(gtx)
+				e.Frame(gtx.Ops)
 
-				case system.DestroyEvent:
-					return e.Err
-				}
+			case app.DestroyEvent:
+				return e.Err
 			}
 		}
 	}

@@ -7,7 +7,7 @@ import (
 
 	"gioui.org/app"
 	"gioui.org/font"
-	"gioui.org/io/system"
+	"gioui.org/io/event"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/widget"
@@ -113,6 +113,20 @@ func (ui *FileUI) Run(w *app.Window) error {
 		}
 	}()
 
+	events := make(chan event.Event)
+	acks := make(chan struct{})
+
+	go func() {
+		for {
+			ev := w.Event()
+			events <- ev
+			<-acks
+			if _, ok := ev.(app.DestroyEvent); ok {
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case err := <-fileLoadError:
@@ -121,16 +135,18 @@ func (ui *FileUI) Run(w *app.Window) error {
 		case file := <-fileLoaded:
 			ui.SetFile(file)
 			w.Invalidate()
-		case e := <-w.Events():
+		case e := <-events:
 			switch e := e.(type) {
-			case system.FrameEvent:
-				gtx := layout.NewContext(&ops, e)
+			case app.FrameEvent:
+				gtx := app.NewContext(&ops, e)
 				ui.Layout(gtx)
 				e.Frame(gtx.Ops)
 
-			case system.DestroyEvent:
+			case app.DestroyEvent:
+				acks <- struct{}{}
 				return e.Err
 			}
+			acks <- struct{}{}
 		}
 	}
 }
@@ -155,7 +171,7 @@ func (ui *FileUI) loadOptions() disasm.Options {
 }
 
 func (ui *FileUI) Layout(gtx layout.Context) {
-	for ui.OpenInNew.Clicked() {
+	for ui.OpenInNew.Clicked(gtx) {
 		ui.openInNew(gtx)
 	}
 

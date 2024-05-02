@@ -9,6 +9,7 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/gesture"
+	"gioui.org/io/event"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -68,13 +69,17 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
 	mouseClicked := false
-	pointer.InputOp{
-		Tag:   ui.Code,
-		Types: pointer.Move | pointer.Press,
-	}.Add(gtx.Ops)
-	for _, ev := range gtx.Queue.Events(ui.Code) {
+
+	event.Op(gtx.Ops, ui.Code)
+	for {
+		ev, ok := gtx.Event(pointer.Filter{
+			Kinds: pointer.Move | pointer.Press,
+		})
+		if !ok {
+			break
+		}
 		if ev, ok := ev.(pointer.Event); ok {
-			switch ev.Type {
+			switch ev.Kind {
 			case pointer.Move:
 				ui.mousePosition = ev.Position
 			case pointer.Press:
@@ -309,8 +314,6 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		viewTop := -ui.asm.scroll
 		viewBot := -ui.asm.scroll + float32(gtx.Constraints.Max.Y)
 
-		ui.asm.gesture.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
-
 		{
 			stack := op.Offset(image.Pt(int(jump.Min)-pad, 0)).Push(gtx.Ops)
 			gtx := gtx
@@ -325,7 +328,11 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		if distance := ui.asm.bar.ScrollDistance(); distance != 0 {
 			ui.asm.scroll -= distance * (contentBot - contentTop)
 		}
-		if distance := ui.asm.gesture.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
+		image.Rect(0, -1000, 1, 1000)
+		if distance := ui.asm.gesture.Update(gtx.Metric, gtx.Source, gtx.Now, gesture.Vertical,
+			pointer.ScrollRange{},
+			pointer.ScrollRange{Min: -1000, Max: 1000},
+		); distance != 0 {
 			ui.asm.scroll -= float32(distance)
 		}
 
@@ -357,8 +364,6 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		viewTop := -ui.src.scroll
 		viewBot := -ui.src.scroll + float32(gtx.Constraints.Max.Y)
 
-		ui.src.gesture.Add(gtx.Ops, image.Rect(0, -1000, 0, 1000))
-
 		{
 			stack := op.Offset(image.Pt(int(source.Max), 0)).Push(gtx.Ops)
 			gtx := gtx
@@ -373,7 +378,10 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		if distance := ui.src.bar.ScrollDistance(); distance != 0 {
 			ui.src.scroll -= distance * (contentBot - contentTop)
 		}
-		if distance := ui.src.gesture.Scroll(gtx.Metric, gtx, gtx.Now, gesture.Vertical); distance != 0 {
+		if distance := ui.src.gesture.Update(gtx.Metric, gtx.Source, gtx.Now, gesture.Vertical,
+			pointer.ScrollRange{},
+			pointer.ScrollRange{Min: -1000, Max: 1000},
+		); distance != 0 {
 			ui.src.scroll -= float32(distance)
 		}
 
