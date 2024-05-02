@@ -95,7 +95,7 @@ func (anim *ScrollAnimation) Start(gtx layout.Context, from, to float32, duratio
 	anim.to = to
 	anim.duration = duration
 	anim.start = gtx.Now
-	op.InvalidateOp{}.Add(gtx.Ops)
+	gtx.Execute(op.InvalidateCmd{})
 }
 
 func (anim *ScrollAnimation) Stop() { anim.active = false }
@@ -104,7 +104,7 @@ func (anim *ScrollAnimation) Update(gtx layout.Context) (float32, bool) {
 	if !anim.active {
 		return anim.to, false
 	}
-	op.InvalidateOp{}.Add(gtx.Ops)
+	gtx.Execute(op.InvalidateCmd{})
 
 	elapsed := gtx.Now.Sub(anim.start)
 	if elapsed > anim.duration {
