@@ -1,6 +1,6 @@
 module loov.dev/lensm
 
-go 1.21.2
+go 1.23.0
 
 require (
 	gioui.org v0.3.1

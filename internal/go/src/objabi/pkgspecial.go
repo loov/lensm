@@ -18,6 +18,8 @@ type PkgSpecial struct {
 	//
 	// - Optimizations are always enabled.
 	//
+	// - Checkptr is always disabled.
+	//
 	// This should be set for runtime and all packages it imports, and may be
 	// set for additional packages.
 	Runtime bool
@@ -43,13 +45,15 @@ type PkgSpecial struct {
 var runtimePkgs = []string{
 	"runtime",
 
-	"runtime/internal/atomic",
+	"loov.dev/lensm/internal/go/src/runtime/atomic",
+	"loov.dev/lensm/internal/go/src/runtime/exithook",
 	"runtime/internal/math",
 	"runtime/internal/sys",
-	"runtime/internal/syscall",
+	"loov.dev/lensm/internal/go/src/runtime/syscall",
 
 	"loov.dev/lensm/internal/go/src/abi",
 	"loov.dev/lensm/internal/go/src/bytealg",
+	"loov.dev/lensm/internal/go/src/byteorder",
 	"loov.dev/lensm/internal/go/src/chacha8rand",
 	"loov.dev/lensm/internal/go/src/coverage/rtcov",
 	"loov.dev/lensm/internal/go/src/cpu",
@@ -57,6 +61,8 @@ var runtimePkgs = []string{
 	"loov.dev/lensm/internal/go/src/godebugs",
 	"loov.dev/lensm/internal/go/src/goexperiment",
 	"loov.dev/lensm/internal/go/src/goos",
+	"loov.dev/lensm/internal/go/src/profilerecord",
+	"loov.dev/lensm/internal/go/src/stringslite",
 }
 
 // extraNoInstrumentPkgs is the set of packages in addition to runtimePkgs that
@@ -73,7 +79,7 @@ var extraNoInstrumentPkgs = []string{
 	"-internal/bytealg",
 }
 
-var noRaceFuncPkgs = []string{"sync", "sync/atomic"}
+var noRaceFuncPkgs = []string{"sync", "sync/atomic", "internal/runtime/atomic"}
 
 var allowAsmABIPkgs = []string{
 	"runtime",
@@ -81,7 +87,7 @@ var allowAsmABIPkgs = []string{
 	"syscall",
 	"loov.dev/lensm/internal/go/src/bytealg",
 	"loov.dev/lensm/internal/go/src/chacha8rand",
-	"runtime/internal/syscall",
+	"loov.dev/lensm/internal/go/src/runtime/syscall",
 	"runtime/internal/startlinetest",
 }
 
