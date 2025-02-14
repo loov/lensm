@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"loov.dev/lensm/internal/disasm"
+	godisasm "loov.dev/lensm/internal/go/src/disasm"
 	"loov.dev/lensm/internal/go/src/objfile"
 )
 
@@ -17,7 +18,7 @@ var _ disasm.Func = (*Function)(nil)
 // File contains information about the object file.
 type File struct {
 	objfile *objfile.File
-	disasm  *objfile.Disasm
+	disasm  *godisasm.Disasm
 	funcs   []disasm.Func
 
 	cache map[*Function]*disasm.Code
@@ -45,7 +46,7 @@ func Load(path string) (*File, error) {
 		return nil, err
 	}
 
-	dis, err := f.Disasm()
+	dis, err := godisasm.DisasmForFile(f)
 	if err != nil {
 		_ = f.Close()
 		return nil, err

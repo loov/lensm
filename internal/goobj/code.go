@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/go/src/objfile"
+	godisasm "loov.dev/lensm/internal/go/src/disasm"
 )
 
 var rxRefAbs = regexp.MustCompile(`\s0x[\da-fA-F]+$`)
@@ -17,7 +17,7 @@ var rxRefRel = regexp.MustCompile(`\s-?\d+\(PC\)$`)
 var rxCall = regexp.MustCompile(`^CALL\s+([\w\d\/\.\(\)\*]+)\(SB\)`)
 
 // Disassemble disassembles the specified symbol.
-func Disassemble(dis *objfile.Disasm, sym *Function, opts disasm.Options) (*disasm.Code, error) {
+func Disassemble(dis *godisasm.Disasm, sym *Function, opts disasm.Options) (*disasm.Code, error) {
 	neededLines := make(map[string]*disasm.LineSet)
 
 	file, _, _ := dis.PCLN().PCToLine(sym.sym.Addr)

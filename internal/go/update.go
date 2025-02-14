@@ -16,7 +16,7 @@ func main() {
 	must0(os.Mkdir("src", 0755))
 
 	goroot := strings.TrimSpace(must(run("go", "env", "GOROOT")))
-	for _, subdir := range []string{"archive", "bio", "goobj", "objabi", "objfile", "src", "sys"} {
+	for _, subdir := range []string{"archive", "bio", "goobj", "objabi", "objfile", "src", "sys", "disasm"} {
 		dir := filepath.Join(goroot, "src/cmd/internal", subdir)
 		copydir(dir, filepath.Join("src", subdir))
 	}
@@ -25,7 +25,7 @@ func main() {
 		copydir(dir, filepath.Join("src", subdir))
 	}
 
-	must0(os.WriteFile("src/objfile/expose.go", must(os.ReadFile("expose.go_")), 0644))
+	must0(os.WriteFile("src/disasm/expose.go", must(os.ReadFile("expose.go_")), 0644))
 	must0(os.Remove("src/abi/abi_test.s"))
 }
 

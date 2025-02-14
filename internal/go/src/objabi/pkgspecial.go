@@ -47,8 +47,9 @@ var runtimePkgs = []string{
 
 	"loov.dev/lensm/internal/go/src/runtime/atomic",
 	"loov.dev/lensm/internal/go/src/runtime/exithook",
-	"runtime/internal/math",
-	"runtime/internal/sys",
+	"loov.dev/lensm/internal/go/src/runtime/maps",
+	"loov.dev/lensm/internal/go/src/runtime/math",
+	"loov.dev/lensm/internal/go/src/runtime/sys",
 	"loov.dev/lensm/internal/go/src/runtime/syscall",
 
 	"loov.dev/lensm/internal/go/src/abi",
@@ -79,7 +80,7 @@ var extraNoInstrumentPkgs = []string{
 	"-internal/bytealg",
 }
 
-var noRaceFuncPkgs = []string{"sync", "sync/atomic", "internal/runtime/atomic"}
+var noRaceFuncPkgs = []string{"sync", "sync/atomic", "internal/sync", "internal/runtime/atomic"}
 
 var allowAsmABIPkgs = []string{
 	"runtime",
@@ -91,39 +92,36 @@ var allowAsmABIPkgs = []string{
 	"runtime/internal/startlinetest",
 }
 
-var (
-	pkgSpecials     map[string]PkgSpecial
-	pkgSpecialsOnce sync.Once
-)
-
 // LookupPkgSpecial returns special build properties for the given package path.
 func LookupPkgSpecial(pkgPath string) PkgSpecial {
-	pkgSpecialsOnce.Do(func() {
-		// Construct pkgSpecials from various package lists. This lets us use
-		// more flexible logic, while keeping the final map simple, and avoids
-		// the init-time cost of a map.
-		pkgSpecials = make(map[string]PkgSpecial)
-		set := func(elt string, f func(*PkgSpecial)) {
-			s := pkgSpecials[elt]
-			f(&s)
-			pkgSpecials[elt] = s
-		}
-		for _, pkg := range runtimePkgs {
-			set(pkg, func(ps *PkgSpecial) { ps.Runtime = true; ps.NoInstrument = true })
-		}
-		for _, pkg := range extraNoInstrumentPkgs {
-			if pkg[0] == '-' {
-				set(pkg[1:], func(ps *PkgSpecial) { ps.NoInstrument = false })
-			} else {
-				set(pkg, func(ps *PkgSpecial) { ps.NoInstrument = true })
-			}
-		}
-		for _, pkg := range noRaceFuncPkgs {
-			set(pkg, func(ps *PkgSpecial) { ps.NoRaceFunc = true })
-		}
-		for _, pkg := range allowAsmABIPkgs {
-			set(pkg, func(ps *PkgSpecial) { ps.AllowAsmABI = true })
-		}
-	})
-	return pkgSpecials[pkgPath]
+	return pkgSpecialsOnce()[pkgPath]
 }
+
+var pkgSpecialsOnce = sync.OnceValue(func() map[string]PkgSpecial {
+	// Construct pkgSpecials from various package lists. This lets us use
+	// more flexible logic, while keeping the final map simple, and avoids
+	// the init-time cost of a map.
+	pkgSpecials := make(map[string]PkgSpecial)
+	set := func(elt string, f func(*PkgSpecial)) {
+		s := pkgSpecials[elt]
+		f(&s)
+		pkgSpecials[elt] = s
+	}
+	for _, pkg := range runtimePkgs {
+		set(pkg, func(ps *PkgSpecial) { ps.Runtime = true; ps.NoInstrument = true })
+	}
+	for _, pkg := range extraNoInstrumentPkgs {
+		if pkg[0] == '-' {
+			set(pkg[1:], func(ps *PkgSpecial) { ps.NoInstrument = false })
+		} else {
+			set(pkg, func(ps *PkgSpecial) { ps.NoInstrument = true })
+		}
+	}
+	for _, pkg := range noRaceFuncPkgs {
+		set(pkg, func(ps *PkgSpecial) { ps.NoRaceFunc = true })
+	}
+	for _, pkg := range allowAsmABIPkgs {
+		set(pkg, func(ps *PkgSpecial) { ps.AllowAsmABI = true })
+	}
+	return pkgSpecials
+})
