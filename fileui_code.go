@@ -73,7 +73,8 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	event.Op(gtx.Ops, ui.Code)
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
-			Kinds: pointer.Move | pointer.Press,
+			Target: ui.Code,
+			Kinds:  pointer.Move | pointer.Press,
 		})
 		if !ok {
 			break
