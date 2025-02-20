@@ -195,11 +195,23 @@ func Disassemble(dis *godisasm.Disasm, sym *Function, opts disasm.Options) (*dis
 	return code, nil
 }
 
+var rxEnvVariable = regexp.MustCompile(`\$[a-zA-Z_]+[a-zA-Z0-9_]+\b`)
+
+func replaceEnvironmentVariables(s string) string {
+	return rxEnvVariable.ReplaceAllStringFunc(s, func(env string) string {
+		replacement := os.Getenv(env[1:])
+		if replacement != "" {
+			return replacement
+		}
+		return env
+	})
+}
+
 // LoadSources loads the specified line sets.
 func LoadSources(needed map[string]*disasm.LineSet, symbolFile string, context int) []disasm.Source {
 	var sources []disasm.Source
 	for file, set := range needed {
-		data, err := os.ReadFile(file)
+		data, err := os.ReadFile(replaceEnvironmentVariables(file))
 		if err != nil {
 			// TODO: should we create a stub source block instead?
 			fmt.Fprintf(os.Stderr, "unable to load source from %q: %v\n", file, err)
