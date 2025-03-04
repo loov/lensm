@@ -68,27 +68,6 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
-	mouseClicked := false
-
-	event.Op(gtx.Ops, ui.Code)
-	for {
-		ev, ok := gtx.Event(pointer.Filter{
-			Target: ui.Code,
-			Kinds:  pointer.Move | pointer.Press,
-		})
-		if !ok {
-			break
-		}
-		if ev, ok := ev.(pointer.Event); ok {
-			switch ev.Kind {
-			case pointer.Move:
-				ui.mousePosition = ev.Position
-			case pointer.Press:
-				mouseClicked = true
-			}
-		}
-	}
-
 	// The layout has the following sections:
 	// pad | Jump | pad/2 | Related | pad | Gutter | pad | Source | pad
 
@@ -103,6 +82,37 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	asm := BoundsWidth(int(jump.Max)+pad/2, blocksWidth*3/10)
 	gutter := BoundsWidth(int(asm.Max)+pad, gutterWidth)
 	source := BoundsWidth(int(gutter.Max)+pad, blocksWidth*7/10)
+
+	event.Op(gtx.Ops, ui.Code)
+	mouseClicked := false
+	for {
+		ev, ok := gtx.Event(pointer.Filter{
+			Target: ui.Code,
+			Kinds:  pointer.Move | pointer.Press | pointer.Scroll,
+			ScrollY: pointer.ScrollRange{
+				Min: int(ui.asm.scroll) - lineHeight,
+				Max: len(ui.Code.Insts)*lineHeight + lineHeight - int(ui.asm.scroll),
+			},
+		})
+		if !ok {
+			break
+		}
+		if ev, ok := ev.(pointer.Event); ok {
+			switch ev.Kind {
+			case pointer.Move:
+				ui.mousePosition = ev.Position
+			case pointer.Press:
+				mouseClicked = true
+			case pointer.Scroll:
+				switch {
+				case asm.Contains(ev.Position.X):
+					ui.asm.scroll -= ev.Scroll.Y
+				case source.Contains(ev.Position.X):
+					ui.src.scroll -= ev.Scroll.Y
+				}
+			}
+		}
+	}
 
 	// draw gutter
 	paint.FillShape(gtx.Ops, f32color.Gray8(0xE8), clip.Rect{
