@@ -99,10 +99,7 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 					}
 
 					if offset != 0 {
-						target := list.Selected + offset
-						if target < 0 {
-							target = 0
-						}
+						target := max(list.Selected+offset, 0)
 						if target >= length {
 							target = length - 1
 						}

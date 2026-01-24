@@ -21,9 +21,7 @@ type Windows struct {
 }
 
 func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Window) error) {
-	windows.active.Add(1)
-	go func() {
-		defer windows.active.Done()
+	windows.active.Go(func() {
 
 		window := new(app.Window)
 		window.Option(
@@ -33,7 +31,7 @@ func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Win
 		if err := run(window); err != nil {
 			log.Println(err)
 		}
-	}()
+	})
 }
 
 func (windows *Windows) Wait() {
