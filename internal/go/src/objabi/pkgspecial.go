@@ -43,14 +43,21 @@ type PkgSpecial struct {
 }
 
 var runtimePkgs = []string{
+	// TODO(panjf2000): consider syncing the list inside the
+	// 	isAsyncSafePoint in preempt.go based on this list?
+
 	"runtime",
 
 	"loov.dev/lensm/internal/go/src/runtime/atomic",
+	"loov.dev/lensm/internal/go/src/runtime/cgroup",
 	"loov.dev/lensm/internal/go/src/runtime/exithook",
+	"loov.dev/lensm/internal/go/src/runtime/gc",
+	"loov.dev/lensm/internal/go/src/runtime/gc/scan",
 	"loov.dev/lensm/internal/go/src/runtime/maps",
 	"loov.dev/lensm/internal/go/src/runtime/math",
 	"loov.dev/lensm/internal/go/src/runtime/sys",
-	"loov.dev/lensm/internal/go/src/runtime/syscall",
+	"loov.dev/lensm/internal/go/src/runtime/syscall/linux",
+	"loov.dev/lensm/internal/go/src/runtime/syscall/windows",
 
 	"loov.dev/lensm/internal/go/src/abi",
 	"loov.dev/lensm/internal/go/src/bytealg",
@@ -63,6 +70,7 @@ var runtimePkgs = []string{
 	"loov.dev/lensm/internal/go/src/goexperiment",
 	"loov.dev/lensm/internal/go/src/goos",
 	"loov.dev/lensm/internal/go/src/profilerecord",
+	"loov.dev/lensm/internal/go/src/strconv",
 	"loov.dev/lensm/internal/go/src/stringslite",
 }
 
@@ -88,8 +96,9 @@ var allowAsmABIPkgs = []string{
 	"syscall",
 	"loov.dev/lensm/internal/go/src/bytealg",
 	"loov.dev/lensm/internal/go/src/chacha8rand",
-	"loov.dev/lensm/internal/go/src/runtime/syscall",
-	"runtime/internal/startlinetest",
+	"loov.dev/lensm/internal/go/src/runtime/syscall/linux",
+	"loov.dev/lensm/internal/go/src/runtime/syscall/windows",
+	"loov.dev/lensm/internal/go/src/runtime/startlinetest",
 }
 
 // LookupPkgSpecial returns special build properties for the given package path.
