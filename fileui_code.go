@@ -339,7 +339,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		if distance := ui.asm.bar.ScrollDistance(); distance != 0 {
 			ui.asm.scroll -= distance * (contentBot - contentTop)
 		}
-		image.Rect(0, -1000, 1, 1000)
+
 		if distance := ui.asm.gesture.Update(gtx.Metric, gtx.Source, gtx.Now, gesture.Vertical,
 			pointer.ScrollRange{},
 			pointer.ScrollRange{Min: -1000, Max: 1000},
