@@ -81,6 +81,7 @@ type CodeUIStyle struct {
 	Syntax           SyntaxPalette
 
 	ShowNative bool
+	ShowHelp   bool
 	TextHeight unit.Sp
 	LineHeight unit.Sp
 }
@@ -752,7 +753,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	commentEditing := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
-	if !ui.selecting && !commentEditing && InRange(highlightAsmIndex, len(ui.Code.Insts)) {
+	if ui.ShowHelp && !ui.selecting && !commentEditing && InRange(highlightAsmIndex, len(ui.Code.Insts)) {
 		inst := ui.Code.Insts[highlightAsmIndex]
 		nativeHovered := ui.ShowNative && native.Contains(mousePosition.X)
 		var help AssemblyHelp
