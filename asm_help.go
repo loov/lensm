@@ -84,7 +84,7 @@ var asmInstructionRules = []asmInstructionRule{
 func NativeAssemblyInstructionHelp(text string) (AssemblyHelp, bool) {
 	mnemonic, operands := splitAssemblyInstruction(text)
 	lookup := canonicalNativeMnemonic(mnemonic)
-	help, ok := AssemblyInstructionHelp(lookup)
+	help, ok := knownAssemblyInstructionHelp(lookup, nil)
 	if !ok {
 		return AssemblyHelp{}, false
 	}
@@ -440,6 +440,16 @@ func AssemblyInstructionHelp(text string) (AssemblyHelp, bool) {
 	if mnemonic == "" {
 		return AssemblyHelp{}, false
 	}
+	if help, ok := knownAssemblyInstructionHelp(mnemonic, operands); ok {
+		return help, true
+	}
+	return AssemblyHelp{
+		Mnemonic:    mnemonic,
+		Description: "Execute the " + mnemonic + " instruction.",
+	}, true
+}
+
+func knownAssemblyInstructionHelp(mnemonic string, operands []string) (AssemblyHelp, bool) {
 	// Resolve exact mnemonics first. Otherwise BLS can be mistaken for BL with
 	// an S size suffix, and similar prefix collisions produce wrong semantics.
 	for _, rule := range asmInstructionRules {
