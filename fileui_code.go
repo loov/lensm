@@ -139,7 +139,8 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	sourceCommentLeft := sourceTextLeft + sourceTextWidth*70/100
 	sourceCommentWidth := int(source.Max) - sourceCommentLeft
 	sourceCodeWidth := sourceCommentLeft - sourceTextLeft - pad/2
-	if sourceCodeWidth < 0 || sourceCommentWidth < lineHeight*8 {
+	minimumCommentWidth := lineHeight * 4
+	if sourceCodeWidth < 0 || sourceCommentWidth < minimumCommentWidth {
 		sourceCodeWidth = sourceTextWidth
 		sourceCommentWidth = 0
 	}
@@ -156,7 +157,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	nativeCommentLeft := nativeTextLeft + nativeTextWidth*62/100
 	nativeCommentWidth := int(native.Max) - nativeCommentLeft
 	nativeInstructionWidth := nativeCommentLeft - nativeTextLeft - pad/2
-	if nativeInstructionWidth < 0 || nativeCommentWidth < lineHeight*8 {
+	if nativeInstructionWidth < 0 || nativeCommentWidth < minimumCommentWidth {
 		nativeInstructionWidth = nativeTextWidth
 		nativeCommentWidth = 0
 	}
@@ -169,7 +170,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		commentWidth = 0
 	}
 	goInstructionWidth := commentLeft - goTextLeft - pad/2
-	if goInstructionWidth < 0 || commentWidth < lineHeight*8 {
+	if goInstructionWidth < 0 || commentWidth < minimumCommentWidth {
 		goInstructionWidth = goTextWidth
 		commentWidth = 0
 	}
@@ -271,10 +272,29 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			}
 		}
 	}
+	copyFocus := event.Tag(ui.CodeUI)
+	commentFocused := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
+	if ui.Selection.Active && !commentFocused {
+		// A drag can leave keyboard focus on a surrounding widget on macOS.
+		// An active line selection still owns Cmd/Ctrl+C unless the user is
+		// editing comment text.
+		copyFocus = nil
+	}
+	for {
+		ev, ok := gtx.Event(key.Filter{Focus: copyFocus, Required: key.ModShortcut, Name: key.Name("C")})
+		if !ok {
+			break
+		}
+		keyEvent, ok := ev.(key.Event)
+		if ok && keyEvent.State == key.Press {
+			if text := ui.Selection.Text(ui.Code); text != "" && ui.CopyText != nil {
+				ui.CopyText(gtx, text)
+			}
+		}
+	}
 	for {
 		ev, ok := gtx.Event(
 			key.FocusFilter{Target: ui.CodeUI},
-			key.Filter{Focus: ui.CodeUI, Required: key.ModShortcut, Name: key.Name("C")},
 			key.Filter{Focus: ui.CodeUI, Required: key.ModShortcut, Name: key.Name("A")},
 			key.Filter{Focus: ui.CodeUI, Name: key.NameEscape},
 		)
@@ -286,10 +306,6 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			continue
 		}
 		switch keyEvent.Name {
-		case key.Name("C"):
-			if text := ui.Selection.Text(ui.Code); text != "" && ui.CopyText != nil {
-				ui.CopyText(gtx, text)
-			}
 		case key.Name("A"):
 			view := ui.Selection.View
 			if view == CodeViewNone {
