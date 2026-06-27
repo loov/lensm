@@ -140,11 +140,19 @@ func (store *CommentStore) set(coord CommentCoord, text string, persist bool) er
 			UpdatedAt:    time.Now().UTC(),
 		}
 	}
+	wasDirty := store.dirty
 	store.dirty = true
 	if !persist {
 		return nil
 	}
 	if err := store.saveLocked(); err != nil {
+		// Roll back so the in-memory store keeps matching the file.
+		if exists {
+			store.records[key] = existing
+		} else {
+			delete(store.records, key)
+		}
+		store.dirty = wasDirty
 		return err
 	}
 	store.dirty = false
