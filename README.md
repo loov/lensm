@@ -18,6 +18,17 @@ Build this checkout locally:
 go build -o lensm .
 ```
 
+GitHub Actions also builds installable macOS disk images for Apple Silicon
+and Intel. Download the DMG artifact from a successful CI run, open it, and
+drag `Lensm.app` to Applications. CI builds use an ad-hoc signature, so macOS
+may require the first launch through **Control-click → Open**.
+
+To build the DMG locally on macOS:
+
+```
+./scripts/build-macos-dmg.sh 0.0.0 1 "$(go env GOARCH)"
+```
+
 On Linux, use the same Gio tags if you want to skip a windowing backend:
 
 ```

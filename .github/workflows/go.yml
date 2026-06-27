@@ -1,17 +1,57 @@
-name: Go
+name: CI
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
       - run: go test ./...
+
+  build-macos:
+    if: github.event_name != 'pull_request'
+    needs: test
+    name: macOS ${{ matrix.goarch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            goarch: arm64
+          - runner: macos-15-intel
+            goarch: amd64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build application DMG
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" == v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          ./scripts/build-macos-dmg.sh "$version" "$GITHUB_RUN_NUMBER" "${{ matrix.goarch }}"
+      - name: Upload DMG
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/*.dmg
+          archive: false
+          if-no-files-found: error
