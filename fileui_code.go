@@ -48,6 +48,12 @@ type CodeUI struct {
 	SelectedView  CommentView
 	SelectedFile  string
 	SelectedLine  int
+	Selection     TextSelection
+
+	selecting        bool
+	selectionPointer pointer.ID
+	selectionStart   f32.Point
+	selectionMoved   bool
 }
 
 // highlightCache holds the syntax highlight spans for a Code. Layout
@@ -117,6 +123,7 @@ type CodeUIStyle struct {
 	SetComment       func(disasm.Inst, string)
 	SetNativeComment func(disasm.Inst, string)
 	SetSourceComment func(file string, line int, text string)
+	CopyText         func(gtx layout.Context, text string)
 	CommentEditor    *widget.Editor
 	Theme            *material.Theme
 	Colors           UIColors
@@ -216,12 +223,35 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		commentWidth = 0
 	}
 
-	event.Op(gtx.Ops, ui.Code)
+	event.Op(gtx.Ops, ui.CodeUI)
+	selectionAt := func(position f32.Point) (CodeView, int, bool) {
+		if asm.Contains(position.X) {
+			relative := position.Y - ui.asm.scroll
+			if relative < 0 {
+				return CodeViewNone, -1, false
+			}
+			line := int(relative) / lineHeight
+			return CodeViewGoAsm, line, InRange(line, len(ui.Code.Insts))
+		}
+		if ui.ShowNative && native.Contains(position.X) {
+			relative := position.Y - ui.asm.scroll
+			if relative < 0 {
+				return CodeViewNone, -1, false
+			}
+			line := int(relative) / lineHeight
+			return CodeViewNativeAsm, line, InRange(line, len(ui.Code.Insts))
+		}
+		if source.Contains(position.X) {
+			line := sourceRowAtY(ui.Code, ui.src.scroll, lineHeight, position.Y)
+			return CodeViewSource, line, line >= 0
+		}
+		return CodeViewNone, -1, false
+	}
 	mouseClicked := false
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
-			Target: ui.Code,
-			Kinds:  pointer.Move | pointer.Press | pointer.Scroll,
+			Target: ui.CodeUI,
+			Kinds:  pointer.Move | pointer.Leave | pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Scroll,
 			ScrollY: pointer.ScrollRange{
 				Min: int(ui.asm.scroll) - lineHeight,
 				Max: len(ui.Code.Insts)*lineHeight + lineHeight - int(ui.asm.scroll),
@@ -234,9 +264,49 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			switch ev.Kind {
 			case pointer.Move:
 				ui.mousePosition = ev.Position
+			case pointer.Leave:
+				if !ui.selecting {
+					ui.mousePosition = f32.Pt(-1, -1)
+				}
 			case pointer.Press:
 				ui.mousePosition = ev.Position
-				mouseClicked = true
+				if ev.Buttons.Contain(pointer.ButtonPrimary) {
+					view, line, selectable := selectionAt(ev.Position)
+					if selectable {
+						ui.Selection.Begin(view, line, ev.Modifiers.Contain(key.ModShift))
+						ui.selecting = true
+						ui.selectionPointer = ev.PointerID
+						ui.selectionStart = ev.Position
+						ui.selectionMoved = false
+						gtx.Execute(pointer.GrabCmd{Tag: ui.CodeUI, ID: ev.PointerID})
+						gtx.Execute(key.FocusCmd{Tag: ui.CodeUI})
+					} else {
+						ui.Selection.Clear()
+					}
+				}
+			case pointer.Drag:
+				ui.mousePosition = ev.Position
+				if ui.selecting && ev.PointerID == ui.selectionPointer {
+					if math.Abs(float64(ev.Position.X-ui.selectionStart.X)) > 3 || math.Abs(float64(ev.Position.Y-ui.selectionStart.Y)) > 3 {
+						ui.selectionMoved = true
+					}
+					view, line, selectable := selectionAt(ev.Position)
+					if selectable && view == ui.Selection.View {
+						ui.Selection.Extend(view, line)
+					}
+				}
+			case pointer.Release:
+				ui.mousePosition = ev.Position
+				if ui.selecting && ev.PointerID == ui.selectionPointer {
+					view, line, selectable := selectionAt(ev.Position)
+					if selectable && view == ui.Selection.View {
+						ui.Selection.Extend(view, line)
+					}
+					mouseClicked = !ui.selectionMoved
+					ui.selecting = false
+				}
+			case pointer.Cancel:
+				ui.selecting = false
 			case pointer.Scroll:
 				ui.mousePosition = ev.Position
 				switch {
@@ -248,6 +318,41 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 					ui.src.scroll -= ev.Scroll.Y
 				}
 			}
+		}
+	}
+	for {
+		ev, ok := gtx.Event(
+			key.FocusFilter{Target: ui.CodeUI},
+			key.Filter{Focus: ui.CodeUI, Required: key.ModShortcut, Name: key.Name("C")},
+			key.Filter{Focus: ui.CodeUI, Required: key.ModShortcut, Name: key.Name("A")},
+			key.Filter{Focus: ui.CodeUI, Name: key.NameEscape},
+		)
+		if !ok {
+			break
+		}
+		keyEvent, ok := ev.(key.Event)
+		if !ok || keyEvent.State != key.Press {
+			continue
+		}
+		switch keyEvent.Name {
+		case key.Name("C"):
+			if text := ui.Selection.Text(ui.Code); text != "" && ui.CopyText != nil {
+				ui.CopyText(gtx, text)
+			}
+		case key.Name("A"):
+			view := ui.Selection.View
+			if view == CodeViewNone {
+				view = CodeViewGoAsm
+			}
+			lineCount := len(ui.Code.Insts)
+			if view == CodeViewSource {
+				lineCount = len(sourceTextRows(ui.Code))
+			}
+			if lineCount > 0 {
+				ui.Selection = TextSelection{View: view, Anchor: 0, Head: lineCount - 1, Active: true}
+			}
+		case key.NameEscape:
+			ui.Selection.Clear()
 		}
 	}
 
@@ -264,6 +369,9 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	mousePosition := ui.mousePosition
 	mouseInAsm := asm.Contains(mousePosition.X) || (ui.ShowNative && native.Contains(mousePosition.X))
 	mouseInSource := source.Contains(mousePosition.X)
+	if mouseInAsm || mouseInSource {
+		pointer.CursorText.Add(gtx.Ops)
+	}
 	highlightAsmIndex := -1
 	if relative := mousePosition.Y - ui.asm.scroll; mouseInAsm && relative >= 0 {
 		highlightAsmIndex = int(relative) / lineHeight
@@ -390,6 +498,18 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		}.Op())
 	}
 	for i, ix := range ui.Code.Insts {
+		if ui.Selection.Contains(CodeViewGoAsm, i) {
+			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.scroll)),
+				Max: image.Pt(int(asm.Max), (i+1)*lineHeight+int(ui.asm.scroll)),
+			}.Op())
+		}
+		if ui.ShowNative && ui.Selection.Contains(CodeViewNativeAsm, i) {
+			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+				Min: image.Pt(int(native.Min), i*lineHeight+int(ui.asm.scroll)),
+				Max: image.Pt(int(native.Max), (i+1)*lineHeight+int(ui.asm.scroll)),
+			}.Op())
+		}
 		if ui.SelectedAsm == i {
 			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
 				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.scroll)),
@@ -497,10 +617,22 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Max: image.Pt(int(source.Max), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
 	top = int(ui.src.scroll)
+	sourceRow := 0
+	paintSourceSelection := func(row, rowTop int) {
+		if ui.Selection.Contains(CodeViewSource, row) {
+			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+				Min: image.Pt(int(source.Min), rowTop),
+				Max: image.Pt(int(source.Max), rowTop+lineHeight),
+			}.Op())
+		}
+	}
 	for i, src := range ui.Code.Source {
 		if i > 0 {
+			paintSourceSelection(sourceRow, top)
 			top += lineHeight
+			sourceRow++
 		}
+		paintSourceSelection(sourceRow, top)
 		SourceLine{
 			TopLeft:    image.Pt(int(source.Min), top),
 			Text:       src.File,
@@ -509,11 +641,15 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			Color:      ui.Colors.MutedText,
 		}.Layout(ui.Theme, gtx)
 		top += lineHeight
+		sourceRow++
 		for blockIndex, block := range src.Blocks {
 			if blockIndex > 0 {
+				paintSourceSelection(sourceRow, top)
 				top += lineHeight
+				sourceRow++
 			}
 			for off := range block.Lines {
+				paintSourceSelection(sourceRow, top)
 				highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
 				lineNo := block.From + off
 				if highlight && mouseClicked {
@@ -555,6 +691,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 					}.Layout(ui.Theme, gtx)
 				}
 				top += lineHeight
+				sourceRow++
 			}
 		}
 	}
@@ -659,7 +796,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	commentEditing := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
-	if !commentEditing && InRange(highlightAsmIndex, len(ui.Code.Insts)) {
+	if !ui.selecting && !commentEditing && InRange(highlightAsmIndex, len(ui.Code.Insts)) {
 		inst := ui.Code.Insts[highlightAsmIndex]
 		hoverText := inst.Text
 		nativeHovered := ui.ShowNative && native.Contains(mousePosition.X)
