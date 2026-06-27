@@ -20,6 +20,7 @@ import (
 )
 
 const mcpProtocolVersion = "2025-06-18"
+const defaultMCPSourceContext = 3
 
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -63,7 +64,6 @@ type mcpServer struct {
 type AppMCPServer struct {
 	httpServer   *http.Server
 	url          string
-	context      int
 	commentsPath string
 
 	// mu guards the fields below.
@@ -76,7 +76,7 @@ type AppMCPServer struct {
 	active *sync.WaitGroup
 }
 
-func StartAppMCPServer(context int, commentsPath string) (*AppMCPServer, error) {
+func StartAppMCPServer(commentsPath string) (*AppMCPServer, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:7077")
 	if err != nil {
 		listener, err = net.Listen("tcp", "127.0.0.1:0")
@@ -87,7 +87,6 @@ func StartAppMCPServer(context int, commentsPath string) (*AppMCPServer, error) 
 
 	server := &AppMCPServer{
 		url:          "http://" + listener.Addr().String() + "/mcp",
-		context:      context,
 		commentsPath: commentsPath,
 		active:       &sync.WaitGroup{},
 	}
@@ -126,7 +125,6 @@ func (server *AppMCPServer) SetPath(path string, comments *CommentStore) {
 	server.mu.Lock()
 	server.generation++
 	generation := server.generation
-	context := server.context
 	commentsPath := server.commentsPath
 	old, oldActive := server.session, server.active
 	server.session = nil
@@ -141,7 +139,7 @@ func (server *AppMCPServer) SetPath(path string, comments *CommentStore) {
 	}
 
 	go func() {
-		session, err := NewLensmSessionWithComments(path, context, commentsPath, comments)
+		session, err := NewLensmSessionWithComments(path, commentsPath, comments)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to load MCP session for %q: %v\n", path, err)
 			server.replaceSession(generation, nil, err)
@@ -294,19 +292,18 @@ func (server *AppMCPServer) acquireSession() (session *LensmSession, loadErr err
 func runMCPCommand(args []string) int {
 	fs := flag.NewFlagSet("lensm mcp", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	context := fs.Int("context", 3, "source line context")
 	commentsPath := fs.String("comments", "", "comments sidecar path")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: lensm mcp [-context N] [-comments path] <exePath>")
+		fmt.Fprintln(os.Stderr, "usage: lensm mcp [-comments path] <exePath>")
 		return 2
 	}
 
 	workInProgressWASM = os.Getenv("LENSM_EXPERIMENT_WASM") != ""
 
-	session, err := NewLensmSession(fs.Arg(0), *context, *commentsPath)
+	session, err := NewLensmSession(fs.Arg(0), *commentsPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -508,7 +505,8 @@ func (server *mcpServer) toolListFunctions(args json.RawMessage) (any, error) {
 
 func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 	var req struct {
-		Name string `json:"name"`
+		Name    string `json:"name"`
+		Context *int   `json:"context"`
 	}
 	if err := decodeJSON(args, &req); err != nil {
 		return nil, err
@@ -516,7 +514,14 @@ func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 	if req.Name == "" {
 		return nil, errors.New("name is required")
 	}
-	code, err := server.session.LoadCode(req.Name)
+	context := defaultMCPSourceContext
+	if req.Context != nil {
+		context = *req.Context
+	}
+	if context < 0 {
+		return nil, errors.New("context must be non-negative")
+	}
+	code, err := server.session.LoadCode(req.Name, context)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +546,7 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 	if server.session.Comments.Path() == "" {
 		return nil, errors.New("comments sidecar is unavailable; the comment would not be persisted")
 	}
-	code, err := server.session.LoadCode(req.Name)
+	code, err := server.session.LoadCode(req.Name, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +700,8 @@ func mcpTools() []mcpTool {
 			Title:       "Get Function Code",
 			Description: "Return Go source, Go assembly, native assembly, source-to-asm mappings, and comments for a function.",
 			InputSchema: objectSchema(map[string]any{
-				"name": stringSchema("Exact function name."),
+				"name":    stringSchema("Exact function name."),
+				"context": integerSchema("Number of extra source lines to include before and after referenced lines. Defaults to 3."),
 			}, []string{"name"}),
 		},
 		{

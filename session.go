@@ -10,16 +10,15 @@ import (
 
 type LensmSession struct {
 	Path     string
-	Context  int
 	File     disasm.File
 	Comments *CommentStore
 }
 
-func NewLensmSession(path string, context int, commentsPath string) (*LensmSession, error) {
-	return NewLensmSessionWithComments(path, context, commentsPath, nil)
+func NewLensmSession(path string, commentsPath string) (*LensmSession, error) {
+	return NewLensmSessionWithComments(path, commentsPath, nil)
 }
 
-func NewLensmSessionWithComments(path string, context int, commentsPath string, comments *CommentStore) (*LensmSession, error) {
+func NewLensmSessionWithComments(path string, commentsPath string, comments *CommentStore) (*LensmSession, error) {
 	file, err := loadDisasmFile(path)
 	if err != nil {
 		return nil, err
@@ -37,7 +36,6 @@ func NewLensmSessionWithComments(path string, context int, commentsPath string, 
 	}
 	return &LensmSession{
 		Path:     cleanPath(path),
-		Context:  context,
 		File:     file,
 		Comments: comments,
 	}, nil
@@ -73,10 +71,10 @@ func (session *LensmSession) FindFunc(name string) disasm.Func {
 	return nil
 }
 
-func (session *LensmSession) LoadCode(name string) (*disasm.Code, error) {
+func (session *LensmSession) LoadCode(name string, context int) (*disasm.Code, error) {
 	fn := session.FindFunc(name)
 	if fn == nil {
 		return nil, fmt.Errorf("function %q not found", name)
 	}
-	return fn.Load(disasm.Options{Context: session.Context})
+	return fn.Load(disasm.Options{Context: context})
 }
