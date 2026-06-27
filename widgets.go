@@ -20,10 +20,33 @@ type SourceLine struct {
 	TopLeft    image.Point
 	Width      int
 	Text       string
+	Spans      []SourceSpan
 	TextHeight unit.Sp
+	LineHeight unit.Sp
 	Italic     bool
 	Bold       bool
 	Color      color.NRGBA
+}
+
+type SourceSpan struct {
+	Text   string
+	Color  color.NRGBA
+	Italic bool
+	Bold   bool
+}
+
+const codeLineHeightScale = 4.0 / 3.0
+
+func codeLineHeightPx(gtx layout.Context, textHeight, requested unit.Sp) int {
+	minHeight := textHeight * codeLineHeightScale
+	if requested < minHeight {
+		requested = minHeight
+	}
+	height := gtx.Metric.Sp(requested)
+	if height < 1 {
+		return 1
+	}
+	return height
 }
 
 // Layout draws the text.
@@ -35,19 +58,46 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 
 	defer op.Offset(line.TopLeft).Push(gtx.Ops).Pop()
 	if line.Width > 0 {
-		maxSize := image.Pt(line.Width, gtx.Metric.Sp(line.TextHeight))
+		maxSize := image.Pt(line.Width, codeLineHeightPx(gtx, line.TextHeight, line.LineHeight))
 		defer clip.Rect{Max: maxSize}.Push(gtx.Ops).Pop()
 	}
 
+	spans := line.Spans
+	if len(spans) == 0 {
+		spans = []SourceSpan{{
+			Text:   line.Text,
+			Color:  line.Color,
+			Italic: line.Italic,
+			Bold:   line.Bold,
+		}}
+	}
+
+	left := 0
+	for _, span := range spans {
+		if span.Text == "" {
+			continue
+		}
+		dims := layoutSourceSpan(th, gtx, line, span, left)
+		left += dims.Size.X
+	}
+}
+
+func layoutSourceSpan(th *material.Theme, gtx layout.Context, line SourceLine, span SourceSpan, left int) layout.Dimensions {
 	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Normal}
-	if line.Italic {
+	if line.Italic || span.Italic {
 		f.Style = font.Italic
 	}
-	if line.Bold {
+	if line.Bold || span.Bold {
 		f.Weight = font.Black
 	}
-	paint.ColorOp{Color: line.Color}.Add(gtx.Ops)
-	widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, f, line.TextHeight, line.Text, op.CallOp{})
+	col := span.Color
+	if col == (color.NRGBA{}) {
+		col = line.Color
+	}
+
+	defer op.Offset(image.Pt(left, 0)).Push(gtx.Ops).Pop()
+	paint.ColorOp{Color: col}.Add(gtx.Ops)
+	return widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, f, line.TextHeight, span.Text, op.CallOp{})
 }
 
 type VerticalLine struct {
