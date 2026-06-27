@@ -94,7 +94,7 @@ func NativeAssemblyInstructionHelp(text string) (AssemblyHelp, bool) {
 	lookup := canonicalNativeMnemonic(mnemonic)
 	// Arch is irrelevant here: only the description is kept, the
 	// explanation is replaced with a native-syntax rewrite below.
-	help, ok := AssemblyInstructionHelp("", lookup)
+	help, ok := knownAssemblyInstructionHelp("", lookup, nil)
 	if !ok {
 		return AssemblyHelp{}, false
 	}
@@ -476,6 +476,16 @@ func AssemblyInstructionHelp(arch, text string) (AssemblyHelp, bool) {
 	if mnemonic == "" {
 		return AssemblyHelp{}, false
 	}
+	if help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands); ok {
+		return help, true
+	}
+	return AssemblyHelp{
+		Mnemonic:    mnemonic,
+		Description: "Execute the " + mnemonic + " instruction.",
+	}, true
+}
+
+func knownAssemblyInstructionHelp(arch, mnemonic string, operands []string) (AssemblyHelp, bool) {
 	// Resolve exact mnemonics first. Otherwise BLS can be mistaken for BL with
 	// an S size suffix, and similar prefix collisions produce wrong semantics.
 	for _, rule := range asmInstructionRules {

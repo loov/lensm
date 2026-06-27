@@ -54,6 +54,22 @@ func TestAssemblyInstructionReference(t *testing.T) {
 	}
 }
 
+func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
+	help, ok := AssemblyInstructionHelp("amd64", "VPERM2F128 $49, Y1, Y2, Y3")
+	if !ok {
+		t.Fatal("no fallback help for Go assembly instruction")
+	}
+	if help.Mnemonic != "VPERM2F128" || help.Description != "Execute the VPERM2F128 instruction." {
+		t.Fatalf("fallback help = %#v", help)
+	}
+}
+
+func TestUnknownNativeAssemblyInstructionHasNoGoFallback(t *testing.T) {
+	if help, ok := NativeAssemblyInstructionHelp("unknownop %rax"); ok {
+		t.Fatalf("unexpected native fallback: %#v", help)
+	}
+}
+
 func TestNativeAssemblyInstructionHelpUsesNativeRewrite(t *testing.T) {
 	help, ok := NativeAssemblyInstructionHelp("addq $1, %rax")
 	if !ok {
