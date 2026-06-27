@@ -754,20 +754,15 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	commentEditing := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
 	if !ui.selecting && !commentEditing && InRange(highlightAsmIndex, len(ui.Code.Insts)) {
 		inst := ui.Code.Insts[highlightAsmIndex]
-		hoverText := inst.Text
 		nativeHovered := ui.ShowNative && native.Contains(mousePosition.X)
+		var help AssemblyHelp
+		var ok bool
 		if nativeHovered {
-			hoverText = inst.NativeText
+			help, ok = NativeAssemblyInstructionHelp(inst.NativeText)
+		} else {
+			help, ok = AssemblyInstructionHelp(inst.Text)
 		}
-		if help, ok := AssemblyInstructionHelp(hoverText); ok {
-			if nativeHovered {
-				// Rewrites use Go assembler operand order. Never show one based on
-				// native syntax, whose destination order is architecture-specific.
-				help.Explanation = ""
-			}
-			if goHelp, goOK := AssemblyInstructionHelp(inst.Text); goOK && goHelp.Explanation != "" {
-				help.Explanation = goHelp.Explanation
-			}
+		if ok {
 			ui.layoutAssemblyHelp(gtx, help, mousePosition)
 		}
 	}
