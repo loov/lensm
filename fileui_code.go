@@ -265,8 +265,8 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	mouseInAsm := asm.Contains(mousePosition.X) || (ui.ShowNative && native.Contains(mousePosition.X))
 	mouseInSource := source.Contains(mousePosition.X)
 	highlightAsmIndex := -1
-	if mouseInAsm {
-		highlightAsmIndex = int(mousePosition.Y-ui.asm.scroll) / lineHeight
+	if relative := mousePosition.Y - ui.asm.scroll; mouseInAsm && relative >= 0 {
+		highlightAsmIndex = int(relative) / lineHeight
 	}
 	var highlightRanges []disasm.LineRange
 
@@ -658,9 +658,87 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		stack.Pop()
 	}
 
+	commentEditing := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
+	if !commentEditing && InRange(highlightAsmIndex, len(ui.Code.Insts)) {
+		inst := ui.Code.Insts[highlightAsmIndex]
+		hoverText := inst.Text
+		nativeHovered := ui.ShowNative && native.Contains(mousePosition.X)
+		if nativeHovered {
+			hoverText = inst.NativeText
+		}
+		if help, ok := AssemblyInstructionHelp(hoverText); ok {
+			if nativeHovered {
+				// Rewrites use Go assembler operand order. Never show one based on
+				// native syntax, whose destination order is architecture-specific.
+				help.Explanation = ""
+			}
+			if goHelp, goOK := AssemblyInstructionHelp(inst.Text); goOK && goHelp.Explanation != "" {
+				help.Explanation = goHelp.Explanation
+			}
+			ui.layoutAssemblyHelp(gtx, help, mousePosition)
+		}
+	}
+
 	return layout.Dimensions{
 		Size: gtx.Constraints.Max,
 	}
+}
+
+func (ui CodeUIStyle) layoutAssemblyHelp(gtx layout.Context, help AssemblyHelp, position f32.Point) {
+	maxWidth := gtx.Metric.Dp(460)
+	if maxWidth > gtx.Constraints.Max.X-16 {
+		maxWidth = max(0, gtx.Constraints.Max.X-16)
+	}
+	if maxWidth == 0 {
+		return
+	}
+
+	contentContext := gtx
+	contentContext.Constraints.Min = image.Point{}
+	contentContext.Constraints.Max = image.Pt(maxWidth, gtx.Metric.Dp(140))
+	macro := op.Record(gtx.Ops)
+	dims := layout.UniformInset(8).Layout(contentContext, func(gtx layout.Context) layout.Dimensions {
+		children := []layout.FlexChild{
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				label := material.Body1(ui.Theme, help.Mnemonic+" — "+help.Description)
+				label.Font.Weight = font.Bold
+				label.Color = ui.Colors.Text
+				label.TextSize = ui.TextHeight * 9 / 10
+				return label.Layout(gtx)
+			}),
+		}
+		if help.Explanation != "" {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				label := material.Body1(ui.Theme, help.Explanation)
+				label.Font.Typeface = "override-monospace,Go,monospace"
+				label.Color = ui.Syntax.Plain
+				label.TextSize = ui.TextHeight * 9 / 10
+				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)
+			}))
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	})
+	call := macro.Stop()
+
+	left := int(position.X) + gtx.Metric.Dp(12)
+	top := int(position.Y) + gtx.Metric.Dp(18)
+	if left+dims.Size.X > gtx.Constraints.Max.X-4 {
+		left = gtx.Constraints.Max.X - dims.Size.X - 4
+	}
+	if top+dims.Size.Y > gtx.Constraints.Max.Y-4 {
+		top = int(position.Y) - dims.Size.Y - gtx.Metric.Dp(8)
+	}
+	left = max(4, left)
+	top = max(4, top)
+
+	stack := op.Offset(image.Pt(left, top)).Push(gtx.Ops)
+	paint.FillShape(gtx.Ops, ui.Colors.SecondaryBackground, clip.UniformRRect(image.Rectangle{Max: dims.Size}, 5).Op(gtx.Ops))
+	paint.FillShape(gtx.Ops, ui.Colors.Splitter, clip.Stroke{
+		Path:  clip.UniformRRect(image.Rectangle{Max: dims.Size}, 5).Path(gtx.Ops),
+		Width: 1,
+	}.Op())
+	call.Add(gtx.Ops)
+	stack.Pop()
 }
 
 func (ui CodeUIStyle) callTargetHit(gtx layout.Context, inst disasm.Inst, left int, x float32) bool {
