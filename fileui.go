@@ -631,7 +631,11 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dime
 				return layout.Inset{Left: 4}.Layout(gtx, button.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.IconButton(ui.Theme, &ui.CopyAsm, CopyIcon, "Copy assembly")
+				tooltip := "Copy assembly (drag to select lines)"
+				if code := ui.activeCode(); code != nil && code.Selection.Active {
+					tooltip = "Copy selection (Cmd/Ctrl+C)"
+				}
+				button := material.IconButton(ui.Theme, &ui.CopyAsm, CopyIcon, tooltip)
 				button.Size = 18
 				button.Inset = layout.UniformInset(8)
 				if !ui.activeCodeLoaded() {
@@ -1050,7 +1054,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 					if code == nil || !code.Loaded() {
 						return layout.Dimensions{}
 					}
-					txt := material.Body1(ui.Theme, "file: "+code.Code.File)
+					txt := material.Body1(ui.Theme, "file: "+code.Code.File+"  •  Hover instructions for help  •  Drag lines to select")
 					txt.Font.Style = font.Italic
 					txt.Color = colors.MutedText
 
@@ -1084,7 +1088,10 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 								SetComment:       ui.setCommentForInst,
 								SetNativeComment: ui.setNativeCommentForInst,
 								SetSourceComment: ui.setSourceCommentForLine,
-								CommentEditor:    &ui.Comment,
+								CopyText: func(gtx layout.Context, text string) {
+									ui.writeClipboardText(gtx, text, "Copied selection")
+								},
+								CommentEditor: &ui.Comment,
 
 								Theme:      ui.Theme,
 								Colors:     colors,
@@ -1378,6 +1385,10 @@ func (ui *FileUI) copyAssembly(gtx layout.Context) {
 	if code == nil || !code.Loaded() {
 		return
 	}
+	if selected := code.Selection.Text(code.Code); selected != "" {
+		ui.writeClipboardText(gtx, selected, "Copied selection")
+		return
+	}
 
 	var text strings.Builder
 	for _, inst := range code.Insts {
@@ -1388,11 +1399,7 @@ func (ui *FileUI) copyAssembly(gtx layout.Context) {
 		}
 		text.WriteByte('\n')
 	}
-	gtx.Execute(clipboard.WriteCmd{
-		Type: "text/plain",
-		Data: io.NopCloser(strings.NewReader(text.String())),
-	})
-	ui.copyStatus = "Copied"
+	ui.writeClipboardText(gtx, text.String(), "Copied assembly")
 }
 
 func (ui *FileUI) copySourceCode(gtx layout.Context) {
@@ -1423,11 +1430,18 @@ func (ui *FileUI) copySourceCode(gtx layout.Context) {
 		}
 	}
 
+	ui.writeClipboardText(gtx, text.String(), "Copied code")
+}
+
+func (ui *FileUI) writeClipboardText(gtx layout.Context, text, status string) {
+	if text == "" {
+		return
+	}
 	gtx.Execute(clipboard.WriteCmd{
 		Type: "text/plain",
-		Data: io.NopCloser(strings.NewReader(text.String())),
+		Data: io.NopCloser(strings.NewReader(text)),
 	})
-	ui.copyStatus = "Copied code"
+	ui.copyStatus = status
 }
 
 func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
@@ -1461,6 +1475,15 @@ func (ui *FileUI) openInNew(gtx layout.Context) {
 		},
 		SourceCommentFor: func(file string, line int) string {
 			return ui.Comments.ForSource(codeData.Name, file, line)
+		},
+		CopyText: func(gtx layout.Context, text string) {
+			if text == "" {
+				return
+			}
+			gtx.Execute(clipboard.WriteCmd{
+				Type: "text/plain",
+				Data: io.NopCloser(strings.NewReader(text)),
+			})
 		},
 		Colors:     colors,
 		Syntax:     SyntaxPaletteFor(ui.Settings.SyntaxStyle, colors),
