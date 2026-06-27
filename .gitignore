@@ -16,3 +16,4 @@
 .idea/
 
 lensm
+*.lensm-comments.json
