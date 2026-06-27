@@ -16,6 +16,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		os.Exit(runMCPCommand(os.Args[2:]))
+	}
+
 	cpuprofile := flag.String("cpuprofile", "", "enable cpu profiling")
 	textSize := flag.Int("text-size", 12, "default font size")
 	filter := flag.String("filter", "", "filter the functions by regexp")
