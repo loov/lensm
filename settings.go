@@ -13,6 +13,7 @@ type AppSettings struct {
 	SyntaxStyle   string   `json:"syntax_style"`
 	Dark          bool     `json:"dark,omitempty"`
 	ShowNativeAsm bool     `json:"show_native_asm"`
+	ShowAsmHelp   bool     `json:"show_asm_help"`
 	TextSize      int      `json:"text_size,omitempty"`
 	Context       int      `json:"context,omitempty"`
 	LastPath      string   `json:"last_path,omitempty"`
@@ -24,6 +25,7 @@ func DefaultAppSettings() AppSettings {
 	return AppSettings{
 		SyntaxStyle:   SyntaxStyleGoLand,
 		ShowNativeAsm: true,
+		ShowAsmHelp:   true,
 		TextSize:      12,
 		Context:       3,
 	}

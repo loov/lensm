@@ -64,6 +64,7 @@ type FileUI struct {
 	CopyCode       widget.Clickable
 	OpenInNew      widget.Clickable
 	ShowNativeAsm  widget.Bool
+	ShowAsmHelp    widget.Bool
 	Comment        widget.Editor
 	TextSizeEditor widget.Editor
 	ContextEditor  widget.Editor
@@ -133,6 +134,7 @@ func NewExeUI(windows *Windows, theme *material.Theme) *FileUI {
 	ui.Navigation.Reset()
 	ui.Tabs.List.Axis = layout.Horizontal
 	ui.ShowNativeAsm.Value = settings.ShowNativeAsm
+	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
 	ui.Comment.SingleLine = true
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
@@ -877,6 +879,11 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 						return check.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						check := material.CheckBox(ui.Theme, &ui.ShowAsmHelp, "Show instruction help")
+						check.Color = colors.Text
+						return check.Layout(gtx)
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return ui.layoutSyntaxSelector(gtx, colors)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -962,6 +969,9 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 	for ui.ShowNativeAsm.Update(gtx) {
 		changedVisual = true
 	}
+	for ui.ShowAsmHelp.Update(gtx) {
+		changedVisual = true
+	}
 	for ui.SyntaxStyle.Update(gtx) {
 		ui.SyntaxStyle.Value = NormalizeSyntaxStyle(ui.SyntaxStyle.Value)
 		changedVisual = true
@@ -1024,6 +1034,7 @@ func (ui *FileUI) saveVisualSettings() {
 	settings := ui.Settings
 	settings.Dark = ui.Dark.Value
 	settings.ShowNativeAsm = ui.ShowNativeAsm.Value
+	settings.ShowAsmHelp = ui.ShowAsmHelp.Value
 	settings.SyntaxStyle = NormalizeSyntaxStyle(ui.SyntaxStyle.Value)
 	if value, err := strconv.Atoi(strings.TrimSpace(ui.TextSizeEditor.Text())); err == nil && value > 0 {
 		settings.TextSize = value
@@ -1216,6 +1227,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 								Colors:     colors,
 								Syntax:     SyntaxPaletteFor(ui.Settings.SyntaxStyle, colors),
 								ShowNative: ui.ShowNativeAsm.Value,
+								ShowHelp:   ui.ShowAsmHelp.Value,
 								TextHeight: ui.Theme.TextSize,
 							}.Layout(gtx)
 						}),
@@ -1615,6 +1627,7 @@ func (ui *FileUI) openInNew(gtx layout.Context) {
 		Colors:     colors,
 		Syntax:     SyntaxPaletteFor(ui.Settings.SyntaxStyle, colors),
 		ShowNative: ui.ShowNativeAsm.Value,
+		ShowHelp:   ui.ShowAsmHelp.Value,
 		TextHeight: ui.Theme.TextSize,
 	}
 
