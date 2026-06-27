@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAssemblyInstructionExplanations(t *testing.T) {
 	tests := []struct {
@@ -39,5 +42,164 @@ func TestAssemblyInstructionReference(t *testing.T) {
 	}
 	if help.Explanation != "" {
 		t.Fatalf("unexpected JNE explanation: %q", help.Explanation)
+	}
+}
+
+func TestNativeAssemblyInstructionHelpUsesNativeRewrite(t *testing.T) {
+	help, ok := NativeAssemblyInstructionHelp("addq $1, %rax")
+	if !ok {
+		t.Fatal("no native help for ADDQ")
+	}
+	if help.Explanation != "%rax := %rax + 1" {
+		t.Fatalf("native explanation = %q", help.Explanation)
+	}
+}
+
+func TestNativeARMAssemblyInstructionExplanation(t *testing.T) {
+	help, ok := NativeAssemblyInstructionHelp("add x0, x1, #8")
+	if !ok {
+		t.Fatal("no native help for ARM ADD")
+	}
+	if help.Explanation != "x0 := x1 + 8" {
+		t.Fatalf("native ARM explanation = %q", help.Explanation)
+	}
+}
+
+func TestNativeARMStoreInstructionExplanation(t *testing.T) {
+	help, ok := NativeAssemblyInstructionHelp("str x0, [sp, #16]")
+	if !ok {
+		t.Fatal("no native help for ARM STR")
+	}
+	if help.Explanation != "memory[sp + 16] := x0" {
+		t.Fatalf("native ARM STR explanation = %q", help.Explanation)
+	}
+}
+
+func TestNativeARMIndexedMemoryExplanations(t *testing.T) {
+	tests := map[string]string{
+		"str x30, [sp, #-112]!":     "sp := sp - 112; memory[sp] := x30",
+		"ldr x0, [sp], #16":         "x0 := memory[sp]; sp := sp + 16",
+		"stp x29, x30, [sp, #-16]!": "sp := sp - 16; memory[sp] := pair(x29, x30)",
+	}
+	for instruction, want := range tests {
+		help, ok := NativeAssemblyInstructionHelp(instruction)
+		if !ok || help.Explanation != want {
+			t.Errorf("%q explanation = %q, want %q", instruction, help.Explanation, want)
+		}
+	}
+}
+
+func TestNativeARMUnsignedConditionalBranchIsNotCall(t *testing.T) {
+	help, ok := NativeAssemblyInstructionHelp("b.ls .+0x1bc")
+	if !ok {
+		t.Fatal("no native help for B.LS")
+	}
+	if help.Description != "Conditional jump after an unsigned comparison." {
+		t.Fatalf("B.LS description = %q", help.Description)
+	}
+	if help.Explanation != "if unsigned lower than or equal (C == 0 or Z == 1), PC := .+0x1bc" {
+		t.Fatalf("B.LS explanation = %q", help.Explanation)
+	}
+}
+
+func TestAssemblyHelpRuleTableHasNoMnemonicCollisions(t *testing.T) {
+	type owner struct {
+		description string
+		prefix      string
+	}
+	exact := make(map[string]owner)
+	for _, rule := range asmInstructionRules {
+		for _, prefix := range rule.Prefixes {
+			if previous, exists := exact[prefix]; exists {
+				t.Errorf("duplicate mnemonic %s in %s and %s", prefix, previous.prefix, prefix)
+			}
+			exact[prefix] = owner{description: rule.Description, prefix: prefix}
+		}
+	}
+
+	for _, rule := range asmInstructionRules {
+		for _, prefix := range rule.Prefixes {
+			for suffix := range nativeSizeSuffixes(prefix) {
+				mnemonic := prefix + suffix
+				if exactOwner, isExactMnemonic := exact[mnemonic]; isExactMnemonic {
+					if help, ok := AssemblyInstructionHelp("", mnemonic); !ok || help.Description != exactOwner.description {
+						t.Errorf("exact %s was captured as a suffix of %s", mnemonic, prefix)
+					}
+					continue
+				}
+				help, ok := AssemblyInstructionHelp("", mnemonic)
+				if !ok || help.Description != rule.Description {
+					t.Errorf("%s resolved to %#v; want rule for %s", mnemonic, help, prefix)
+				}
+			}
+		}
+	}
+}
+
+func TestAllNativeARMConditionBranchesResolveAsBranches(t *testing.T) {
+	conditions := map[string]string{
+		"eq": "if the compared values are equal (Z == 1), PC := .+4",
+		"ne": "if the compared values are not equal (Z == 0), PC := .+4",
+		"gt": "if signed greater than (Z == 0 and N == V), PC := .+4",
+		"ge": "if signed greater than or equal (N == V), PC := .+4",
+		"lt": "if signed less than (N != V), PC := .+4",
+		"le": "if signed less than or equal (Z == 1 or N != V), PC := .+4",
+		"hi": "if unsigned higher than (C == 1 and Z == 0), PC := .+4",
+		"hs": "if unsigned higher than or equal (C == 1), PC := .+4",
+		"cs": "if unsigned higher than or equal (C == 1), PC := .+4",
+		"lo": "if unsigned lower than (C == 0), PC := .+4",
+		"cc": "if unsigned lower than (C == 0), PC := .+4",
+		"ls": "if unsigned lower than or equal (C == 0 or Z == 1), PC := .+4",
+	}
+	for condition, want := range conditions {
+		instruction := "b." + condition + " .+4"
+		help, ok := NativeAssemblyInstructionHelp(instruction)
+		if !ok {
+			t.Errorf("no help for %s", instruction)
+			continue
+		}
+		if strings.Contains(help.Description, "Call a function") {
+			t.Errorf("%s incorrectly resolved as call: %#v", instruction, help)
+		}
+		if help.Explanation != want {
+			t.Errorf("%s effect = %q, want %q", instruction, help.Explanation, want)
+		}
+	}
+}
+
+func TestAssemblyInstructionReferenceCoverage(t *testing.T) {
+	for _, instruction := range []string{
+		"movzbl (%rax), %eax", "cmovne %rax, %rbx", "sete %al",
+		"cqto", "syscall", "mfence", "adrp x0, 0x1000", "stp x0, x1, [sp]",
+	} {
+		if help, ok := NativeAssemblyInstructionHelp(instruction); !ok || help.Description == "" || help.Explanation == "" {
+			t.Errorf("no native help for %q", instruction)
+		}
+	}
+}
+
+func TestNativeInstructionFamiliesHaveConcreteExplanations(t *testing.T) {
+	instructions := []string{
+		"movq %rax, %rbx", "movzbl (%rax), %ebx", "leaq 8(%rax), %rbx",
+		"addq $1, %rax", "sub x0, x1, x2", "madd x0, x1, x2, x3",
+		"msub x0, x1, x2, x3", "udiv x0, x1, x2", "and x0, x1, x2",
+		"orr x0, x1, x2", "eor x0, x1, x2", "lsl x0, x1, #3",
+		"cmp x0, x1", "tst x0, x1", "fadd d0, d1, d2",
+		"fsub d0, d1, d2", "fmul d0, d1, d2", "fmadd d0, d1, d2, d3",
+		"ldrb w0, [x1, #4]", "strh w0, [sp, #8]", "ldp x0, x1, [sp]",
+		"stp x0, x1, [sp, #-16]!", "adrp x0, 0x1000", "csel x0, x1, x2, eq",
+		"cset x0, ne", "rev x0, x1", "clz x0, x1", "popcnt %rax, %rbx",
+		"pushq %rax", "popq %rax", "callq 0x1000", "ret", "jmp 0x1000",
+		"b.eq 0x1000", "cbz x0, 0x1000", "tbnz x0, #2, 0x1000",
+		"nop", "syscall", "dmb ish", "yield", "xchgq %rax, %rbx",
+	}
+	for _, instruction := range instructions {
+		help, ok := NativeAssemblyInstructionHelp(instruction)
+		if !ok || help.Explanation == "" {
+			t.Errorf("native %q help has no concrete explanation: %#v", instruction, help)
+		}
+		if strings.HasPrefix(help.Explanation, "execute ") {
+			t.Errorf("native %q uses generic explanation %q", instruction, help.Explanation)
+		}
 	}
 }

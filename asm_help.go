@@ -23,14 +23,17 @@ type asmInstructionRule struct {
 // asmInstructionRules is intentionally data-driven: add a prefix and, when
 // useful, a small operand rewrite to extend the built-in reference.
 var asmInstructionRules = []asmInstructionRule{
+	{Prefixes: []string{"MOVZX", "MOVSX", "MOVSXD"}, Description: "Move a value while extending it to a wider size.", Explain: explainMove},
 	{Prefixes: []string{"MOV"}, Description: "Move or copy data between registers and memory.", Explain: explainMove},
 	{Prefixes: []string{"LEA"}, Description: "Load an effective address without reading memory.", Explain: explainLEA},
 	{Prefixes: []string{"ADD", "ADC"}, Description: "Add values; ADC also includes the carry flag.", Explain: explainBinary("+")},
 	{Prefixes: []string{"SUB", "SBB"}, Description: "Subtract values; SBB also includes the borrow flag.", Explain: explainBinary("-")},
-	{Prefixes: []string{"MUL", "IMUL"}, Description: "Multiply values (IMUL is signed multiplication).", Explain: explainBinary("*")},
-	{Prefixes: []string{"DIV", "IDIV"}, Description: "Divide values (IDIV is signed division).", Explain: explainBinary("/")},
+	{Prefixes: []string{"MUL", "IMUL", "MADD", "MSUB"}, Description: "Multiply values, optionally adding or subtracting another value.", Explain: explainBinary("*")},
+	{Prefixes: []string{"DIV", "IDIV", "SDIV", "UDIV"}, Description: "Divide values (signed or unsigned according to the mnemonic).", Explain: explainBinary("/")},
+	{Prefixes: []string{"CQO", "CDQ", "CWD", "CBW"}, Description: "Sign-extend the accumulator for a wider signed operation."},
 	{Prefixes: []string{"AND"}, Description: "Compute a bitwise AND.", Explain: explainBinary("&")},
-	{Prefixes: []string{"OR"}, Description: "Compute a bitwise OR.", Explain: explainBinary("|")},
+	{Prefixes: []string{"OR", "ORR"}, Description: "Compute a bitwise OR.", Explain: explainBinary("|")},
+	{Prefixes: []string{"BIC"}, Description: "Clear selected bits of a value.", Explain: explainBinary("&^")},
 	{Prefixes: []string{"XOR", "EOR"}, Description: "Compute a bitwise exclusive OR.", Explain: explainBinary("^")},
 	{Prefixes: []string{"SHL", "SAL", "LSL"}, Description: "Shift bits left.", Explain: explainBinary("<<")},
 	{Prefixes: []string{"SHR", "LSR"}, Description: "Shift bits right, filling with zeroes.", Explain: explainBinary(">>")},
@@ -40,6 +43,9 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"NEG"}, Description: "Negate a signed value.", Explain: explainUnaryPrefix("-")},
 	{Prefixes: []string{"NOT"}, Description: "Invert every bit in a value.", Explain: explainUnaryPrefix("^")},
 	{Prefixes: []string{"CMP"}, Description: "Compare values and update condition flags.", ExplainArch: explainCompare},
+	{Prefixes: []string{"CMOV"}, Description: "Conditionally move a value when the selected flags match.", Explain: explainMove},
+	{Prefixes: []string{"SET"}, Description: "Set a byte to 0 or 1 according to condition flags."},
+	{Prefixes: []string{"CSEL", "CSET"}, Description: "Select or set a value according to condition flags."},
 	{Prefixes: []string{"TEST", "TST"}, Description: "Test bits and update condition flags without storing a result.", Explain: explainTest},
 	{Prefixes: []string{"FMADD"}, Description: "Fused floating-point multiply-add with one rounding step.", Explain: explainFMADD},
 	{Prefixes: []string{"FADD"}, Description: "Add floating-point values.", Explain: explainBinary("+")},
@@ -47,18 +53,393 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"FMUL"}, Description: "Multiply floating-point values.", Explain: explainBinary("*")},
 	{Prefixes: []string{"LDR", "LDUR", "LOAD"}, Description: "Load a value from memory into a register.", Explain: explainLoad},
 	{Prefixes: []string{"STR", "STUR", "STORE"}, Description: "Store a register value in memory.", Explain: explainStore},
+	{Prefixes: []string{"ADR", "ADRP"}, Description: "Form a PC-relative address."},
+	{Prefixes: []string{"LDP"}, Description: "Load a pair of registers from memory."},
+	{Prefixes: []string{"STP"}, Description: "Store a pair of registers to memory."},
+	{Prefixes: []string{"XCHG", "SWAP"}, Description: "Exchange two values."},
+	{Prefixes: []string{"BSWAP", "REV"}, Description: "Reverse the byte order of a value."},
+	{Prefixes: []string{"BSF", "BSR", "CLZ", "CTZ"}, Description: "Find or count significant zero bits."},
+	{Prefixes: []string{"POPCNT"}, Description: "Count the one bits in a value."},
 	{Prefixes: []string{"PUSH"}, Description: "Push a value onto the stack."},
 	{Prefixes: []string{"POP"}, Description: "Pop the top stack value."},
-	{Prefixes: []string{"CALL", "BL", "JAL"}, Description: "Call a function and save a return address."},
+	{Prefixes: []string{"CALL", "BL", "BLR", "JAL", "JALR"}, Description: "Call a function and save a return address."},
+	{Prefixes: []string{"SYSCALL", "SVC"}, Description: "Enter the operating system or supervisor."},
+	{Prefixes: []string{"INT"}, Description: "Raise a software interrupt."},
 	{Prefixes: []string{"RET"}, Description: "Return to the caller."},
-	{Prefixes: []string{"JMP", "B"}, Description: "Jump to another instruction."},
+	{Prefixes: []string{"JMP", "B", "BR"}, Description: "Jump to another instruction."},
 	{Prefixes: []string{"JE", "JZ", "BEQ"}, Description: "Jump when values are equal (zero flag set)."},
 	{Prefixes: []string{"JNE", "JNZ", "BNE"}, Description: "Jump when values are not equal."},
 	{Prefixes: []string{"JG", "JGE", "JL", "JLE", "BGT", "BGE", "BLT", "BLE"}, Description: "Conditional jump after a signed comparison."},
 	{Prefixes: []string{"JA", "JAE", "JB", "JBE", "BHI", "BHS", "BLO", "BLS"}, Description: "Conditional jump after an unsigned comparison."},
 	{Prefixes: []string{"CBZ"}, Description: "Jump when a register is zero."},
 	{Prefixes: []string{"CBNZ"}, Description: "Jump when a register is not zero."},
+	{Prefixes: []string{"TBZ"}, Description: "Jump when a selected bit is zero."},
+	{Prefixes: []string{"TBNZ"}, Description: "Jump when a selected bit is not zero."},
 	{Prefixes: []string{"NOP"}, Description: "Do nothing for one instruction slot."},
+	{Prefixes: []string{"HLT", "WFI"}, Description: "Stop or wait for an external event."},
+	{Prefixes: []string{"PAUSE", "YIELD"}, Description: "Hint that the processor is in a spin-wait loop."},
+	{Prefixes: []string{"MFENCE", "LFENCE", "SFENCE", "DMB", "DSB", "ISB"}, Description: "Order memory or instruction accesses across this barrier."},
+}
+
+// NativeAssemblyInstructionHelp returns reference text and a syntax-correct
+// effect for the native (GNU) spelling of an instruction. GNU x86/AT&T uses
+// source-first operands while ARM-family GNU syntax uses destination-first.
+func NativeAssemblyInstructionHelp(text string) (AssemblyHelp, bool) {
+	mnemonic, operands := splitAssemblyInstruction(text)
+	lookup := canonicalNativeMnemonic(mnemonic)
+	// Arch is irrelevant here: only the description is kept, the
+	// explanation is replaced with a native-syntax rewrite below.
+	help, ok := AssemblyInstructionHelp("", lookup)
+	if !ok {
+		return AssemblyHelp{}, false
+	}
+	help.Mnemonic = mnemonic
+	help.Explanation = explainNativeInstruction(lookup, operands)
+	if help.Explanation == "" {
+		help.Explanation = explainNativeEffect(lookup, operands)
+	}
+	return help, true
+}
+
+func canonicalNativeMnemonic(mnemonic string) string {
+	switch {
+	case mnemonic == "ADDS":
+		return "ADD"
+	case mnemonic == "SUBS":
+		return "SUB"
+	case mnemonic == "ANDS":
+		return "AND"
+	case strings.HasPrefix(mnemonic, "LDR"):
+		return "LDR"
+	case strings.HasPrefix(mnemonic, "LDUR"):
+		return "LDUR"
+	case strings.HasPrefix(mnemonic, "STR"):
+		return "STR"
+	case strings.HasPrefix(mnemonic, "STUR"):
+		return "STUR"
+	case strings.HasPrefix(mnemonic, "CMOV"):
+		return "CMOV"
+	case strings.HasPrefix(mnemonic, "SET"):
+		return "SET"
+	case strings.HasPrefix(mnemonic, "MOVZ"), strings.HasPrefix(mnemonic, "MOVSX"), strings.HasPrefix(mnemonic, "MOVSXD"):
+		return "MOVZX"
+	case mnemonic == "CQTO":
+		return "CQO"
+	case strings.HasPrefix(mnemonic, "B."):
+		condition := strings.TrimPrefix(mnemonic, "B.")
+		switch condition {
+		case "EQ":
+			return "BEQ"
+		case "NE":
+			return "BNE"
+		case "GT":
+			return "BGT"
+		case "GE":
+			return "BGE"
+		case "LT":
+			return "BLT"
+		case "LE":
+			return "BLE"
+		case "HI":
+			return "BHI"
+		case "HS", "CS":
+			return "BHS"
+		case "LO", "CC":
+			return "BLO"
+		case "LS":
+			return "BLS"
+		}
+	}
+	for _, base := range []string{"PUSH", "POP", "CALL", "RET", "XCHG", "POPCNT", "BSWAP", "INC", "DEC", "NEG", "NOT"} {
+		if mnemonic == base+"B" || mnemonic == base+"W" || mnemonic == base+"L" || mnemonic == base+"Q" {
+			return base
+		}
+	}
+	return mnemonic
+}
+
+func explainNativeEffect(mnemonic string, operands []string) string {
+	operand := func(index int) string {
+		if index >= len(operands) {
+			return "target"
+		}
+		return strings.TrimSpace(strings.TrimPrefix(operands[index], "#"))
+	}
+	switch {
+	case mnemonic == "PUSH":
+		return "stack := push(stack, " + operand(0) + ")"
+	case mnemonic == "POP":
+		return operand(0) + " := pop(stack)"
+	case mnemonic == "CALL" || mnemonic == "BL" || mnemonic == "BLR" || mnemonic == "JAL" || mnemonic == "JALR":
+		return "call " + operand(0) + " and save the return address"
+	case mnemonic == "RET":
+		return "PC := saved return address"
+	case mnemonic == "JMP" || mnemonic == "B" || mnemonic == "BR":
+		return "PC := " + operand(0)
+	case mnemonic == "JE" || mnemonic == "JZ" || mnemonic == "BEQ":
+		return "if the compared values are equal (Z == 1), PC := " + operand(0)
+	case mnemonic == "JNE" || mnemonic == "JNZ" || mnemonic == "BNE":
+		return "if the compared values are not equal (Z == 0), PC := " + operand(0)
+	case mnemonic == "BGT":
+		return "if signed greater than (Z == 0 and N == V), PC := " + operand(0)
+	case mnemonic == "BGE":
+		return "if signed greater than or equal (N == V), PC := " + operand(0)
+	case mnemonic == "BLT":
+		return "if signed less than (N != V), PC := " + operand(0)
+	case mnemonic == "BLE":
+		return "if signed less than or equal (Z == 1 or N != V), PC := " + operand(0)
+	case mnemonic == "JG":
+		return "if signed greater than (ZF == 0 and SF == OF), PC := " + operand(0)
+	case mnemonic == "JGE":
+		return "if signed greater than or equal (SF == OF), PC := " + operand(0)
+	case mnemonic == "JL":
+		return "if signed less than (SF != OF), PC := " + operand(0)
+	case mnemonic == "JLE":
+		return "if signed less than or equal (ZF == 1 or SF != OF), PC := " + operand(0)
+	case mnemonic == "BHI":
+		return "if unsigned higher than (C == 1 and Z == 0), PC := " + operand(0)
+	case mnemonic == "BHS":
+		return "if unsigned higher than or equal (C == 1), PC := " + operand(0)
+	case mnemonic == "BLO":
+		return "if unsigned lower than (C == 0), PC := " + operand(0)
+	case mnemonic == "BLS":
+		return "if unsigned lower than or equal (C == 0 or Z == 1), PC := " + operand(0)
+	case mnemonic == "JA":
+		return "if unsigned above (CF == 0 and ZF == 0), PC := " + operand(0)
+	case mnemonic == "JAE":
+		return "if unsigned above or equal (CF == 0), PC := " + operand(0)
+	case mnemonic == "JB":
+		return "if unsigned below (CF == 1), PC := " + operand(0)
+	case mnemonic == "JBE":
+		return "if unsigned below or equal (CF == 1 or ZF == 1), PC := " + operand(0)
+	case mnemonic == "CBZ":
+		return "if " + operand(0) + " == 0, PC := " + operand(1)
+	case mnemonic == "CBNZ":
+		return "if " + operand(0) + " != 0, PC := " + operand(1)
+	case mnemonic == "TBZ":
+		return "if bit " + operand(1) + " of " + operand(0) + " == 0, PC := " + operand(2)
+	case mnemonic == "TBNZ":
+		return "if bit " + operand(1) + " of " + operand(0) + " != 0, PC := " + operand(2)
+	case mnemonic == "INC":
+		return operand(0) + " := " + operand(0) + " + 1"
+	case mnemonic == "DEC":
+		return operand(0) + " := " + operand(0) + " - 1"
+	case mnemonic == "NEG":
+		return operand(0) + " := -" + operand(0)
+	case mnemonic == "NOT":
+		return operand(0) + " := ^" + operand(0)
+	case mnemonic == "SET":
+		return operand(0) + " := condition ? 1 : 0"
+	case mnemonic == "NOP":
+		return "state is unchanged"
+	case mnemonic == "SYSCALL" || mnemonic == "SVC" || mnemonic == "INT":
+		return "transfer control to the operating system"
+	case mnemonic == "MFENCE" || mnemonic == "LFENCE" || mnemonic == "SFENCE" || mnemonic == "DMB" || mnemonic == "DSB" || mnemonic == "ISB":
+		return "wait for the ordered accesses to complete"
+	case mnemonic == "PAUSE" || mnemonic == "YIELD":
+		return "temporarily yield processor execution resources"
+	case mnemonic == "HLT" || mnemonic == "WFI":
+		return "wait until an interrupt or event occurs"
+	case mnemonic == "CQO" || mnemonic == "CDQ" || mnemonic == "CWD" || mnemonic == "CBW":
+		return "extend the accumulator's sign into the high half"
+	case mnemonic == "XCHG" || mnemonic == "SWAP":
+		return operand(0) + ", " + operand(1) + " := " + operand(1) + ", " + operand(0)
+	}
+	return ""
+}
+
+func explainNativeInstruction(mnemonic string, operands []string) string {
+	if len(operands) == 0 {
+		return ""
+	}
+	// Registers prefixed with % and immediates prefixed with $ identify GNU
+	// x86/AT&T syntax, whose source-first operand order agrees with the
+	// source-first Plan 9 rewrites (hence the empty arch: the "amd64" CMP
+	// rewrite is natural-order, which would be wrong for AT&T).
+	if strings.Contains(strings.Join(operands, " "), "%") || strings.HasPrefix(strings.TrimSpace(operands[0]), "$") {
+		if help, ok := AssemblyInstructionHelp("", mnemonic+" "+strings.Join(operands, ", ")); ok {
+			if help.Explanation != "" {
+				return help.Explanation
+			}
+		}
+		return explainNativeX86Effect(mnemonic, operands)
+	}
+
+	value := formatNativeValue
+	if len(operands) >= 2 {
+		destination := value(operands[0])
+		switch {
+		case mnemonic == "MOVZX", strings.HasPrefix(mnemonic, "MOV"):
+			return destination + " := " + value(operands[1])
+		case mnemonic == "LDR" || mnemonic == "LDUR" || mnemonic == "LOAD":
+			return explainNativeLoad(destination, operands[1:])
+		case mnemonic == "STR" || mnemonic == "STUR" || mnemonic == "STORE":
+			return explainNativeStore(value(operands[0]), operands[1:])
+		case mnemonic == "LDP" && len(operands) >= 3:
+			return explainNativePairLoad(value(operands[0]), value(operands[1]), operands[2:])
+		case mnemonic == "STP" && len(operands) >= 3:
+			return explainNativePairStore(value(operands[0]), value(operands[1]), operands[2:])
+		case mnemonic == "LEA", mnemonic == "ADR", mnemonic == "ADRP":
+			return destination + " := address(" + value(operands[1]) + ")"
+		case mnemonic == "ADD" || mnemonic == "ADC":
+			return explainNativeDestinationFirst(destination, operands[1:], "+", value)
+		case mnemonic == "SUB" || mnemonic == "SBB":
+			return explainNativeDestinationFirst(destination, operands[1:], "-", value)
+		case mnemonic == "MUL" || mnemonic == "IMUL" || mnemonic == "FMUL":
+			return explainNativeDestinationFirst(destination, operands[1:], "*", value)
+		case mnemonic == "MADD" && len(operands) >= 4:
+			return destination + " := " + value(operands[1]) + " * " + value(operands[2]) + " + " + value(operands[3])
+		case mnemonic == "MSUB" && len(operands) >= 4:
+			return destination + " := " + value(operands[3]) + " - " + value(operands[1]) + " * " + value(operands[2])
+		case mnemonic == "DIV" || mnemonic == "IDIV" || mnemonic == "SDIV" || mnemonic == "UDIV":
+			return explainNativeDestinationFirst(destination, operands[1:], "/", value)
+		case mnemonic == "AND":
+			return explainNativeDestinationFirst(destination, operands[1:], "&", value)
+		case mnemonic == "BIC":
+			return explainNativeDestinationFirst(destination, operands[1:], "&^", value)
+		case mnemonic == "OR" || mnemonic == "ORR":
+			return explainNativeDestinationFirst(destination, operands[1:], "|", value)
+		case mnemonic == "XOR" || mnemonic == "EOR":
+			return explainNativeDestinationFirst(destination, operands[1:], "^", value)
+		case mnemonic == "SHL" || mnemonic == "SAL" || mnemonic == "LSL":
+			return explainNativeDestinationFirst(destination, operands[1:], "<<", value)
+		case mnemonic == "SHR" || mnemonic == "LSR" || mnemonic == "SAR" || mnemonic == "ASR":
+			return explainNativeDestinationFirst(destination, operands[1:], ">>", value)
+		case mnemonic == "FADD":
+			return explainNativeDestinationFirst(destination, operands[1:], "+", value)
+		case mnemonic == "FSUB":
+			return explainNativeDestinationFirst(destination, operands[1:], "-", value)
+		case mnemonic == "FMADD" && len(operands) >= 4:
+			return destination + " := " + value(operands[1]) + " * " + value(operands[2]) + " + " + value(operands[3])
+		case mnemonic == "CMP":
+			return "flags := compare(" + value(operands[0]) + ", " + value(operands[1]) + ")"
+		case mnemonic == "TEST" || mnemonic == "TST":
+			return "flags := " + value(operands[0]) + " & " + value(operands[1])
+		case mnemonic == "CSEL" && len(operands) >= 4:
+			return destination + " := condition(" + value(operands[3]) + ") ? " + value(operands[1]) + " : " + value(operands[2])
+		case mnemonic == "CSET":
+			return destination + " := condition(" + value(operands[1]) + ") ? 1 : 0"
+		case mnemonic == "POPCNT":
+			return destination + " := countOneBits(" + value(operands[1]) + ")"
+		case mnemonic == "BSWAP" || mnemonic == "REV":
+			return destination + " := reverseBytes(" + value(operands[1]) + ")"
+		case mnemonic == "BSF" || mnemonic == "BSR" || mnemonic == "CLZ" || mnemonic == "CTZ":
+			return destination + " := significantBitPosition(" + value(operands[1]) + ")"
+		}
+	}
+	return ""
+}
+
+func explainNativeX86Effect(mnemonic string, operands []string) string {
+	operand := func(index int) string {
+		if index >= len(operands) {
+			return "target"
+		}
+		return formatNativeValue(operands[index])
+	}
+	destination := operand(len(operands) - 1)
+	switch mnemonic {
+	case "POPCNT":
+		return destination + " := countOneBits(" + operand(0) + ")"
+	case "BSWAP":
+		return destination + " := reverseBytes(" + destination + ")"
+	case "XCHG":
+		return operand(0) + ", " + operand(1) + " := " + operand(1) + ", " + operand(0)
+	case "SET":
+		return destination + " := condition ? 1 : 0"
+	case "CMOV":
+		return "if condition, " + destination + " := " + operand(0)
+	}
+	return explainNativeEffect(mnemonic, operands)
+}
+
+func formatNativeValue(operand string) string {
+	operand = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(operand), "#"))
+	if strings.HasPrefix(operand, "[") {
+		return formatNativeMemory(operand)
+	}
+	return operand
+}
+
+func formatNativeMemory(operand string) string {
+	_, address, _ := parseNativeMemory(operand)
+	return "memory[" + address + "]"
+}
+
+func explainNativeLoad(destination string, addressOperands []string) string {
+	base, address, preIndex := parseNativeMemory(addressOperands[0])
+	if preIndex {
+		return base + " := " + address + "; " + destination + " := memory[" + base + "]"
+	}
+	effect := destination + " := memory[" + address + "]"
+	if len(addressOperands) > 1 {
+		effect += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
+	}
+	return effect
+}
+
+func explainNativeStore(source string, addressOperands []string) string {
+	base, address, preIndex := parseNativeMemory(addressOperands[0])
+	if preIndex {
+		return base + " := " + address + "; memory[" + base + "] := " + source
+	}
+	effect := "memory[" + address + "] := " + source
+	if len(addressOperands) > 1 {
+		effect += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
+	}
+	return effect
+}
+
+func explainNativePairLoad(first, second string, addressOperands []string) string {
+	base, address, preIndex := parseNativeMemory(addressOperands[0])
+	load := first + ", " + second + " := pair(memory[" + address + "])"
+	if preIndex {
+		return base + " := " + address + "; " + first + ", " + second + " := pair(memory[" + base + "])"
+	}
+	if len(addressOperands) > 1 {
+		load += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
+	}
+	return load
+}
+
+func explainNativePairStore(first, second string, addressOperands []string) string {
+	base, address, preIndex := parseNativeMemory(addressOperands[0])
+	store := "memory[" + address + "] := pair(" + first + ", " + second + ")"
+	if preIndex {
+		return base + " := " + address + "; memory[" + base + "] := pair(" + first + ", " + second + ")"
+	}
+	if len(addressOperands) > 1 {
+		store += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
+	}
+	return store
+}
+
+func parseNativeMemory(operand string) (base, address string, preIndex bool) {
+	operand = strings.TrimSpace(operand)
+	preIndex = strings.HasSuffix(operand, "!")
+	inside := strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(operand, "["), "!"), "]"))
+	parts := splitAssemblyOperands(inside)
+	base = strings.TrimSpace(parts[0])
+	address = base
+	if len(parts) > 1 {
+		address = addNativeOffset(base, strings.Join(parts[1:], ", "))
+	}
+	return base, address, preIndex
+}
+
+func addNativeOffset(base, offset string) string {
+	offset = strings.TrimSpace(strings.ReplaceAll(offset, "#", ""))
+	if strings.HasPrefix(offset, "-") {
+		return base + " - " + strings.TrimPrefix(offset, "-")
+	}
+	return base + " + " + offset
+}
+
+func explainNativeDestinationFirst(destination string, sources []string, operator string, value func(string) string) string {
+	if len(sources) == 1 {
+		return destination + " := " + destination + " " + operator + " " + value(sources[0])
+	}
+	return destination + " := " + value(sources[0]) + " " + operator + " " + value(sources[1])
 }
 
 func AssemblyInstructionHelp(arch, text string) (AssemblyHelp, bool) {
@@ -66,21 +447,34 @@ func AssemblyInstructionHelp(arch, text string) (AssemblyHelp, bool) {
 	if mnemonic == "" {
 		return AssemblyHelp{}, false
 	}
+	// Resolve exact mnemonics first. Otherwise BLS can be mistaken for BL with
+	// an S size suffix, and similar prefix collisions produce wrong semantics.
+	for _, rule := range asmInstructionRules {
+		for _, prefix := range rule.Prefixes {
+			if mnemonic == prefix {
+				return assemblyHelpFromRule(arch, mnemonic, operands, rule), true
+			}
+		}
+	}
 	for _, rule := range asmInstructionRules {
 		for _, prefix := range rule.Prefixes {
 			if mnemonicMatches(mnemonic, prefix) {
-				help := AssemblyHelp{Mnemonic: mnemonic, Description: rule.Description}
-				switch {
-				case rule.ExplainArch != nil:
-					help.Explanation = rule.ExplainArch(arch, operands)
-				case rule.Explain != nil:
-					help.Explanation = rule.Explain(operands)
-				}
-				return help, true
+				return assemblyHelpFromRule(arch, mnemonic, operands, rule), true
 			}
 		}
 	}
 	return AssemblyHelp{}, false
+}
+
+func assemblyHelpFromRule(arch, mnemonic string, operands []string, rule asmInstructionRule) AssemblyHelp {
+	help := AssemblyHelp{Mnemonic: mnemonic, Description: rule.Description}
+	switch {
+	case rule.ExplainArch != nil:
+		help.Explanation = rule.ExplainArch(arch, operands)
+	case rule.Explain != nil:
+		help.Explanation = rule.Explain(operands)
+	}
+	return help
 }
 
 func mnemonicMatches(mnemonic, prefix string) bool {
@@ -91,7 +485,22 @@ func mnemonicMatches(mnemonic, prefix string) bool {
 		return false
 	}
 	suffix := strings.TrimPrefix(mnemonic, prefix)
-	return suffix == "B" || suffix == "W" || suffix == "L" || suffix == "Q" || suffix == "S" || suffix == "D"
+	return nativeSizeSuffixes(prefix)[suffix]
+}
+
+func nativeSizeSuffixes(mnemonic string) map[string]bool {
+	x86Integer := map[string]bool{"B": true, "W": true, "L": true, "Q": true}
+	floatOrVector := map[string]bool{"S": true, "D": true}
+	switch mnemonic {
+	case "MOV", "LEA", "ADD", "ADC", "SUB", "SBB", "MUL", "IMUL", "DIV", "IDIV",
+		"AND", "OR", "XOR", "SHL", "SAL", "SHR", "SAR", "INC", "DEC", "NEG", "NOT",
+		"CMP", "TEST", "PUSH", "POP", "CALL", "RET", "XCHG", "BSWAP", "POPCNT":
+		return x86Integer
+	case "FADD", "FSUB", "FMUL", "FMADD":
+		return floatOrVector
+	default:
+		return nil
+	}
 }
 
 func splitAssemblyInstruction(text string) (string, []string) {
@@ -111,12 +520,33 @@ func splitAssemblyInstruction(text string) (string, []string) {
 	if rest == "" {
 		return mnemonic, nil
 	}
-	parts := strings.Split(rest, ",")
+	parts := splitAssemblyOperands(rest)
 	operands := make([]string, 0, len(parts))
 	for _, part := range parts {
 		operands = append(operands, strings.TrimSpace(part))
 	}
 	return mnemonic, operands
+}
+
+func splitAssemblyOperands(text string) []string {
+	var parts []string
+	start, depth := 0, 0
+	for index, char := range text {
+		switch char {
+		case '(', '[':
+			depth++
+		case ')', ']':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				parts = append(parts, text[start:index])
+				start = index + 1
+			}
+		}
+	}
+	return append(parts, text[start:])
 }
 
 func explainMove(operands []string) string {
