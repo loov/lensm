@@ -1,15 +1,17 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"math"
+	"strings"
 	"time"
 
 	"gioui.org/f32"
+	"gioui.org/font"
 	"gioui.org/gesture"
 	"gioui.org/io/event"
+	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -39,6 +41,10 @@ type CodeUI struct {
 	}
 
 	mousePosition f32.Point
+	SelectedAsm   int
+	SelectedView  CommentView
+	SelectedFile  string
+	SelectedLine  int
 }
 
 func (ui *CodeUI) Loaded() bool {
@@ -53,9 +59,21 @@ func (ui *CodeUI) ResetScroll() {
 type CodeUIStyle struct {
 	*CodeUI
 
-	TryOpen func(gtx layout.Context, funcname string)
-	Theme   *material.Theme
+	TryOpen          func(gtx layout.Context, funcname string)
+	CommentFor       func(disasm.Inst) string
+	NativeCommentFor func(disasm.Inst) string
+	SourceCommentFor func(file string, line int) string
+	CommentKey       *string
+	CommentKeyFor    func(disasm.Inst) string
+	SetComment       func(disasm.Inst, string)
+	SetNativeComment func(disasm.Inst, string)
+	SetSourceComment func(file string, line int, text string)
+	CommentEditor    *widget.Editor
+	Theme            *material.Theme
+	Colors           UIColors
+	Syntax           SyntaxPalette
 
+	ShowNative bool
 	TextHeight unit.Sp
 	LineHeight unit.Sp
 }
@@ -65,23 +83,88 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	if ui.Code == nil {
 		return layout.Dimensions{Size: gtx.Constraints.Max}
 	}
+	if ui.Colors.Background == (color.NRGBA{}) {
+		ui.Colors = ApplyTheme(ui.Theme, false)
+	}
+	if ui.Syntax.Plain == (color.NRGBA{}) {
+		ui.Syntax = SyntaxPaletteFor(SyntaxStyleGoLand, ui.Colors)
+	}
+
+	paint.FillShape(gtx.Ops, ui.Colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
 	// The layout has the following sections:
-	// pad | Jump | pad/2 | Related | pad | Gutter | pad | Source | pad
+	// pad | Jump | pad/2 | Go asm | pad | Native asm | pad | Gutter | pad | Source | pad
 
-	lineHeight := gtx.Metric.Sp(ui.LineHeight)
+	lineHeight := codeLineHeightPx(gtx, ui.TextHeight, ui.LineHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
 	jumpWidth := jumpStep * ui.Code.MaxJump
 	gutterWidth := lineHeight * 8
-	blocksWidth := gtx.Constraints.Max.X - gutterWidth - jumpWidth - 4*pad - pad/2
+	fixedWidth := gutterWidth + jumpWidth + 4*pad + pad/2
+	if ui.ShowNative {
+		fixedWidth += pad
+	}
+	blocksWidth := max(0, gtx.Constraints.Max.X-fixedWidth)
 
 	jump := BoundsWidth(pad, jumpWidth)
-	asm := BoundsWidth(int(jump.Max)+pad/2, blocksWidth*3/10)
+	asmWidth := blocksWidth * 40 / 100
+	if ui.ShowNative {
+		asmWidth = blocksWidth * 28 / 100
+	}
+	asm := BoundsWidth(int(jump.Max)+pad/2, asmWidth)
+	native := BoundsWidth(int(asm.Max), 0)
 	gutter := BoundsWidth(int(asm.Max)+pad, gutterWidth)
-	source := BoundsWidth(int(gutter.Max)+pad, blocksWidth*7/10)
+	sourceWidth := blocksWidth - int(asm.Width())
+	if ui.ShowNative {
+		native = BoundsWidth(int(asm.Max)+pad, blocksWidth*28/100)
+		gutter = BoundsWidth(int(native.Max)+pad, gutterWidth)
+		sourceWidth -= int(native.Width())
+	}
+	source := BoundsWidth(int(gutter.Max)+pad, max(0, sourceWidth))
+	sourceTextLeft := int(source.Min)
+	sourceTextWidth := int(source.Max) - sourceTextLeft
+	if sourceTextWidth < 0 {
+		sourceTextWidth = 0
+	}
+	sourceCommentLeft := sourceTextLeft + sourceTextWidth*70/100
+	sourceCommentWidth := int(source.Max) - sourceCommentLeft
+	sourceCodeWidth := sourceCommentLeft - sourceTextLeft - pad/2
+	if sourceCodeWidth < 0 || sourceCommentWidth < lineHeight*8 {
+		sourceCodeWidth = sourceTextWidth
+		sourceCommentWidth = 0
+	}
+	goTextLeft := int(asm.Min) + pad/2
+	goTextWidth := int(asm.Max) - goTextLeft
+	if goTextWidth < 0 {
+		goTextWidth = 0
+	}
+	nativeTextLeft := int(native.Min)
+	nativeTextWidth := int(native.Max) - nativeTextLeft
+	if nativeTextWidth < 0 {
+		nativeTextWidth = 0
+	}
+	nativeCommentLeft := nativeTextLeft + nativeTextWidth*62/100
+	nativeCommentWidth := int(native.Max) - nativeCommentLeft
+	nativeInstructionWidth := nativeCommentLeft - nativeTextLeft - pad/2
+	if nativeInstructionWidth < 0 || nativeCommentWidth < lineHeight*8 {
+		nativeInstructionWidth = nativeTextWidth
+		nativeCommentWidth = 0
+	}
+	commentLeft := goTextLeft + goTextWidth*62/100
+	if commentLeft < goTextLeft {
+		commentLeft = goTextLeft
+	}
+	commentWidth := int(asm.Max) - commentLeft
+	if commentWidth < 0 {
+		commentWidth = 0
+	}
+	goInstructionWidth := commentLeft - goTextLeft - pad/2
+	if goInstructionWidth < 0 || commentWidth < lineHeight*8 {
+		goInstructionWidth = goTextWidth
+		commentWidth = 0
+	}
 
 	event.Op(gtx.Ops, ui.Code)
 	mouseClicked := false
@@ -102,10 +185,14 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			case pointer.Move:
 				ui.mousePosition = ev.Position
 			case pointer.Press:
+				ui.mousePosition = ev.Position
 				mouseClicked = true
 			case pointer.Scroll:
+				ui.mousePosition = ev.Position
 				switch {
 				case asm.Contains(ev.Position.X):
+					ui.asm.scroll -= ev.Scroll.Y
+				case ui.ShowNative && native.Contains(ev.Position.X):
 					ui.asm.scroll -= ev.Scroll.Y
 				case source.Contains(ev.Position.X):
 					ui.src.scroll -= ev.Scroll.Y
@@ -115,7 +202,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	// draw gutter
-	paint.FillShape(gtx.Ops, f32color.Gray8(0xE8), clip.Rect{
+	paint.FillShape(gtx.Ops, ui.Colors.Gutter, clip.Rect{
 		Min: image.Pt(int(gutter.Min), 0),
 		Max: image.Pt(int(gutter.Max), gtx.Constraints.Max.Y),
 	}.Op())
@@ -125,7 +212,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	mousePosition := ui.mousePosition
-	mouseInAsm := asm.Contains(mousePosition.X)
+	mouseInAsm := asm.Contains(mousePosition.X) || (ui.ShowNative && native.Contains(mousePosition.X))
 	mouseInSource := source.Contains(mousePosition.X)
 	highlightAsmIndex := -1
 	if mouseInAsm {
@@ -134,27 +221,54 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	var highlightRanges []disasm.LineRange
 
 	if InRange(highlightAsmIndex, len(ui.Code.Insts)) {
+		activateClicked := mouseClicked && ui.SelectedAsm == highlightAsmIndex
 		ix := &ui.Code.Insts[highlightAsmIndex]
-		if ui.TryOpen != nil && ix.Call != "" {
+		callTargetHovered := ui.TryOpen != nil &&
+			ix.Call != "" &&
+			asm.Contains(mousePosition.X) &&
+			mousePosition.X <= float32(goTextLeft+goInstructionWidth) &&
+			ui.callTargetHit(gtx, *ix, goTextLeft, mousePosition.X)
+		if callTargetHovered {
 			pointer.CursorPointer.Add(gtx.Ops)
 			if mouseClicked {
+				ui.SelectedAsm = highlightAsmIndex
+				ui.SelectedView = CommentViewGoAsm
+				ui.SelectedFile = ""
+				ui.SelectedLine = 0
 				ui.TryOpen(gtx, ix.Call)
+			}
+		} else if mouseClicked {
+			ui.SelectedAsm = highlightAsmIndex
+			ui.SelectedFile = ""
+			ui.SelectedLine = 0
+			if ui.ShowNative && native.Contains(mousePosition.X) {
+				ui.SelectedView = CommentViewNativeAsm
+			} else {
+				ui.SelectedView = CommentViewGoAsm
+			}
+			if ui.CommentEditor != nil {
+				gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
 			}
 		}
 		if ix.Call == "" && ix.RefOffset != 0 {
 			pointer.CursorPointer.Add(gtx.Ops)
-			if mouseClicked {
+			if activateClicked {
 				// TODO: smooth scroll
 				// highlightAsmIndex -= ix.RefOffset
 				ui.asm.anim.Start(gtx, ui.asm.scroll, ui.asm.scroll-float32(ix.RefOffset*lineHeight), 150*time.Millisecond)
 			}
 		}
 	}
+	if !InRange(ui.SelectedAsm, len(ui.Code.Insts)) {
+		ui.SelectedAsm = -1
+	}
 
 	// relations underlay
 	top := int(ui.src.scroll)
-	var highlightPath *clip.PathSpec
-	var highlightColor color.NRGBA
+	var highlightPaths []clip.PathSpec
+	relationStroke := ui.Colors.RelationStroke
+	relationFill := relationStroke
+	relationFill.A /= 2
 	for i, src := range ui.Code.Source {
 		if i > 0 {
 			top += lineHeight
@@ -164,64 +278,52 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			if i > 0 {
 				top += lineHeight
 			}
-			for off, ranges := range block.Related {
+			for _, ranges := range block.Related {
 				if len(ranges) > 0 {
-					highlight := false
-					if mouseInSource {
-						if float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight) {
-							highlight = true
-							highlightRanges = ranges
-						}
-					}
-
-					var p clip.Path
-					p.Begin(gtx.Ops)
-					p.MoveTo(f32.Pt(gutter.Max, float32(top+lineHeight)))
-					p.LineTo(f32.Pt(source.Max, float32(top+lineHeight)))
-					p.LineTo(f32.Pt(source.Max, float32(top)))
-					p.LineTo(f32.Pt(gutter.Max, float32(top)))
-					pin := float32(top)
-					for i, r := range ranges {
-						if mouseInAsm {
+					highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
+					if !highlight && mouseInAsm {
+						for _, r := range ranges {
 							if float32(r.From*lineHeight)+ui.asm.scroll <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.asm.scroll {
 								highlight = true
-								highlightRanges = ranges
+								break
 							}
 						}
-						const S = 0.1
-						p.CubeTo(
-							f32.Pt(gutter.Lerp(0.5-S), pin),
-							f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.asm.scroll),
-							f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.asm.scroll))
-						p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.asm.scroll))
-						p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.asm.scroll))
-						p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.asm.scroll))
-						pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
-						p.CubeTo(
-							f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.asm.scroll),
-							f32.Pt(gutter.Lerp(0.5-S), pin),
-							f32.Pt(gutter.Max, pin))
 					}
-					alpha := float32(0.4)
-					pathSpec := p.End()
 					if highlight {
-						alpha = 0.8
-					}
-					relationColor := f32color.HSLA(float32(math.Mod(float64((i+1)*(off+1))*math.Phi, 1)), 0.9, 0.8, alpha)
-					if !highlight {
-						paint.FillShape(gtx.Ops, relationColor, clip.Outline{Path: pathSpec}.Op())
-					} else {
-						highlightPath = &pathSpec
-						highlightColor = relationColor
+						highlightRanges = ranges
+
+						var p clip.Path
+						p.Begin(gtx.Ops)
+						p.MoveTo(f32.Pt(gutter.Max, float32(top+lineHeight)))
+						p.LineTo(f32.Pt(source.Max, float32(top+lineHeight)))
+						p.LineTo(f32.Pt(source.Max, float32(top)))
+						p.LineTo(f32.Pt(gutter.Max, float32(top)))
+						pin := float32(top)
+						for i, r := range ranges {
+							const S = 0.1
+							p.CubeTo(
+								f32.Pt(gutter.Lerp(0.5-S), pin),
+								f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.asm.scroll),
+								f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.asm.scroll))
+							p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.asm.scroll))
+							p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.asm.scroll))
+							p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.asm.scroll))
+							pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
+							p.CubeTo(
+								f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.asm.scroll),
+								f32.Pt(gutter.Lerp(0.5-S), pin),
+								f32.Pt(gutter.Max, pin))
+						}
+						highlightPaths = append(highlightPaths, p.End())
 					}
 				}
 				top += lineHeight
 			}
 		}
 	}
-	if highlightPath != nil {
-		paint.FillShape(gtx.Ops, highlightColor, clip.Outline{Path: *highlightPath}.Op())
-		paint.FillShape(gtx.Ops, color.NRGBA{A: 0x40}, clip.Stroke{Path: *highlightPath, Width: 1}.Op())
+	for _, path := range highlightPaths {
+		paint.FillShape(gtx.Ops, relationFill, clip.Outline{Path: path}.Op())
+		paint.FillShape(gtx.Ops, relationStroke, clip.Stroke{Path: path, Width: 1}.Op())
 	}
 
 	// assembly
@@ -229,15 +331,82 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		Min: image.Pt(int(jump.Min), 0),
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
+	if ui.ShowNative {
+		paint.FillShape(gtx.Ops, ui.Colors.Splitter, clip.Rect{
+			Min: image.Pt(int(native.Min)-pad/2, 0),
+			Max: image.Pt(int(native.Min)-pad/2+1, gtx.Constraints.Max.Y),
+		}.Op())
+	}
 	for i, ix := range ui.Code.Insts {
+		if ui.SelectedAsm == i {
+			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.scroll)),
+				Max: image.Pt(int(gutter.Min), (i+1)*lineHeight+int(ui.asm.scroll)),
+			}.Op())
+		}
 		SourceLine{
-			TopLeft:    image.Pt(int(asm.Min)+pad/2, i*lineHeight+int(ui.asm.scroll)),
+			TopLeft:    image.Pt(goTextLeft, i*lineHeight+int(ui.asm.scroll)),
+			Width:      goInstructionWidth,
 			Text:       ix.Text,
+			Spans:      HighlightAsmLine(ix.Text, ix.Call, ui.Syntax),
 			TextHeight: ui.TextHeight,
+			LineHeight: ui.LineHeight,
 			Italic:     ix.Call != "",
-			Bold:       highlightAsmIndex == i,
-			Color:      f32color.Black,
+			Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
+			Color:      ui.Syntax.Plain,
 		}.Layout(ui.Theme, gtx)
+		if commentWidth > 0 && ix.Text != "" {
+			comment := ""
+			if ui.CommentFor != nil {
+				comment = ui.CommentFor(ix)
+			}
+			if ui.SelectedAsm == i && ui.SelectedView == CommentViewGoAsm {
+				ui.layoutInlineCommentEditor(gtx, ix, i*lineHeight+int(ui.asm.scroll), commentLeft, commentWidth, lineHeight)
+			} else if comment != "" {
+				SourceLine{
+					TopLeft:    image.Pt(commentLeft, i*lineHeight+int(ui.asm.scroll)),
+					Width:      commentWidth,
+					Text:       "; " + comment,
+					TextHeight: ui.TextHeight,
+					LineHeight: ui.LineHeight,
+					Italic:     true,
+					Color:      ui.Colors.MutedText,
+				}.Layout(ui.Theme, gtx)
+			}
+		}
+		if ui.ShowNative {
+			nativeComment := ""
+			if ui.NativeCommentFor != nil {
+				nativeComment = ui.NativeCommentFor(ix)
+			}
+			width := nativeTextWidth
+			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == CommentViewNativeAsm)) && nativeCommentWidth > 0 {
+				width = nativeInstructionWidth
+			}
+			SourceLine{
+				TopLeft:    image.Pt(nativeTextLeft, i*lineHeight+int(ui.asm.scroll)),
+				Width:      width,
+				Text:       strings.ToUpper(ix.NativeText),
+				Spans:      HighlightAsmLine(strings.ToUpper(ix.NativeText), "", ui.Syntax),
+				TextHeight: ui.TextHeight,
+				LineHeight: ui.LineHeight,
+				Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
+				Color:      ui.Syntax.Plain,
+			}.Layout(ui.Theme, gtx)
+			if ui.SelectedAsm == i && ui.SelectedView == CommentViewNativeAsm && nativeCommentWidth > 0 {
+				ui.layoutInlineNativeCommentEditor(gtx, ix, i*lineHeight+int(ui.asm.scroll), nativeCommentLeft, nativeCommentWidth, lineHeight)
+			} else if nativeComment != "" && nativeCommentWidth > 0 {
+				SourceLine{
+					TopLeft:    image.Pt(nativeCommentLeft, i*lineHeight+int(ui.asm.scroll)),
+					Width:      nativeCommentWidth,
+					Text:       "; " + nativeComment,
+					TextHeight: ui.TextHeight,
+					LineHeight: ui.LineHeight,
+					Italic:     true,
+					Color:      ui.Colors.MutedText,
+				}.Layout(ui.Theme, gtx)
+			}
+		}
 
 		// jump line
 		if ix.RefOffset != 0 {
@@ -288,8 +457,9 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			TopLeft:    image.Pt(int(source.Min), top),
 			Text:       src.File,
 			TextHeight: ui.TextHeight,
+			LineHeight: ui.LineHeight,
 			Bold:       highlightAsmIndex == i,
-			Color:      f32color.Black,
+			Color:      ui.Colors.MutedText,
 		}.Layout(ui.Theme, gtx)
 		top += lineHeight
 		for i, block := range src.Blocks {
@@ -298,13 +468,48 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			}
 			for off, line := range block.Lines {
 				highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
+				lineNo := block.From + off
+				if highlight && mouseClicked {
+					ui.SelectedAsm = -1
+					ui.SelectedView = CommentViewSource
+					ui.SelectedFile = src.File
+					ui.SelectedLine = lineNo
+					if ui.CommentEditor != nil {
+						gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
+					}
+				}
+				sourceComment := ""
+				if ui.SourceCommentFor != nil {
+					sourceComment = ui.SourceCommentFor(src.File, lineNo)
+				}
+				width := sourceTextWidth
+				selectedSource := ui.SelectedView == CommentViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
+				if (sourceComment != "" || selectedSource) && sourceCommentWidth > 0 {
+					width = sourceCodeWidth
+				}
 				SourceLine{
 					TopLeft:    image.Pt(int(source.Min), top),
-					Text:       fmt.Sprintf("%-4d %s", block.From+off, line),
+					Width:      width,
+					Text:       lineNumberPrefix(lineNo) + line,
+					Spans:      HighlightSourceLine(lineNo, line, ui.Syntax),
 					TextHeight: ui.TextHeight,
+					LineHeight: ui.LineHeight,
 					Bold:       highlight,
-					Color:      f32color.Black,
+					Color:      ui.Syntax.Plain,
 				}.Layout(ui.Theme, gtx)
+				if selectedSource && sourceCommentWidth > 0 {
+					ui.layoutInlineSourceCommentEditor(gtx, src.File, lineNo, top, sourceCommentLeft, sourceCommentWidth, lineHeight)
+				} else if sourceComment != "" && sourceCommentWidth > 0 {
+					SourceLine{
+						TopLeft:    image.Pt(sourceCommentLeft, top),
+						Width:      sourceCommentWidth,
+						Text:       "// " + sourceComment,
+						TextHeight: ui.TextHeight,
+						LineHeight: ui.LineHeight,
+						Italic:     true,
+						Color:      ui.Colors.MutedText,
+					}.Layout(ui.Theme, gtx)
+				}
 				top += lineHeight
 			}
 		}
@@ -315,7 +520,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	{
 		stack := clip.Rect{
 			Min: image.Pt(int(jump.Min)-pad, 0),
-			Max: image.Pt(int(asm.Max), gtx.Constraints.Max.Y),
+			Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
 
 		// overflow := gtx.Constraints.Max.Y / 3
@@ -412,4 +617,178 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{
 		Size: gtx.Constraints.Max,
 	}
+}
+
+func (ui CodeUIStyle) callTargetHit(gtx layout.Context, inst disasm.Inst, left int, x float32) bool {
+	if inst.Call == "" {
+		return false
+	}
+	start := strings.Index(inst.Text, inst.Call)
+	if start < 0 {
+		return false
+	}
+	end := start + len(inst.Call)
+	targetLeft := left + ui.measureAsmTextWidth(gtx, inst.Text[:start])
+	targetRight := left + ui.measureAsmTextWidth(gtx, inst.Text[:end])
+	return float32(targetLeft) <= x && x <= float32(targetRight)
+}
+
+func (ui CodeUIStyle) measureAsmTextWidth(gtx layout.Context, text string) int {
+	if text == "" {
+		return 0
+	}
+	gtx.Constraints.Min = image.Point{}
+	gtx.Constraints.Max = image.Pt(maxLineWidth, maxLineWidth)
+
+	macro := op.Record(gtx.Ops)
+	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Normal}
+	dims := widget.Label{MaxLines: 1}.Layout(gtx, ui.Theme.Shaper, f, ui.TextHeight, text, op.CallOp{})
+	_ = macro.Stop()
+	return dims.Size.X
+}
+
+func (ui CodeUIStyle) layoutInlineCommentEditor(gtx layout.Context, inst disasm.Inst, top, left, width, lineHeight int) {
+	ui.layoutInlineAsmCommentEditor(gtx, inst, CommentViewGoAsm, ui.CommentFor, ui.CommentKeyFor, ui.SetComment, top, left, width, lineHeight)
+}
+
+func (ui CodeUIStyle) layoutInlineNativeCommentEditor(gtx layout.Context, inst disasm.Inst, top, left, width, lineHeight int) {
+	keyFor := func(inst disasm.Inst) string {
+		if ui.Code == nil {
+			return ""
+		}
+		return ui.Code.Name + ":" + string(CommentViewNativeAsm) + ":" + formatPC(inst.PC)
+	}
+	ui.layoutInlineAsmCommentEditor(gtx, inst, CommentViewNativeAsm, ui.NativeCommentFor, keyFor, ui.SetNativeComment, top, left, width, lineHeight)
+}
+
+func (ui CodeUIStyle) layoutInlineAsmCommentEditor(gtx layout.Context, inst disasm.Inst, view CommentView, commentFor func(disasm.Inst) string, keyFor func(disasm.Inst) string, setComment func(disasm.Inst, string), top, left, width, lineHeight int) {
+	if ui.CommentEditor == nil || ui.CommentKey == nil || keyFor == nil || setComment == nil {
+		if commentFor == nil {
+			return
+		}
+		comment := commentFor(inst)
+		if comment == "" {
+			return
+		}
+		SourceLine{
+			TopLeft:    image.Pt(left, top),
+			Width:      width,
+			Text:       "; " + comment,
+			TextHeight: ui.TextHeight,
+			LineHeight: ui.LineHeight,
+			Italic:     true,
+			Color:      ui.Colors.MutedText,
+		}.Layout(ui.Theme, gtx)
+		return
+	}
+
+	if keyFor == nil || setComment == nil {
+		return
+	}
+	key := keyFor(inst)
+	if view != "" {
+		key = string(view) + ":" + key
+	}
+	if key != *ui.CommentKey {
+		*ui.CommentKey = key
+		comment := ""
+		if commentFor != nil {
+			comment = commentFor(inst)
+		}
+		ui.CommentEditor.SetText(comment)
+	}
+
+	changed := false
+	for {
+		ev, ok := ui.CommentEditor.Update(gtx)
+		if !ok {
+			break
+		}
+		switch ev.(type) {
+		case widget.ChangeEvent, widget.SubmitEvent:
+			changed = true
+		}
+	}
+	if changed {
+		setComment(inst, ui.CommentEditor.Text())
+	}
+
+	prefixWidth := lineHeight
+	SourceLine{
+		TopLeft:    image.Pt(left, top),
+		Width:      prefixWidth,
+		Text:       ";",
+		TextHeight: ui.TextHeight,
+		LineHeight: ui.LineHeight,
+		Color:      ui.Colors.MutedText,
+	}.Layout(ui.Theme, gtx)
+
+	editorLeft := left + prefixWidth
+	editorWidth := width - prefixWidth
+	if editorWidth < 0 {
+		editorWidth = 0
+	}
+	stack := op.Offset(image.Pt(editorLeft, top)).Push(gtx.Ops)
+	gtx.Constraints = layout.Exact(image.Pt(editorWidth, lineHeight))
+	editor := material.Editor(ui.Theme, ui.CommentEditor, "comment")
+	editor.TextSize = ui.TextHeight
+	editor.Font.Typeface = "override-monospace,Go,monospace"
+	editor.Color = ui.Colors.Text
+	editor.Layout(gtx)
+	stack.Pop()
+}
+
+func (ui CodeUIStyle) layoutInlineSourceCommentEditor(gtx layout.Context, file string, line int, top, left, width, lineHeight int) {
+	if ui.CommentEditor == nil || ui.CommentKey == nil || ui.SetSourceComment == nil {
+		return
+	}
+
+	key := ui.Code.Name + ":" + string(CommentViewSource) + ":" + file + ":" + lineNumberPrefix(line)
+	if key != *ui.CommentKey {
+		*ui.CommentKey = key
+		comment := ""
+		if ui.SourceCommentFor != nil {
+			comment = ui.SourceCommentFor(file, line)
+		}
+		ui.CommentEditor.SetText(comment)
+	}
+
+	changed := false
+	for {
+		ev, ok := ui.CommentEditor.Update(gtx)
+		if !ok {
+			break
+		}
+		switch ev.(type) {
+		case widget.ChangeEvent, widget.SubmitEvent:
+			changed = true
+		}
+	}
+	if changed {
+		ui.SetSourceComment(file, line, ui.CommentEditor.Text())
+	}
+
+	prefixWidth := lineHeight
+	SourceLine{
+		TopLeft:    image.Pt(left, top),
+		Width:      prefixWidth,
+		Text:       "//",
+		TextHeight: ui.TextHeight,
+		LineHeight: ui.LineHeight,
+		Color:      ui.Colors.MutedText,
+	}.Layout(ui.Theme, gtx)
+
+	editorLeft := left + prefixWidth
+	editorWidth := width - prefixWidth
+	if editorWidth < 0 {
+		editorWidth = 0
+	}
+	stack := op.Offset(image.Pt(editorLeft, top)).Push(gtx.Ops)
+	gtx.Constraints = layout.Exact(image.Pt(editorWidth, lineHeight))
+	editor := material.Editor(ui.Theme, ui.CommentEditor, "comment")
+	editor.TextSize = ui.TextHeight
+	editor.Font.Typeface = "override-monospace,Go,monospace"
+	editor.Color = ui.Colors.Text
+	editor.Layout(gtx)
+	stack.Pop()
 }
