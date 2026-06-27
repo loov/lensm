@@ -54,11 +54,7 @@ func Load(path string) (*File, error) {
 		return nil, err
 	}
 	obj.module = module
-
-	tryParseDWARF(module)
-
-	fmt.Println("LOCAL NAMES", module.NameSection.LocalNames)
-	fmt.Println("FUNC NAMES", module.NameSection.FunctionNames)
+	obj.dwarf = parseDWARF(module)
 
 	for i, fnname := range module.NameSection.FunctionNames {
 		code := module.CodeSection[i]
@@ -93,7 +89,7 @@ func (file *File) LoadCode(fn *Func, opts disasm.Options) *disasm.Code {
 	for i, b := range fn.code.Body {
 		code.Insts = append(code.Insts, disasm.Inst{
 			PC:   uint64(i),
-			Text: fmt.Sprintf("BYTE 0x%0x2", b),
+			Text: fmt.Sprintf("BYTE 0x%02x", b),
 		})
 	}
 	return code
@@ -146,7 +142,7 @@ func (file *File) immediatesToString(xs []interface{}) string {
 }
 */
 
-func tryParseDWARF(module *wasm.Module) {
+func parseDWARF(module *wasm.Module) *dwarf.Data {
 	customSectionData := func(name string) []byte {
 		for _, sec := range module.CustomSections {
 			if sec.Name == name {
@@ -167,40 +163,7 @@ func tryParseDWARF(module *wasm.Module) {
 		customSectionData(".debug_str"),
 	)
 	if err != nil {
-		fmt.Println("ERROR", err)
-		return
+		return nil
 	}
-
-	rd := dwarfdata.Reader()
-	for {
-		entry, err := rd.Next()
-		if entry == nil && err == nil {
-			break
-		}
-		if err != nil {
-			fmt.Println(err)
-			break
-		}
-		if entry.Tag == dwarf.TagCompileUnit {
-			lrd, err := dwarfdata.LineReader(entry)
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-
-			for _, fln := range lrd.Files() {
-				fmt.Println(fln)
-			}
-
-			var lineEntry dwarf.LineEntry
-			for lrd.Next(&lineEntry) == nil {
-				fmt.Println(
-					lineEntry.Address,
-					lineEntry.Line,
-					lineEntry.Column,
-					lineEntry.File.Name,
-				)
-			}
-		}
-	}
+	return dwarfdata
 }
