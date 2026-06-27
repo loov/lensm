@@ -278,6 +278,14 @@ func (d *Disasm) Print(w io.Writer, filter *regexp.Regexp, start, end uint64, pr
 
 // Decode disassembles the text segment range [start, end), calling f for each instruction.
 func (d *Disasm) Decode(start, end uint64, relocs []objfile.Reloc, gnuAsm bool, f func(pc, size uint64, file string, line int, text string)) {
+	d.DecodeSyntax(start, end, relocs, func(pc, size uint64, file string, line int, goText, gnuText string) {
+		f(pc, size, file, line, formatSyntax(goText, gnuText, gnuAsm))
+	})
+}
+
+// DecodeSyntax disassembles the text segment range [start, end), calling f for each
+// instruction with Go assembler syntax and native GNU assembler syntax separately.
+func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(pc, size uint64, file string, line int, goText, gnuText string)) {
 	if start < d.textStart {
 		start = d.textStart
 	}
@@ -288,45 +296,46 @@ func (d *Disasm) Decode(start, end uint64, relocs []objfile.Reloc, gnuAsm bool, 
 	lookup := d.lookup
 	for pc := start; pc < end; {
 		i := pc - d.textStart
-		text, size := d.disasm(code[i:], pc, lookup, d.byteOrder, gnuAsm)
+		goText, gnuText, size := d.disasm(code[i:], pc, lookup, d.byteOrder)
 		file, line, _ := d.pcln.PCToLine(pc)
 		sep := "\t"
 		for len(relocs) > 0 && relocs[0].Addr < i+uint64(size) {
-			text += sep + relocs[0].Stringer.String(pc-start)
+			reloc := relocs[0].Stringer.String(pc - start)
+			goText += sep + reloc
+			gnuText += sep + reloc
 			sep = " "
 			relocs = relocs[1:]
 		}
-		f(pc, uint64(size), file, line, text)
+		f(pc, uint64(size), file, line, goText, gnuText)
 		pc += uint64(size)
 	}
 }
 
+func formatSyntax(goText, gnuText string, gnuAsm bool) string {
+	if !gnuAsm {
+		return goText
+	}
+	return fmt.Sprintf("%-36s // %s", goText, gnuText)
+}
+
 type lookupFunc = func(addr uint64) (sym string, base uint64)
-type disasmFunc func(code []byte, pc uint64, lookup lookupFunc, ord binary.ByteOrder, _ bool) (text string, size int)
+type disasmFunc func(code []byte, pc uint64, lookup lookupFunc, ord binary.ByteOrder) (goText, gnuText string, size int)
 
-func disasm_386(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder, gnuAsm bool) (string, int) {
-	return disasm_x86(code, pc, lookup, 32, gnuAsm)
+func disasm_386(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder) (string, string, int) {
+	return disasm_x86(code, pc, lookup, 32)
 }
 
-func disasm_amd64(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder, gnuAsm bool) (string, int) {
-	return disasm_x86(code, pc, lookup, 64, gnuAsm)
+func disasm_amd64(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder) (string, string, int) {
+	return disasm_x86(code, pc, lookup, 64)
 }
 
-func disasm_x86(code []byte, pc uint64, lookup lookupFunc, arch int, gnuAsm bool) (string, int) {
+func disasm_x86(code []byte, pc uint64, lookup lookupFunc, arch int) (string, string, int) {
 	inst, err := x86asm.Decode(code, arch)
-	var text string
 	size := inst.Len
 	if err != nil || size == 0 || inst.Op == 0 {
-		size = 1
-		text = "?"
-	} else {
-		if gnuAsm {
-			text = fmt.Sprintf("%-36s // %s", x86asm.GoSyntax(inst, pc, lookup), x86asm.GNUSyntax(inst, pc, nil))
-		} else {
-			text = x86asm.GoSyntax(inst, pc, lookup)
-		}
+		return "?", "?", 1
 	}
-	return text, size
+	return x86asm.GoSyntax(inst, pc, lookup), x86asm.GNUSyntax(inst, pc, nil), size
 }
 
 type textReader struct {
@@ -349,94 +358,56 @@ func (r textReader) ReadAt(data []byte, off int64) (n int, err error) {
 	return
 }
 
-func disasm_arm(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder, gnuAsm bool) (string, int) {
+func disasm_arm(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder) (string, string, int) {
 	inst, err := armasm.Decode(code, armasm.ModeARM)
-	var text string
 	size := inst.Len
 	if err != nil || size == 0 || inst.Op == 0 {
-		size = 4
-		text = "?"
-	} else if gnuAsm {
-		text = fmt.Sprintf("%-36s // %s", armasm.GoSyntax(inst, pc, lookup, textReader{code, pc}), armasm.GNUSyntax(inst))
-	} else {
-		text = armasm.GoSyntax(inst, pc, lookup, textReader{code, pc})
+		return "?", "?", 4
 	}
-	return text, size
+	return armasm.GoSyntax(inst, pc, lookup, textReader{code, pc}), armasm.GNUSyntax(inst), size
 }
 
-func disasm_arm64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder, gnuAsm bool) (string, int) {
+func disasm_arm64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder) (string, string, int) {
 	inst, err := arm64asm.Decode(code)
-	var text string
 	if err != nil || inst.Op == 0 {
-		text = "?"
-	} else if gnuAsm {
-		text = fmt.Sprintf("%-36s // %s", arm64asm.GoSyntax(inst, pc, lookup, textReader{code, pc}), arm64asm.GNUSyntax(inst))
-	} else {
-		text = arm64asm.GoSyntax(inst, pc, lookup, textReader{code, pc})
+		return "?", "?", 4
 	}
-	return text, 4
+	return arm64asm.GoSyntax(inst, pc, lookup, textReader{code, pc}), arm64asm.GNUSyntax(inst), 4
 }
 
-func disasm_loong64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder, gnuAsm bool) (string, int) {
+func disasm_loong64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder) (string, string, int) {
 	inst, err := loong64asm.Decode(code)
-	var text string
 	if err != nil || inst.Op == 0 {
-		text = "?"
-	} else if gnuAsm {
-		text = fmt.Sprintf("%-36s // %s", loong64asm.GoSyntax(inst, pc, lookup), loong64asm.GNUSyntax(inst))
-	} else {
-		text = loong64asm.GoSyntax(inst, pc, lookup)
+		return "?", "?", 4
 	}
-	return text, 4
+	return loong64asm.GoSyntax(inst, pc, lookup), loong64asm.GNUSyntax(inst), 4
 }
 
-func disasm_ppc64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder, gnuAsm bool) (string, int) {
+func disasm_ppc64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder) (string, string, int) {
 	inst, err := ppc64asm.Decode(code, byteOrder)
-	var text string
 	size := inst.Len
 	if err != nil || size == 0 {
-		size = 4
-		text = "?"
-	} else {
-		if gnuAsm {
-			text = fmt.Sprintf("%-36s // %s", ppc64asm.GoSyntax(inst, pc, lookup), ppc64asm.GNUSyntax(inst, pc))
-		} else {
-			text = ppc64asm.GoSyntax(inst, pc, lookup)
-		}
+		return "?", "?", 4
 	}
-	return text, size
+	return ppc64asm.GoSyntax(inst, pc, lookup), ppc64asm.GNUSyntax(inst, pc), size
 }
 
-func disasm_riscv64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder, gnuAsm bool) (string, int) {
+func disasm_riscv64(code []byte, pc uint64, lookup lookupFunc, byteOrder binary.ByteOrder) (string, string, int) {
 	inst, err := riscv64asm.Decode(code)
-	var text string
 	size := inst.Len
 	if err != nil || inst.Op == 0 {
-		size = 2
-		text = "?"
-	} else if gnuAsm {
-		text = fmt.Sprintf("%-36s // %s", riscv64asm.GoSyntax(inst, pc, lookup, textReader{code, pc}), riscv64asm.GNUSyntax(inst))
-	} else {
-		text = riscv64asm.GoSyntax(inst, pc, lookup, textReader{code, pc})
+		return "?", "?", 2
 	}
-	return text, size
+	return riscv64asm.GoSyntax(inst, pc, lookup, textReader{code, pc}), riscv64asm.GNUSyntax(inst), size
 }
 
-func disasm_s390x(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder, gnuAsm bool) (string, int) {
+func disasm_s390x(code []byte, pc uint64, lookup lookupFunc, _ binary.ByteOrder) (string, string, int) {
 	inst, err := s390xasm.Decode(code)
-	var text string
 	size := inst.Len
 	if err != nil || size == 0 || inst.Op == 0 {
-		size = 2
-		text = "?"
-	} else {
-		if gnuAsm {
-			text = fmt.Sprintf("%-36s // %s", s390xasm.GoSyntax(inst, pc, lookup), s390xasm.GNUSyntax(inst, pc))
-		} else {
-			text = s390xasm.GoSyntax(inst, pc, lookup)
-		}
+		return "?", "?", 2
 	}
-	return text, size
+	return s390xasm.GoSyntax(inst, pc, lookup), s390xasm.GNUSyntax(inst, pc), size
 }
 
 var disasms = map[string]disasmFunc{

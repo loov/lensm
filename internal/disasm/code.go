@@ -24,6 +24,8 @@ type Inst struct {
 	PC uint64
 	// Text is the textual representation of this instruction.
 	Text string
+	// NativeText is the native assembler syntax for this instruction.
+	NativeText string
 	// File is the location where this instruction was compiled from.
 	File string
 	// Line is the line in the file where this instruction was compiled from.
