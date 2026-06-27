@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"log"
 	"os"
 	"runtime/pprof"
@@ -21,21 +20,33 @@ func main() {
 	}
 
 	cpuprofile := flag.String("cpuprofile", "", "enable cpu profiling")
-	textSize := flag.Int("text-size", 12, "default font size")
+	defaults := DefaultAppSettings()
+	textSize := flag.Int("text-size", defaults.TextSize, "default font size")
 	filter := flag.String("filter", "", "filter the functions by regexp")
 	watch := flag.Bool("watch", false, "auto reload executable")
-	context := flag.Int("context", 3, "source line context")
+	context := flag.Int("context", defaults.Context, "source line context")
+	comments := flag.String("comments", "", "comments sidecar path")
 	font := flag.String("font", "", "user font")
 
 	workInProgressWASM = os.Getenv("LENSM_EXPERIMENT_WASM") != ""
 
 	flag.Parse()
 	exePath := flag.Arg(0)
+	explicitTextSize := false
+	explicitContext := false
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "text-size":
+			explicitTextSize = true
+		case "context":
+			explicitContext = true
+		}
+	})
 
-	if exePath == "" {
-		fmt.Fprintln(os.Stderr, "lensm <exePath>")
+	if flag.NArg() > 1 {
+		fmt.Fprintln(os.Stderr, "lensm [exePath]")
 		flag.Usage()
-		os.Exit(1)
+		os.Exit(2)
 	}
 
 	windows := &Windows{}
@@ -45,10 +56,20 @@ func main() {
 	theme.TextSize = unit.Sp(*textSize)
 
 	ui := NewExeUI(windows, theme)
+	if !explicitTextSize {
+		theme.TextSize = unit.Sp(ui.Settings.TextSize)
+	}
+	if exePath == "" {
+		exePath = ui.Settings.LastPath
+	}
+	if !explicitContext {
+		*context = ui.Settings.Context
+	}
 	ui.Config = FileUIConfig{
-		Path:    exePath,
-		Watch:   *watch,
-		Context: *context,
+		Path:         exePath,
+		Watch:        *watch,
+		Context:      *context,
+		CommentsPath: *comments,
 	}
 	ui.Funcs.SetFilter(*filter)
 
@@ -62,11 +83,6 @@ func main() {
 	// This starts Gio main.
 	app.Main()
 }
-
-var (
-	secondaryBackground = color.NRGBA{R: 0xF0, G: 0xF0, B: 0xF0, A: 0xFF}
-	splitterColor       = color.NRGBA{R: 0x80, G: 0x80, B: 0x80, A: 0xFF}
-)
 
 func profile(cpuprofile string, fn func()) {
 	if cpuprofile != "" {
