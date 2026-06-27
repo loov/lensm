@@ -17,5 +17,6 @@
 
 lensm
 /output/
+/dist/
 /tmp/
 *.lensm-comments.json
