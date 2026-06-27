@@ -53,6 +53,9 @@ func (ui *FilterList[T]) SelectIndex(index int) {
 func (ui *FilterList[T]) SetItems(all []T) {
 	ui.All = all
 	ui.updateFiltered()
+	if ui.List.Selected == -1 && len(ui.Filtered) > 0 {
+		ui.SelectIndex(0)
+	}
 }
 
 // SetFilter sets the filter.
@@ -65,6 +68,8 @@ func (ui *FilterList[T]) SetFilter(filter string) {
 func (ui *FilterList[T]) updateFiltered() {
 	defer func() {
 		ui.List.Selected = -1
+		var zero T
+		ui.SelectedItem = zero
 		for i, item := range ui.Filtered {
 			if item.Name() == ui.Selected {
 				ui.List.Selected = i
@@ -91,8 +96,8 @@ func (ui *FilterList[T]) updateFiltered() {
 }
 
 // Layout draws the list.
-func (ui *FilterList[T]) Layout(th *material.Theme, gtx layout.Context) layout.Dimensions {
-	paint.FillShape(gtx.Ops, secondaryBackground, clip.Rect{Max: gtx.Constraints.Min}.Op())
+func (ui *FilterList[T]) Layout(th *material.Theme, colors UIColors, gtx layout.Context) layout.Dimensions {
+	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Min}.Op())
 
 	ui.SelectIndex(ui.List.Selected)
 
@@ -123,7 +128,9 @@ func (ui *FilterList[T]) Layout(th *material.Theme, gtx layout.Context) layout.D
 			if ui.FilterError == "" {
 				return layout.Dimensions{}
 			}
-			return material.Body1(th, ui.FilterError).Layout(gtx)
+			label := material.Body1(th, ui.FilterError)
+			label.Color = colors.Error
+			return label.Layout(gtx)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return ui.List.Layout(th, gtx, len(ui.Filtered),
