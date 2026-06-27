@@ -54,14 +54,9 @@ type FileUI struct {
 
 	// Other FileUI elements.
 	BrowseButton   widget.Clickable
-	BackButton     widget.Clickable
-	ForwardButton  widget.Clickable
 	SettingsButton widget.Clickable
 	Dark           widget.Bool
 	SyntaxStyle    widget.Enum
-	CopyAsm        widget.Clickable
-	CopyCode       widget.Clickable
-	OpenInNew      widget.Clickable
 	ShowNativeAsm  widget.Bool
 	ShowAsmHelp    widget.Bool
 	Comment        widget.Editor
@@ -362,11 +357,6 @@ func (ui *FileUI) activeCode() *CodeUI {
 	return &tab.Code
 }
 
-func (ui *FileUI) activeCodeLoaded() bool {
-	code := ui.activeCode()
-	return code != nil && code.Loaded()
-}
-
 func (ui *FileUI) findFunc(name string) disasm.Func {
 	if ui.File == nil {
 		return nil
@@ -565,25 +555,8 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	for ui.BrowseButton.Clicked(gtx) {
 		ui.chooseFile()
 	}
-	for ui.BackButton.Clicked(gtx) {
-		ui.navigateBack()
-	}
-	for ui.ForwardButton.Clicked(gtx) {
-		ui.navigateForward()
-	}
 	for ui.SettingsButton.Clicked(gtx) {
 		ui.openSettingsWindow()
-	}
-	for ui.CopyAsm.Clicked(gtx) {
-		ui.copyAssembly(gtx)
-	}
-	for ui.CopyCode.Clicked(gtx) {
-		ui.copySourceCode(gtx)
-	}
-	for ui.OpenInNew.Clicked(gtx) {
-		if ui.activeCodeLoaded() {
-			ui.openInNew(gtx)
-		}
 	}
 }
 
@@ -596,24 +569,6 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dime
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				button := material.Button(ui.Theme, &ui.BrowseButton, "Choose...")
 				button.Inset = layout.Inset{Top: 6, Right: 10, Bottom: 6, Left: 10}
-				return layout.Inset{Right: 6}.Layout(gtx, button.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if !ui.Navigation.CanBack() {
-					gtx = gtx.Disabled()
-				}
-				button := material.IconButton(ui.Theme, &ui.BackButton, BackIcon, "Back (Alt+Left / Cmd+[)")
-				button.Size = 18
-				button.Inset = layout.UniformInset(8)
-				return button.Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if !ui.Navigation.CanForward() {
-					gtx = gtx.Disabled()
-				}
-				button := material.IconButton(ui.Theme, &ui.ForwardButton, ForwardIcon, "Forward (Alt+Right / Cmd+])")
-				button.Size = 18
-				button.Inset = layout.UniformInset(8)
 				return layout.Inset{Right: 6}.Layout(gtx, button.Layout)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -630,28 +585,6 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dime
 				button := material.IconButton(ui.Theme, &ui.SettingsButton, SettingsIcon, "Settings")
 				button.Size = 18
 				button.Inset = layout.UniformInset(8)
-				return layout.Inset{Left: 4}.Layout(gtx, button.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				tooltip := "Copy assembly (drag to select lines)"
-				if code := ui.activeCode(); code != nil && code.Selection.Active {
-					tooltip = "Copy selection (Cmd/Ctrl+C)"
-				}
-				button := material.IconButton(ui.Theme, &ui.CopyAsm, CopyIcon, tooltip)
-				button.Size = 18
-				button.Inset = layout.UniformInset(8)
-				if !ui.activeCodeLoaded() {
-					gtx = gtx.Disabled()
-				}
-				return layout.Inset{Left: 4}.Layout(gtx, button.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.Button(ui.Theme, &ui.CopyCode, "Copy code")
-				button.Inset = layout.Inset{Top: 6, Right: 10, Bottom: 6, Left: 10}
-				code := ui.activeCode()
-				if code == nil || !code.Loaded() || len(code.Source) == 0 {
-					gtx = gtx.Disabled()
-				}
 				return layout.Inset{Left: 4}.Layout(gtx, button.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1113,16 +1046,6 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 								LineHeight: ui.Theme.TextSize * 1.2,
 							}.Layout(gtx)
 						}),
-						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-							code := ui.activeCode()
-							if code == nil || !code.Loaded() {
-								return layout.Dimensions{}
-							}
-							button := material.IconButton(ui.Theme, &ui.OpenInNew, OpenInNewIcon, "Open in separate window")
-							button.Size = 16
-							button.Inset = layout.UniformInset(12)
-							return layout.UniformInset(2).Layout(gtx, button.Layout)
-						}),
 					)
 				}),
 			)
@@ -1392,59 +1315,6 @@ func (ui *FileUI) setSourceCommentForLine(file string, line int, text string) {
 	}
 }
 
-func (ui *FileUI) copyAssembly(gtx layout.Context) {
-	code := ui.activeCode()
-	if code == nil || !code.Loaded() {
-		return
-	}
-	if selected := code.Selection.Text(code.Code); selected != "" {
-		ui.writeClipboardText(gtx, selected, "Copied selection")
-		return
-	}
-
-	var text strings.Builder
-	for _, inst := range code.Insts {
-		text.WriteString(inst.Text)
-		if comment := ui.commentFor(inst); comment != "" {
-			text.WriteString(" ; ")
-			text.WriteString(comment)
-		}
-		text.WriteByte('\n')
-	}
-	ui.writeClipboardText(gtx, text.String(), "Copied assembly")
-}
-
-func (ui *FileUI) copySourceCode(gtx layout.Context) {
-	code := ui.activeCode()
-	if code == nil || !code.Loaded() || len(code.Source) == 0 {
-		return
-	}
-
-	var text strings.Builder
-	multipleFiles := len(code.Source) > 1
-	for srcIndex, src := range code.Source {
-		if srcIndex > 0 {
-			text.WriteByte('\n')
-		}
-		if multipleFiles {
-			text.WriteString("// ")
-			text.WriteString(src.File)
-			text.WriteByte('\n')
-		}
-		for blockIndex, block := range src.Blocks {
-			if blockIndex > 0 {
-				text.WriteByte('\n')
-			}
-			for _, line := range block.Lines {
-				text.WriteString(line)
-				text.WriteByte('\n')
-			}
-		}
-	}
-
-	ui.writeClipboardText(gtx, text.String(), "Copied code")
-}
-
 func (ui *FileUI) writeClipboardText(gtx layout.Context, text, status string) {
 	if text == "" {
 		return
@@ -1464,49 +1334,4 @@ func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
 
 	ui.openFuncTabNext(fn)
 	gtx.Execute(op.InvalidateCmd{})
-}
-
-func (ui *FileUI) openInNew(gtx layout.Context) {
-	code := ui.activeCode()
-	if code == nil || !code.Loaded() {
-		return
-	}
-
-	state := *code
-	codeData := state.Code
-	colors := ApplyTheme(ui.Theme, ui.Dark.Value)
-	style := CodeUIStyle{
-		Theme:  ui.Theme,
-		CodeUI: &state,
-
-		CommentFor: func(inst disasm.Inst) string {
-			return ui.Comments.ForAsm(codeData.Name, CommentViewGoAsm, inst.PC)
-		},
-		NativeCommentFor: func(inst disasm.Inst) string {
-			return ui.Comments.ForAsm(codeData.Name, CommentViewNativeAsm, inst.PC)
-		},
-		SourceCommentFor: func(file string, line int) string {
-			return ui.Comments.ForSource(codeData.Name, file, line)
-		},
-		CopyText: func(gtx layout.Context, text string) {
-			if text == "" {
-				return
-			}
-			gtx.Execute(clipboard.WriteCmd{
-				Type: "text/plain",
-				Data: io.NopCloser(strings.NewReader(text)),
-			})
-		},
-		Colors:     colors,
-		Syntax:     SyntaxPaletteFor(ui.Settings.SyntaxStyle, colors),
-		ShowNative: ui.ShowNativeAsm.Value,
-		ShowHelp:   ui.ShowAsmHelp.Value,
-		TextHeight: ui.Theme.TextSize,
-		LineHeight: ui.Theme.TextSize * 14 / 12,
-	}
-
-	size := gtx.Constraints.Max
-	size.X = int(float32(size.X) / gtx.Metric.PxPerDp)
-	size.Y = int(float32(size.Y) / gtx.Metric.PxPerDp)
-	ui.Windows.Open(code.Name, size, WidgetWindow(style.Layout))
 }
