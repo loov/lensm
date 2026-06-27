@@ -24,7 +24,7 @@ func main() {
 	textSize := flag.Int("text-size", defaults.TextSize, "default font size")
 	filter := flag.String("filter", "", "filter the functions by regexp")
 	watch := flag.Bool("watch", false, "auto reload executable")
-	context := flag.Int("context", defaults.Context, "source line context")
+	context := flag.Int("context", 3, "source line context")
 	comments := flag.String("comments", "", "comments sidecar path")
 	font := flag.String("font", "", "user font")
 
@@ -33,13 +33,10 @@ func main() {
 	flag.Parse()
 	exePath := flag.Arg(0)
 	explicitTextSize := false
-	explicitContext := false
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "text-size":
 			explicitTextSize = true
-		case "context":
-			explicitContext = true
 		}
 	})
 
@@ -61,9 +58,6 @@ func main() {
 	}
 	if exePath == "" {
 		exePath = ui.Settings.LastPath
-	}
-	if !explicitContext {
-		*context = ui.Settings.Context
 	}
 	ui.Config = FileUIConfig{
 		Path:         exePath,

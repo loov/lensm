@@ -61,7 +61,6 @@ type FileUI struct {
 	ShowAsmHelp    widget.Bool
 	Comment        widget.Editor
 	TextSizeEditor widget.Editor
-	ContextEditor  widget.Editor
 	StartMCP       widget.Clickable
 	StopMCP        widget.Clickable
 
@@ -118,9 +117,6 @@ func NewExeUI(windows *Windows, theme *material.Theme) *FileUI {
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
 	ui.TextSizeEditor.SetText(strconv.Itoa(settings.TextSize))
-	ui.ContextEditor.SingleLine = true
-	ui.ContextEditor.Submit = true
-	ui.ContextEditor.SetText(strconv.Itoa(settings.Context))
 	ui.Comments, _ = NewCommentStore("", "")
 	return ui
 }
@@ -736,9 +732,6 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: 14}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return ui.layoutSettingsSection(gtx, colors, "MCP", []layout.FlexChild{
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.layoutLabeledEditor(gtx, colors, "Source context", &ui.ContextEditor)
-						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							status := "Stopped"
 							if ui.MCP != nil {
 								status = "Running: " + ui.MCP.URL()
@@ -828,16 +821,6 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 		ui.invalidateMain()
 	}
 
-	contextChanged := ui.updatePositiveIntEditor(gtx, &ui.ContextEditor, func(value int) {
-		ui.Config.Context = value
-	})
-	if contextChanged {
-		ui.saveMCPSettings()
-		if ui.MCP != nil {
-			ui.stopMCP()
-			ui.startMCP()
-		}
-	}
 	for ui.StartMCP.Clicked(gtx) {
 		ui.startMCP()
 		gtx.Execute(op.InvalidateCmd{})
@@ -883,14 +866,6 @@ func (ui *FileUI) saveVisualSettings() {
 	ui.saveSettings(settings)
 }
 
-func (ui *FileUI) saveMCPSettings() {
-	settings := ui.Settings
-	if value, err := strconv.Atoi(strings.TrimSpace(ui.ContextEditor.Text())); err == nil && value > 0 {
-		settings.Context = value
-	}
-	ui.saveSettings(settings)
-}
-
 func (ui *FileUI) saveSettings(settings AppSettings) {
 	if err := SaveAppSettings(settings); err != nil {
 		fmt.Fprintf(os.Stderr, "unable to save settings: %v\n", err)
@@ -913,7 +888,7 @@ func (ui *FileUI) startMCP() {
 	if ui.MCP != nil {
 		return
 	}
-	server, err := StartAppMCPServer(ui.Config.Context, ui.Config.CommentsPath)
+	server, err := StartAppMCPServer(ui.Config.CommentsPath)
 	if err != nil {
 		ui.LoadError = fmt.Errorf("unable to start MCP server: %w", err)
 		ui.invalidateMain()

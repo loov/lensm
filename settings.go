@@ -13,7 +13,6 @@ type AppSettings struct {
 	ShowNativeAsm bool     `json:"show_native_asm"`
 	ShowAsmHelp   bool     `json:"show_asm_help"`
 	TextSize      int      `json:"text_size,omitempty"`
-	Context       int      `json:"context,omitempty"`
 	LastPath      string   `json:"last_path,omitempty"`
 	OpenTabs      []string `json:"open_tabs,omitempty"`
 	ActiveTab     string   `json:"active_tab,omitempty"`
@@ -25,7 +24,6 @@ func DefaultAppSettings() AppSettings {
 		ShowNativeAsm: true,
 		ShowAsmHelp:   true,
 		TextSize:      12,
-		Context:       3,
 	}
 }
 
@@ -50,9 +48,6 @@ func LoadAppSettings() (AppSettings, error) {
 	if settings.TextSize <= 0 {
 		settings.TextSize = DefaultAppSettings().TextSize
 	}
-	if settings.Context <= 0 {
-		settings.Context = DefaultAppSettings().Context
-	}
 	settings.LastPath = cleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
 	if settings.ActiveTab != "" && !containsString(settings.OpenTabs, settings.ActiveTab) {
@@ -65,9 +60,6 @@ func SaveAppSettings(settings AppSettings) error {
 	settings.SyntaxStyle = NormalizeSyntaxStyle(settings.SyntaxStyle)
 	if settings.TextSize <= 0 {
 		settings.TextSize = DefaultAppSettings().TextSize
-	}
-	if settings.Context <= 0 {
-		settings.Context = DefaultAppSettings().Context
 	}
 	settings.LastPath = cleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
