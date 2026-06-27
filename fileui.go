@@ -14,6 +14,7 @@ import (
 	"gioui.org/font"
 	"gioui.org/io/clipboard"
 	"gioui.org/io/event"
+	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -54,6 +55,8 @@ type FileUI struct {
 
 	// Other FileUI elements.
 	BrowseButton   widget.Clickable
+	BackButton     widget.Clickable
+	ForwardButton  widget.Clickable
 	SettingsButton widget.Clickable
 	Dark           widget.Bool
 	SyntaxStyle    widget.Enum
@@ -84,6 +87,8 @@ type FileUI struct {
 	settingsWindowOpen bool
 	pickerOpen         bool
 	loadGeneration     uint64
+	Navigation         NavigationHistory
+	navigatingHistory  bool
 }
 
 type pickerResult struct {
@@ -124,6 +129,7 @@ func NewExeUI(windows *Windows, theme *material.Theme) *FileUI {
 	ui.Dark.Value = settings.Dark
 	ui.Funcs = NewFilterList[disasm.Func](theme)
 	ui.ActiveTab = -1
+	ui.Navigation.Reset()
 	ui.Tabs.List.Axis = layout.Horizontal
 	ui.ShowNativeAsm.Value = settings.ShowNativeAsm
 	ui.Comment.SingleLine = true
@@ -323,6 +329,15 @@ func (ui *FileUI) Run(w *app.Window) error {
 }
 
 func (ui *FileUI) SetFile(file disasm.File) {
+	ui.navigatingHistory = true
+	defer func() {
+		ui.navigatingHistory = false
+		if tab := ui.activeTab(); tab != nil {
+			ui.Navigation.Visit(tab.Name)
+		}
+	}()
+	ui.Navigation.Reset()
+
 	initialLoad := ui.File == nil
 	if ui.File != nil {
 		_ = ui.File.Close()
@@ -445,6 +460,7 @@ func (ui *FileUI) openFuncTab(fn disasm.Func) *CodeTab {
 			ui.ActiveTab = i
 			ui.selectFuncByName(name)
 			ui.commentKey = ""
+			ui.recordNavigation(name)
 			ui.saveSessionState()
 			return tab
 		}
@@ -457,6 +473,7 @@ func (ui *FileUI) openFuncTab(fn disasm.Func) *CodeTab {
 	ui.ActiveTab = len(ui.CodeTabs) - 1
 	ui.selectFuncByName(name)
 	ui.commentKey = ""
+	ui.recordNavigation(name)
 	ui.saveSessionState()
 	return tab
 }
@@ -472,6 +489,7 @@ func (ui *FileUI) openFuncTabNext(fn disasm.Func) *CodeTab {
 			ui.ActiveTab = i
 			ui.selectFuncByName(name)
 			ui.commentKey = ""
+			ui.recordNavigation(name)
 			ui.saveSessionState()
 			return tab
 		}
@@ -493,6 +511,7 @@ func (ui *FileUI) openFuncTabNext(fn disasm.Func) *CodeTab {
 	ui.ActiveTab = index
 	ui.selectFuncByName(name)
 	ui.commentKey = ""
+	ui.recordNavigation(name)
 	ui.saveSessionState()
 	return tab
 }
@@ -504,6 +523,7 @@ func (ui *FileUI) selectTab(index int) {
 	ui.ActiveTab = index
 	ui.commentKey = ""
 	ui.selectFuncByName(ui.CodeTabs[index].Name)
+	ui.recordNavigation(ui.CodeTabs[index].Name)
 	ui.saveSessionState()
 }
 
@@ -526,6 +546,7 @@ func (ui *FileUI) closeTab(index int) {
 	}
 	if tab := ui.activeTab(); tab != nil {
 		ui.selectFuncByName(tab.Name)
+		ui.recordNavigation(tab.Name)
 	} else {
 		ui.commentKey = ""
 	}
@@ -557,6 +578,7 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 	colors := ApplyTheme(ui.Theme, ui.Dark.Value)
 	paint.FillShape(gtx.Ops, colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
+	event.Op(gtx.Ops, ui)
 	ui.handleActions(gtx)
 
 	layout.Flex{
@@ -573,8 +595,35 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 }
 
 func (ui *FileUI) handleActions(gtx layout.Context) {
+	for {
+		ev, ok := gtx.Event(
+			key.Filter{Required: key.ModAlt, Name: key.NameLeftArrow},
+			key.Filter{Required: key.ModAlt, Name: key.NameRightArrow},
+			key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
+			key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
+		)
+		if !ok {
+			break
+		}
+		keyEvent, ok := ev.(key.Event)
+		if !ok || keyEvent.State != key.Press {
+			continue
+		}
+		switch keyEvent.Name {
+		case key.NameLeftArrow, key.Name("["):
+			ui.navigateBack()
+		case key.NameRightArrow, key.Name("]"):
+			ui.navigateForward()
+		}
+	}
 	for ui.BrowseButton.Clicked(gtx) {
 		ui.chooseFile()
+	}
+	for ui.BackButton.Clicked(gtx) {
+		ui.navigateBack()
+	}
+	for ui.ForwardButton.Clicked(gtx) {
+		ui.navigateForward()
 	}
 	for ui.SettingsButton.Clicked(gtx) {
 		ui.openSettingsWindow()
@@ -601,6 +650,24 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dime
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				button := material.Button(ui.Theme, &ui.BrowseButton, "Choose...")
 				button.Inset = layout.Inset{Top: 6, Right: 10, Bottom: 6, Left: 10}
+				return layout.Inset{Right: 6}.Layout(gtx, button.Layout)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if !ui.Navigation.CanBack() {
+					gtx = gtx.Disabled()
+				}
+				button := material.IconButton(ui.Theme, &ui.BackButton, BackIcon, "Back (Alt+Left / Cmd+[)")
+				button.Size = 18
+				button.Inset = layout.UniformInset(8)
+				return button.Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if !ui.Navigation.CanForward() {
+					gtx = gtx.Disabled()
+				}
+				button := material.IconButton(ui.Theme, &ui.ForwardButton, ForwardIcon, "Forward (Alt+Right / Cmd+])")
+				button.Size = 18
+				button.Inset = layout.UniformInset(8)
 				return layout.Inset{Right: 6}.Layout(gtx, button.Layout)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -657,6 +724,43 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dime
 			}),
 		)
 	})
+}
+
+func (ui *FileUI) recordNavigation(name string) {
+	if !ui.navigatingHistory {
+		ui.Navigation.Visit(name)
+	}
+}
+
+func (ui *FileUI) navigateBack() {
+	for ui.Navigation.CanBack() {
+		name, _ := ui.Navigation.Back()
+		if ui.navigateHistoryEntry(name) {
+			return
+		}
+	}
+}
+
+func (ui *FileUI) navigateForward() {
+	for ui.Navigation.CanForward() {
+		name, _ := ui.Navigation.Forward()
+		if ui.navigateHistoryEntry(name) {
+			return
+		}
+	}
+}
+
+func (ui *FileUI) navigateHistoryEntry(name string) bool {
+	fn := ui.findFunc(name)
+	if fn == nil {
+		return false
+	}
+	ui.navigatingHistory = true
+	ui.openFuncTab(fn)
+	ui.navigatingHistory = false
+	ui.copyStatus = ""
+	ui.invalidateMain()
+	return true
 }
 
 func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors UIColors) layout.Dimensions {

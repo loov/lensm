@@ -28,3 +28,14 @@ var SettingsIcon = func() *widget.Icon {
 	icon, _ := widget.NewIcon(icons.ActionSettings)
 	return icon
 }()
+
+// BackIcon and ForwardIcon navigate through visited functions.
+var BackIcon = func() *widget.Icon {
+	icon, _ := widget.NewIcon(icons.NavigationArrowBack)
+	return icon
+}()
+
+var ForwardIcon = func() *widget.Icon {
+	icon, _ := widget.NewIcon(icons.NavigationArrowForward)
+	return icon
+}()
