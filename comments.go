@@ -125,6 +125,13 @@ func (store *CommentStore) Set(coord CommentCoord, text string) error {
 		}
 	}
 	err := store.saveLocked()
+	if err != nil {
+		if exists {
+			store.records[key] = existing
+		} else {
+			delete(store.records, key)
+		}
+	}
 	store.mu.Unlock()
 	return err
 }

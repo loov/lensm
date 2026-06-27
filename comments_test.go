@@ -118,3 +118,33 @@ func TestCommentStoreSkipsMissingCommentDelete(t *testing.T) {
 		t.Fatalf("comments file exists after deleting missing comment: %v", err)
 	}
 }
+
+func TestCommentStoreRollsBackFailedSave(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "comments.json")
+	store, err := NewCommentStore(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "old"); err != nil {
+		t.Fatal(err)
+	}
+
+	store.path = filepath.Join(dir, "missing", "comments.json")
+	if err := os.WriteFile(filepath.Join(dir, "missing"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "new"); err == nil {
+		t.Fatal("updating comment unexpectedly succeeded")
+	}
+	if got := store.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "old" {
+		t.Fatalf("comment after failed update = %q, want old", got)
+	}
+
+	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, ""); err == nil {
+		t.Fatal("deleting comment unexpectedly succeeded")
+	}
+	if got := store.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "old" {
+		t.Fatalf("comment after failed delete = %q, want old", got)
+	}
+}
