@@ -241,7 +241,6 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 
 								Theme:      ui.Theme,
 								TextHeight: ui.Theme.TextSize,
-								LineHeight: ui.Theme.TextSize * 1.2,
 							}.Layout(gtx)
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -300,7 +299,6 @@ func (ui *FileUI) openInNew(gtx layout.Context) {
 		CodeUI: &state,
 
 		TextHeight: ui.Theme.TextSize,
-		LineHeight: ui.Theme.TextSize * 14 / 12,
 	}
 
 	size := gtx.Constraints.Max
