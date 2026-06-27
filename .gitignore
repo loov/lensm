@@ -16,4 +16,6 @@
 .idea/
 
 lensm
+/output/
+/tmp/
 *.lensm-comments.json
