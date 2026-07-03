@@ -1,12 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -39,9 +40,9 @@ type CommentRecord struct {
 }
 
 type commentsDiskFile struct {
-	Version  int             `json:"version"`
-	Binary   string          `json:"binary,omitempty"`
-	Comments []CommentRecord `json:"comments"`
+	Version  int               `json:"version"`
+	Binary   string            `json:"binary,omitempty"`
+	Comments []json.RawMessage `json:"comments"`
 }
 
 type CommentStore struct {
@@ -49,6 +50,9 @@ type CommentStore struct {
 	path    string
 	binary  string
 	records map[string]CommentRecord
+	// preserved holds records this version doesn't understand (e.g. views
+	// added by a newer lensm), kept verbatim so saving doesn't destroy them.
+	preserved []json.RawMessage
 }
 
 func defaultCommentPath(binaryPath string) string {
@@ -213,8 +217,10 @@ func (store *CommentStore) load() error {
 	if disk.Version != 0 && disk.Version != commentsFileVersion {
 		return fmt.Errorf("unsupported comments file version %d", disk.Version)
 	}
-	for _, rec := range disk.Comments {
-		if rec.Text == "" {
+	for _, raw := range disk.Comments {
+		var rec CommentRecord
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			store.preserved = append(store.preserved, raw)
 			continue
 		}
 		if rec.Binary == "" {
@@ -222,6 +228,10 @@ func (store *CommentStore) load() error {
 		}
 		rec.PCHex = commentPCHex(rec.CommentCoord)
 		if err := rec.CommentCoord.validate(); err != nil {
+			store.preserved = append(store.preserved, raw)
+			continue
+		}
+		if rec.Text == "" {
 			continue
 		}
 		store.records[store.key(rec.CommentCoord)] = rec
@@ -239,10 +249,20 @@ func (store *CommentStore) saveLocked() error {
 	}
 	sortCommentRecords(records)
 
+	comments := make([]json.RawMessage, 0, len(records)+len(store.preserved))
+	for _, rec := range records {
+		raw, err := json.Marshal(rec)
+		if err != nil {
+			return err
+		}
+		comments = append(comments, raw)
+	}
+	comments = append(comments, store.preserved...)
+
 	data, err := json.MarshalIndent(commentsDiskFile{
 		Version:  commentsFileVersion,
 		Binary:   store.binary,
-		Comments: records,
+		Comments: comments,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -264,10 +284,36 @@ func (store *CommentStore) saveLocked() error {
 		_ = tmp.Close()
 		return err
 	}
+	// CreateTemp creates the file 0600; keep the sidecar shareable.
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	// Flush data blocks before the rename, otherwise a crash can leave a
+	// zero-length or truncated file behind the already-journaled rename.
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, store.path)
+	if err := os.Rename(tmpName, store.path); err != nil {
+		return err
+	}
+	syncDir(dir)
+	return nil
+}
+
+// syncDir best-effort flushes directory metadata so a rename survives a
+// crash. Errors are ignored: not all platforms support syncing directories.
+func syncDir(dir string) {
+	d, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	_ = d.Sync()
+	_ = d.Close()
 }
 
 func (store *CommentStore) normalize(coord CommentCoord) CommentCoord {
@@ -309,21 +355,20 @@ func (coord CommentCoord) validate() error {
 }
 
 func sortCommentRecords(records []CommentRecord) {
-	sort.Slice(records, func(i, j int) bool {
-		a, b := records[i], records[j]
-		if a.Function != b.Function {
-			return a.Function < b.Function
+	slices.SortFunc(records, func(a, b CommentRecord) int {
+		if c := cmp.Compare(a.Function, b.Function); c != 0 {
+			return c
 		}
-		if a.View != b.View {
-			return a.View < b.View
+		if c := cmp.Compare(a.View, b.View); c != 0 {
+			return c
 		}
-		if a.File != b.File {
-			return a.File < b.File
+		if c := cmp.Compare(a.File, b.File); c != 0 {
+			return c
 		}
-		if a.Line != b.Line {
-			return a.Line < b.Line
+		if c := cmp.Compare(a.Line, b.Line); c != 0 {
+			return c
 		}
-		return a.PC < b.PC
+		return cmp.Compare(a.PC, b.PC)
 	})
 }
 

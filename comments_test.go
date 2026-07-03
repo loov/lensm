@@ -105,6 +105,58 @@ func TestCommentStoreSkipsUnchangedCommentWrite(t *testing.T) {
 	}
 }
 
+func TestCommentStorePreservesUnknownRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "comments.json")
+	seed := `{
+  "version": 1,
+  "comments": [
+    {"function": "main.add", "view": "hologram", "pc": 16, "text": "from the future"},
+    {"function": "main.add", "view": "go_asm", "pc_hex": "0x1000", "pc": 4096, "text": "known"}
+  ]
+}`
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewCommentStore(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Trigger a full rewrite of the file.
+	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x2000, "new note"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte("hologram")) {
+		t.Fatalf("unknown-view record dropped on save:\n%s", data)
+	}
+	if !bytes.Contains(data, []byte("known")) || !bytes.Contains(data, []byte("new note")) {
+		t.Fatalf("known records missing after save:\n%s", data)
+	}
+}
+
+func TestCommentStoreSaveKeepsFileShareable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "comments.json")
+	store, err := NewCommentStore(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "note"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("comments file mode = %o, want 644", got)
+	}
+}
+
 func TestCommentStoreSkipsMissingCommentDelete(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "comments.json")
 	store, err := NewCommentStore(path, "/tmp/app")
