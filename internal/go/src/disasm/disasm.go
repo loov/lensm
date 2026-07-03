@@ -278,14 +278,23 @@ func (d *Disasm) Print(w io.Writer, filter *regexp.Regexp, start, end uint64, pr
 
 // Decode disassembles the text segment range [start, end), calling f for each instruction.
 func (d *Disasm) Decode(start, end uint64, relocs []objfile.Reloc, gnuAsm bool, f func(pc, size uint64, file string, line int, text string)) {
-	d.DecodeSyntax(start, end, relocs, func(pc, size uint64, file string, line int, goText, gnuText string) {
-		f(pc, size, file, line, formatSyntax(goText, gnuText, gnuAsm))
+	d.decode(start, end, relocs, func(pc, size uint64, file string, line int, goText, gnuText, reloc string) {
+		f(pc, size, file, line, formatSyntax(goText, gnuText, gnuAsm)+reloc)
 	})
 }
 
 // DecodeSyntax disassembles the text segment range [start, end), calling f for each
 // instruction with Go assembler syntax and native GNU assembler syntax separately.
 func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(pc, size uint64, file string, line int, goText, gnuText string)) {
+	d.decode(start, end, relocs, func(pc, size uint64, file string, line int, goText, gnuText, reloc string) {
+		f(pc, size, file, line, goText+reloc, gnuText+reloc)
+	})
+}
+
+// decode disassembles [start, end) and yields both syntaxes plus the
+// relocation suffix separately, so Decode can append relocations after
+// formatting the combined text the way the upstream objdump code does.
+func (d *Disasm) decode(start, end uint64, relocs []objfile.Reloc, f func(pc, size uint64, file string, line int, goText, gnuText, reloc string)) {
 	if start < d.textStart {
 		start = d.textStart
 	}
@@ -298,15 +307,14 @@ func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(
 		i := pc - d.textStart
 		goText, gnuText, size := d.disasm(code[i:], pc, lookup, d.byteOrder)
 		file, line, _ := d.pcln.PCToLine(pc)
+		var relocText string
 		sep := "\t"
 		for len(relocs) > 0 && relocs[0].Addr < i+uint64(size) {
-			reloc := relocs[0].Stringer.String(pc - start)
-			goText += sep + reloc
-			gnuText += sep + reloc
+			relocText += sep + relocs[0].Stringer.String(pc-start)
 			sep = " "
 			relocs = relocs[1:]
 		}
-		f(pc, uint64(size), file, line, goText, gnuText)
+		f(pc, uint64(size), file, line, goText, gnuText, relocText)
 		pc += uint64(size)
 	}
 }
@@ -314,6 +322,10 @@ func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(
 func formatSyntax(goText, gnuText string, gnuAsm bool) string {
 	if !gnuAsm {
 		return goText
+	}
+	if goText == "?" && gnuText == "?" {
+		// Undecodable instruction: upstream renders a bare "?".
+		return "?"
 	}
 	return fmt.Sprintf("%-36s // %s", goText, gnuText)
 }
