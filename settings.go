@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 type AppSettings struct {
@@ -36,12 +38,19 @@ func LoadAppSettings() (AppSettings, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return settings, nil
 		}
 		return settings, err
 	}
 	if err := json.Unmarshal(data, &settings); err != nil {
+		// Move the unreadable file aside: callers proceed with defaults,
+		// and the next save would otherwise silently replace every
+		// preference the user had.
+		backup := path + ".corrupt"
+		if renameErr := os.Rename(path, backup); renameErr == nil {
+			return DefaultAppSettings(), fmt.Errorf("decode %s (moved to %s): %w", path, backup, err)
+		}
 		return DefaultAppSettings(), fmt.Errorf("decode %s: %w", path, err)
 	}
 	settings.SyntaxStyle = NormalizeSyntaxStyle(settings.SyntaxStyle)
@@ -53,7 +62,7 @@ func LoadAppSettings() (AppSettings, error) {
 	}
 	settings.LastPath = cleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
-	if settings.ActiveTab != "" && !containsString(settings.OpenTabs, settings.ActiveTab) {
+	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
 		settings.ActiveTab = ""
 	}
 	return settings, nil
@@ -69,7 +78,7 @@ func SaveAppSettings(settings AppSettings) error {
 	}
 	settings.LastPath = cleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
-	if settings.ActiveTab != "" && !containsString(settings.OpenTabs, settings.ActiveTab) {
+	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
 		settings.ActiveTab = ""
 	}
 	path, err := appSettingsPath()
@@ -109,13 +118,4 @@ func cleanFuncNames(names []string) []string {
 		out = append(out, name)
 	}
 	return out
-}
-
-func containsString(values []string, value string) bool {
-	for _, v := range values {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }
