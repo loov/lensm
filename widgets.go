@@ -22,7 +22,6 @@ type SourceLine struct {
 	Text       string
 	Spans      []SourceSpan
 	TextHeight unit.Sp
-	LineHeight unit.Sp
 	Italic     bool
 	Bold       bool
 	Color      color.NRGBA
@@ -35,14 +34,13 @@ type SourceSpan struct {
 	Bold   bool
 }
 
+// codeLineHeightScale leaves room for ascenders and descenders when a
+// line is clipped to its width; rows themselves advance by the tighter
+// CodeUIStyle.LineHeight.
 const codeLineHeightScale = 4.0 / 3.0
 
-func codeLineHeightPx(gtx layout.Context, textHeight, requested unit.Sp) int {
-	minHeight := textHeight * codeLineHeightScale
-	if requested < minHeight {
-		requested = minHeight
-	}
-	height := gtx.Metric.Sp(requested)
+func codeLineHeightPx(gtx layout.Context, textHeight unit.Sp) int {
+	height := gtx.Metric.Sp(textHeight * codeLineHeightScale)
 	if height < 1 {
 		return 1
 	}
@@ -58,7 +56,7 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 
 	defer op.Offset(line.TopLeft).Push(gtx.Ops).Pop()
 	if line.Width > 0 {
-		maxSize := image.Pt(line.Width, codeLineHeightPx(gtx, line.TextHeight, line.LineHeight))
+		maxSize := image.Pt(line.Width, codeLineHeightPx(gtx, line.TextHeight))
 		defer clip.Rect{Max: maxSize}.Push(gtx.Ops).Pop()
 	}
 
