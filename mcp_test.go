@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -41,6 +42,51 @@ func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
 			t.Fatal("timed out waiting for MCP load failure")
 		case <-tick.C:
 		}
+	}
+}
+
+func TestMCPHandleHTTPRejectsRebinding(t *testing.T) {
+	server := &AppMCPServer{}
+
+	cases := []struct {
+		name   string
+		host   string
+		origin string
+		status int
+	}{
+		{name: "loopback ip", host: "127.0.0.1:7077", status: 200},
+		{name: "localhost", host: "localhost:7077", status: 200},
+		{name: "ipv6 loopback", host: "[::1]:7077", status: 200},
+		{name: "rebound host", host: "evil.example.com:7077", status: 403},
+		{name: "loopback origin", host: "127.0.0.1:7077", origin: "http://localhost:8000", status: 200},
+		{name: "cross-site origin", host: "127.0.0.1:7077", origin: "https://evil.example.com", status: 403},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "http://placeholder/", nil)
+			req.Host = tc.host
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			rec := httptest.NewRecorder()
+			server.handleHTTP(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.status)
+			}
+		})
+	}
+}
+
+func TestMCPHandleHTTPParseErrorHasNullID(t *testing.T) {
+	server := &AppMCPServer{}
+	req := httptest.NewRequest("POST", "http://127.0.0.1:7077/mcp", strings.NewReader("{not json"))
+	rec := httptest.NewRecorder()
+	server.handleHTTP(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"id":null`) {
+		t.Fatalf("parse error response missing null id: %s", rec.Body.String())
 	}
 }
 

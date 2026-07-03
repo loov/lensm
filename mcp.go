@@ -10,11 +10,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const mcpProtocolVersion = "2025-06-18"
@@ -91,7 +93,13 @@ func StartAppMCPServer(context int, commentsPath string) (*AppMCPServer, error) 
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", server.handleHTTP)
-	httpServer := &http.Server{Handler: mux}
+	httpServer := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       time.Minute,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+	}
 	server.httpServer = httpServer
 
 	go func() {
@@ -202,6 +210,17 @@ func (server *AppMCPServer) handleHTTP(w http.ResponseWriter, req *http.Request)
 		http.NotFound(w, req)
 		return
 	}
+	// The MCP streamable-HTTP spec requires validating Origin (and, for a
+	// loopback server, Host) to block DNS-rebinding pages from driving the
+	// server; the CORS headers below are advisory only.
+	if !isLoopbackHost(req.Host) {
+		http.Error(w, "forbidden host", http.StatusForbidden)
+		return
+	}
+	if origin := req.Header.Get("Origin"); origin != "" && !isLoopbackOrigin(origin) {
+		http.Error(w, "forbidden origin", http.StatusForbidden)
+		return
+	}
 	w.Header().Set("Access-Control-Allow-Origin", "http://localhost")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id")
@@ -235,7 +254,10 @@ func (server *AppMCPServer) handleHTTPPost(w http.ResponseWriter, req *http.Requ
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(rpcMessage{
 			JSONRPC: "2.0",
-			Error:   &rpcError{Code: -32700, Message: "parse error"},
+			// JSON-RPC 2.0 requires "id": null when the request id is
+			// unknowable, otherwise strict clients cannot correlate it.
+			ID:    json.RawMessage("null"),
+			Error: &rpcError{Code: -32700, Message: "parse error"},
 		})
 		return
 	}
@@ -314,6 +336,7 @@ func (server *mcpServer) serve(input io.Reader) error {
 		if err := json.Unmarshal(line, &msg); err != nil {
 			_ = server.writeMessage(rpcMessage{
 				JSONRPC: "2.0",
+				ID:      json.RawMessage("null"),
 				Error:   &rpcError{Code: -32700, Message: "parse error"},
 			})
 			continue
@@ -515,6 +538,9 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 	if req.Name == "" {
 		return nil, errors.New("name is required")
 	}
+	if server.session.Comments.Path() == "" {
+		return nil, errors.New("comments sidecar is unavailable; the comment would not be persisted")
+	}
 	code, err := server.session.LoadCode(req.Name)
 	if err != nil {
 		return nil, err
@@ -660,8 +686,8 @@ func mcpTools() []mcpTool {
 			Description: "List functions in the loaded executable. The optional filter is a case-insensitive Go regexp.",
 			InputSchema: objectSchema(map[string]any{
 				"filter": stringSchema("Optional case-insensitive regexp matched against function names."),
-				"limit":  numberSchema("Maximum number of functions to return. Defaults to 100, capped at 1000."),
-				"offset": numberSchema("Number of matching functions to skip."),
+				"limit":  integerSchema("Maximum number of functions to return. Defaults to 100, capped at 1000."),
+				"offset": integerSchema("Number of matching functions to skip."),
 			}, nil),
 		},
 		{
@@ -684,7 +710,7 @@ func mcpTools() []mcpTool {
 					string(CommentViewNativeAsm),
 				}),
 				"file": stringSchema("Source file path. Required for source comments."),
-				"line": numberSchema("Source line number. Required for source comments."),
+				"line": integerSchema("Source line number. Required for source comments."),
 				"pc":   pcSchema(),
 				"text": stringSchema("Comment text. Empty string deletes the comment."),
 			}, []string{"name", "view", "text"}),
@@ -721,8 +747,33 @@ func stringSchema(description string) map[string]any {
 	return map[string]any{"type": "string", "description": description}
 }
 
-func numberSchema(description string) map[string]any {
+func integerSchema(description string) map[string]any {
 	return map[string]any{"type": "integer", "description": description}
+}
+
+// isLoopbackHost reports whether a Host header (optionally host:port)
+// refers to this machine.
+func isLoopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// isLoopbackOrigin reports whether an Origin header value refers to a
+// page served from this machine.
+func isLoopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return isLoopbackHost(u.Host)
 }
 
 func enumSchema(description string, values []string) map[string]any {
