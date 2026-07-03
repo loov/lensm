@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,11 +41,59 @@ type CodeUI struct {
 		bar     widget.Scrollbar
 	}
 
+	hl highlightCache
+
 	mousePosition f32.Point
 	SelectedAsm   int
 	SelectedView  CommentView
 	SelectedFile  string
 	SelectedLine  int
+}
+
+// highlightCache holds the syntax highlight spans for a Code. Layout
+// runs every frame; highlighting is a pure function of the immutable
+// code and the palette, so it is rebuilt only when either changes —
+// re-highlighting per frame allocates a go/scanner per source line.
+type highlightCache struct {
+	code   *disasm.Code
+	syntax SyntaxPalette
+
+	asm        [][]SourceSpan
+	nativeText []string
+	native     [][]SourceSpan
+	// source is indexed by source file, block, and line within the block.
+	source [][][][]SourceSpan
+}
+
+func (hl *highlightCache) update(code *disasm.Code, syntax SyntaxPalette) {
+	if hl.code == code && hl.syntax == syntax {
+		return
+	}
+	hl.code = code
+	hl.syntax = syntax
+
+	hl.asm = make([][]SourceSpan, len(code.Insts))
+	hl.nativeText = make([]string, len(code.Insts))
+	hl.native = make([][]SourceSpan, len(code.Insts))
+	for i := range code.Insts {
+		ix := &code.Insts[i]
+		hl.asm[i] = HighlightAsmLine(ix.Text, ix.Call, syntax)
+		hl.nativeText[i] = strings.ToUpper(ix.NativeText)
+		hl.native[i] = HighlightAsmLine(hl.nativeText[i], "", syntax)
+	}
+
+	hl.source = make([][][][]SourceSpan, len(code.Source))
+	for i, src := range code.Source {
+		blocks := make([][][]SourceSpan, len(src.Blocks))
+		for j, block := range src.Blocks {
+			lines := make([][]SourceSpan, len(block.Lines))
+			for k, line := range block.Lines {
+				lines[k] = HighlightSourceLine(block.From+k, line, syntax)
+			}
+			blocks[j] = lines
+		}
+		hl.source[i] = blocks
+	}
 }
 
 func (ui *CodeUI) Loaded() bool {
@@ -88,6 +137,8 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	if ui.Syntax.Plain == (color.NRGBA{}) {
 		ui.Syntax = SyntaxPaletteFor(SyntaxStyleGoLand, ui.Colors)
 	}
+	hl := &ui.CodeUI.hl
+	hl.update(ui.Code, ui.Syntax)
 
 	paint.FillShape(gtx.Ops, ui.Colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
@@ -236,7 +287,9 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 				ui.SelectedLine = 0
 				ui.TryOpen(gtx, ix.Call)
 			}
-		} else if mouseClicked {
+		} else if mouseClicked && ix.Text != "" {
+			// Spacer rows (empty synthetic instructions) have no inline
+			// editor; focusing it would swallow subsequent typing.
 			ui.SelectedAsm = highlightAsmIndex
 			ui.SelectedFile = ""
 			ui.SelectedLine = 0
@@ -347,7 +400,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			TopLeft:    image.Pt(goTextLeft, i*lineHeight+int(ui.asm.scroll)),
 			Width:      goInstructionWidth,
 			Text:       ix.Text,
-			Spans:      HighlightAsmLine(ix.Text, ix.Call, ui.Syntax),
+			Spans:      hl.asm[i],
 			TextHeight: ui.TextHeight,
 			Italic:     ix.Call != "",
 			Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
@@ -383,8 +436,8 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			SourceLine{
 				TopLeft:    image.Pt(nativeTextLeft, i*lineHeight+int(ui.asm.scroll)),
 				Width:      width,
-				Text:       strings.ToUpper(ix.NativeText),
-				Spans:      HighlightAsmLine(strings.ToUpper(ix.NativeText), "", ui.Syntax),
+				Text:       hl.nativeText[i],
+				Spans:      hl.native[i],
 				TextHeight: ui.TextHeight,
 				Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 				Color:      ui.Syntax.Plain,
@@ -456,11 +509,11 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			Color:      ui.Colors.MutedText,
 		}.Layout(ui.Theme, gtx)
 		top += lineHeight
-		for i, block := range src.Blocks {
-			if i > 0 {
+		for blockIndex, block := range src.Blocks {
+			if blockIndex > 0 {
 				top += lineHeight
 			}
-			for off, line := range block.Lines {
+			for off := range block.Lines {
 				highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
 				lineNo := block.From + off
 				if highlight && mouseClicked {
@@ -484,8 +537,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 				SourceLine{
 					TopLeft:    image.Pt(int(source.Min), top),
 					Width:      width,
-					Text:       lineNumberPrefix(lineNo) + line,
-					Spans:      HighlightSourceLine(lineNo, line, ui.Syntax),
+					Spans:      hl.source[i][blockIndex][off],
 					TextHeight: ui.TextHeight,
 					Bold:       highlight,
 					Color:      ui.Syntax.Plain,
@@ -619,13 +671,17 @@ func (ui CodeUIStyle) callTargetHit(gtx layout.Context, inst disasm.Inst, left i
 	if start < 0 {
 		return false
 	}
+	// A hovered call line is drawn bold and italic; measure with the
+	// same style, otherwise the hitbox drifts from the visible text
+	// whenever the fallback font is proportional.
+	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Black, Style: font.Italic}
 	end := start + len(inst.Call)
-	targetLeft := left + ui.measureAsmTextWidth(gtx, inst.Text[:start])
-	targetRight := left + ui.measureAsmTextWidth(gtx, inst.Text[:end])
+	targetLeft := left + ui.measureAsmTextWidth(gtx, f, inst.Text[:start])
+	targetRight := left + ui.measureAsmTextWidth(gtx, f, inst.Text[:end])
 	return float32(targetLeft) <= x && x <= float32(targetRight)
 }
 
-func (ui CodeUIStyle) measureAsmTextWidth(gtx layout.Context, text string) int {
+func (ui CodeUIStyle) measureAsmTextWidth(gtx layout.Context, f font.Font, text string) int {
 	if text == "" {
 		return 0
 	}
@@ -633,7 +689,6 @@ func (ui CodeUIStyle) measureAsmTextWidth(gtx layout.Context, text string) int {
 	gtx.Constraints.Max = image.Pt(maxLineWidth, maxLineWidth)
 
 	macro := op.Record(gtx.Ops)
-	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Normal}
 	dims := widget.Label{MaxLines: 1}.Layout(gtx, ui.Theme.Shaper, f, ui.TextHeight, text, op.CallOp{})
 	_ = macro.Stop()
 	return dims.Size.X
@@ -648,7 +703,8 @@ func (ui CodeUIStyle) layoutInlineNativeCommentEditor(gtx layout.Context, inst d
 		if ui.Code == nil {
 			return ""
 		}
-		return ui.Code.Name + ":" + string(CommentViewNativeAsm) + ":" + formatPC(inst.PC)
+		// The view is prefixed by layoutInlineAsmCommentEditor.
+		return ui.Code.Name + ":" + formatPC(inst.PC)
 	}
 	ui.layoutInlineAsmCommentEditor(gtx, inst, CommentViewNativeAsm, ui.NativeCommentFor, keyFor, ui.SetNativeComment, top, left, width, lineHeight)
 }
@@ -673,9 +729,6 @@ func (ui CodeUIStyle) layoutInlineAsmCommentEditor(gtx layout.Context, inst disa
 		return
 	}
 
-	if keyFor == nil || setComment == nil {
-		return
-	}
 	key := keyFor(inst)
 	if view != "" {
 		key = string(view) + ":" + key
@@ -733,7 +786,7 @@ func (ui CodeUIStyle) layoutInlineSourceCommentEditor(gtx layout.Context, file s
 		return
 	}
 
-	key := ui.Code.Name + ":" + string(CommentViewSource) + ":" + file + ":" + lineNumberPrefix(line)
+	key := string(CommentViewSource) + ":" + ui.Code.Name + ":" + file + ":" + strconv.Itoa(line)
 	if key != *ui.CommentKey {
 		*ui.CommentKey = key
 		comment := ""
