@@ -59,14 +59,19 @@ type mcpServer struct {
 }
 
 type AppMCPServer struct {
-	mu           sync.RWMutex
 	httpServer   *http.Server
 	url          string
 	context      int
 	commentsPath string
-	session      *LensmSession
-	loadError    error
-	generation   uint64
+
+	// mu guards the fields below.
+	mu         sync.Mutex
+	session    *LensmSession
+	loadError  error
+	generation uint64
+	// active counts in-flight requests using session; a replaced
+	// session is closed only once they have finished.
+	active *sync.WaitGroup
 }
 
 func StartAppMCPServer(context int, commentsPath string) (*AppMCPServer, error) {
@@ -82,6 +87,7 @@ func StartAppMCPServer(context int, commentsPath string) (*AppMCPServer, error) 
 		url:          "http://" + listener.Addr().String() + "/mcp",
 		context:      context,
 		commentsPath: commentsPath,
+		active:       &sync.WaitGroup{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", server.handleHTTP)
@@ -114,13 +120,13 @@ func (server *AppMCPServer) SetPath(path string, comments *CommentStore) {
 	generation := server.generation
 	context := server.context
 	commentsPath := server.commentsPath
-	old := server.session
+	old, oldActive := server.session, server.active
 	server.session = nil
 	server.loadError = nil
+	server.active = &sync.WaitGroup{}
 	server.mu.Unlock()
-	if old != nil {
-		_ = old.Close()
-	}
+	// SetPath runs on the UI event loop: don't block on in-flight requests.
+	closeSessionWhenIdle(old, oldActive)
 
 	if path == "" {
 		return
@@ -143,11 +149,15 @@ func (server *AppMCPServer) Close() error {
 	}
 	server.mu.Lock()
 	server.generation++
-	old := server.session
+	old, oldActive := server.session, server.active
 	server.session = nil
 	server.loadError = nil
+	server.active = &sync.WaitGroup{}
 	server.mu.Unlock()
 	if old != nil {
+		if oldActive != nil {
+			oldActive.Wait()
+		}
 		_ = old.Close()
 	}
 	if server.httpServer == nil {
@@ -165,13 +175,26 @@ func (server *AppMCPServer) replaceSession(generation uint64, session *LensmSess
 		}
 		return
 	}
-	old := server.session
+	old, oldActive := server.session, server.active
 	server.session = session
 	server.loadError = loadErr
+	server.active = &sync.WaitGroup{}
 	server.mu.Unlock()
-	if old != nil {
-		_ = old.Close()
+	closeSessionWhenIdle(old, oldActive)
+}
+
+// closeSessionWhenIdle closes session once in-flight requests holding it
+// have finished, without blocking the caller.
+func closeSessionWhenIdle(session *LensmSession, active *sync.WaitGroup) {
+	if session == nil {
+		return
 	}
+	go func() {
+		if active != nil {
+			active.Wait()
+		}
+		_ = session.Close()
+	}()
 }
 
 func (server *AppMCPServer) handleHTTP(w http.ResponseWriter, req *http.Request) {
@@ -227,9 +250,23 @@ func (server *AppMCPServer) handleHTTPPost(w http.ResponseWriter, req *http.Requ
 }
 
 func (server *AppMCPServer) handleHTTPMessage(msg rpcMessage) (rpcMessage, bool) {
-	server.mu.RLock()
-	defer server.mu.RUnlock()
-	return (&mcpServer{session: server.session, loadErr: server.loadError}).handle(msg)
+	session, loadErr, release := server.acquireSession()
+	defer release()
+	return (&mcpServer{session: session, loadErr: loadErr}).handle(msg)
+}
+
+// acquireSession snapshots the current session and keeps it open until
+// release is called. The server lock is not held while a request is
+// handled, so concurrent requests and SetPath never wait on a handler.
+func (server *AppMCPServer) acquireSession() (session *LensmSession, loadErr error, release func()) {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if server.active == nil {
+		server.active = &sync.WaitGroup{}
+	}
+	active := server.active
+	active.Add(1)
+	return server.session, server.loadError, active.Done
 }
 
 func runMCPCommand(args []string) int {

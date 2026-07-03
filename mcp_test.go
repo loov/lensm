@@ -16,20 +16,20 @@ func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
 
 	server.SetPath(filepath.Join(t.TempDir(), "missing-binary"), nil)
 
-	server.mu.RLock()
+	server.mu.Lock()
 	if server.session != nil {
 		t.Fatal("old MCP session was not cleared immediately")
 	}
-	server.mu.RUnlock()
+	server.mu.Unlock()
 
 	deadline := time.After(2 * time.Second)
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		server.mu.RLock()
+		server.mu.Lock()
 		loadErr := server.loadError
 		session := server.session
-		server.mu.RUnlock()
+		server.mu.Unlock()
 		if loadErr != nil {
 			if session != nil {
 				t.Fatal("MCP session was set after load failure")

@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"loov.dev/lensm/internal/disasm"
 	godisasm "loov.dev/lensm/internal/go/src/disasm"
@@ -19,6 +20,10 @@ type File struct {
 	disasm  *godisasm.Disasm
 	funcs   []disasm.Func
 
+	// mu guards cache and serializes Disassemble calls: disassembly
+	// lazily populates line-table caches inside disasm, which is not
+	// safe for concurrent use.
+	mu    sync.Mutex
 	cache map[*Function]cacheEntry
 }
 
@@ -87,6 +92,8 @@ func (fn *Function) Load(opts disasm.Options) (*disasm.Code, error) {
 }
 
 func (file *File) LoadCode(fn *Function, opts disasm.Options) (*disasm.Code, error) {
+	file.mu.Lock()
+	defer file.mu.Unlock()
 	entry, ok := file.cache[fn]
 	if !ok {
 		entry.code, entry.err = Disassemble(fn.obj.disasm, fn, opts)
