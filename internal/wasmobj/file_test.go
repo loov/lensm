@@ -8,6 +8,8 @@ import (
 	"loov.dev/lensm/internal/disasm"
 )
 
+var rxByteInst = regexp.MustCompile(`^BYTE 0x[0-9a-f]{2}$`)
+
 func TestLoadFormatsBytes(t *testing.T) {
 	file, err := Load(filepath.Join("..", "..", "testdata", "c-wasm", "example.wasm"))
 	if err != nil {
@@ -19,8 +21,10 @@ func TestLoadFormatsBytes(t *testing.T) {
 		if len(code.Insts) == 0 {
 			continue
 		}
-		if !regexp.MustCompile(`^BYTE 0x[0-9a-f]{2}$`).MatchString(code.Insts[0].Text) {
-			t.Fatalf("instruction text = %q", code.Insts[0].Text)
+		for _, inst := range code.Insts {
+			if !rxByteInst.MatchString(inst.Text) {
+				t.Fatalf("instruction text = %q", inst.Text)
+			}
 		}
 		return
 	}

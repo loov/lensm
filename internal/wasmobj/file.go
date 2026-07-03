@@ -1,7 +1,6 @@
 package wasmobj
 
 import (
-	"debug/dwarf"
 	"fmt"
 	"os"
 	"sort"
@@ -19,7 +18,6 @@ var _ disasm.Func = (*Func)(nil)
 // File contains information about the object file.
 type File struct {
 	module *wasm.Module
-	dwarf  *dwarf.Data
 
 	funcs []disasm.Func
 }
@@ -54,7 +52,6 @@ func Load(path string) (*File, error) {
 		return nil, err
 	}
 	obj.module = module
-	obj.dwarf = parseDWARF(module)
 
 	for i, fnname := range module.NameSection.FunctionNames {
 		code := module.CodeSection[i]
@@ -141,29 +138,3 @@ func (file *File) immediatesToString(xs []interface{}) string {
 	return str.String()
 }
 */
-
-func parseDWARF(module *wasm.Module) *dwarf.Data {
-	customSectionData := func(name string) []byte {
-		for _, sec := range module.CustomSections {
-			if sec.Name == name {
-				return sec.Data
-			}
-		}
-		return nil
-	}
-
-	dwarfdata, err := dwarf.New(
-		customSectionData(".debug_abbrev"),
-		customSectionData(".debug_aranges"),
-		customSectionData(".debug_frame"),
-		customSectionData(".debug_info"),
-		customSectionData(".debug_line"),
-		customSectionData(".debug_pubnames"),
-		customSectionData(".debug_ranges"),
-		customSectionData(".debug_str"),
-	)
-	if err != nil {
-		return nil
-	}
-	return dwarfdata
-}
