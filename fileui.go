@@ -72,6 +72,9 @@ type FileUI struct {
 
 	loadRequests       chan fileLoadRequest
 	invalidate         chan struct{}
+	settingsEvents     chan event.Event
+	settingsAcks       chan struct{}
+	exited             chan struct{}
 	commentKey         string
 	copyStatus         string
 	settingsWindowOpen bool
@@ -139,9 +142,18 @@ func (ui *FileUI) Run(w *app.Window) error {
 	ui.loadRequests = loadRequests
 	invalidate := make(chan struct{}, 1)
 	ui.invalidate = invalidate
+	settingsEvents := make(chan event.Event)
+	settingsAcks := make(chan struct{})
+	ui.settingsEvents = settingsEvents
+	ui.settingsAcks = settingsAcks
+	ui.exited = exited
+	var settingsOps op.Ops
 	defer func() {
 		ui.loadRequests = nil
 		ui.invalidate = nil
+		ui.settingsEvents = nil
+		ui.settingsAcks = nil
+		ui.exited = nil
 	}()
 
 	loadFinished := func(result fileLoadResult) {
@@ -251,6 +263,16 @@ func (ui *FileUI) Run(w *app.Window) error {
 			w.Invalidate()
 		case <-invalidate:
 			w.Invalidate()
+		case ev := <-settingsEvents:
+			switch e := ev.(type) {
+			case app.FrameEvent:
+				gtx := app.NewContext(&settingsOps, e)
+				ui.layoutSettingsWindow(gtx)
+				e.Frame(gtx.Ops)
+			case app.DestroyEvent:
+				ui.settingsWindowOpen = false
+			}
+			settingsAcks <- struct{}{}
 		case e := <-events:
 			switch e := e.(type) {
 			case app.FrameEvent:
@@ -627,21 +649,30 @@ func (ui *FileUI) layoutSyntaxRadio(gtx layout.Context, colors UIColors, style s
 }
 
 func (ui *FileUI) openSettingsWindow() {
-	if ui.settingsWindowOpen {
+	if ui.settingsWindowOpen || ui.settingsEvents == nil {
 		return
 	}
 	ui.settingsWindowOpen = true
+	events, acks, exited := ui.settingsEvents, ui.settingsAcks, ui.exited
 	ui.Windows.Open("lensm settings", image.Pt(520, 360), func(w *app.Window) error {
-		defer func() { ui.settingsWindowOpen = false }()
-		var ops op.Ops
+		// Only pump events here: the settings window is laid out on the
+		// main event loop, because layout reads and mutates state shared
+		// with the main window (Settings, MCP, Config, widget state) and
+		// shapes text through the Theme's Shaper, which is not safe for
+		// concurrent use.
 		for {
-			e := w.Event()
-			switch e := e.(type) {
-			case app.FrameEvent:
-				gtx := app.NewContext(&ops, e)
-				ui.layoutSettingsWindow(gtx)
-				e.Frame(gtx.Ops)
-			case app.DestroyEvent:
+			ev := w.Event()
+			select {
+			case events <- ev:
+			case <-exited:
+				return nil
+			}
+			select {
+			case <-acks:
+			case <-exited:
+				return nil
+			}
+			if e, ok := ev.(app.DestroyEvent); ok {
 				return e.Err
 			}
 		}
