@@ -78,5 +78,5 @@ func (session *LensmSession) LoadCode(name string) (*disasm.Code, error) {
 	if fn == nil {
 		return nil, fmt.Errorf("function %q not found", name)
 	}
-	return fn.Load(disasm.Options{Context: session.Context}), nil
+	return fn.Load(disasm.Options{Context: session.Context})
 }

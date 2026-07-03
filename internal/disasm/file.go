@@ -13,7 +13,7 @@ type Func interface {
 	// Name is the name of the func.
 	Name() string
 	// Load loads the source code and disassembles it.
-	Load(opt Options) *Code
+	Load(opt Options) (*Code, error)
 }
 
 // Options defines configuration for loading the func.

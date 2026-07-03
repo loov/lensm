@@ -72,8 +72,8 @@ func Load(path string) (*File, error) {
 	return obj, nil
 }
 
-func (fn *Func) Load(opts disasm.Options) *disasm.Code {
-	return fn.obj.LoadCode(fn, opts)
+func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
+	return fn.obj.LoadCode(fn, opts), nil
 }
 
 func (file *File) LoadCode(fn *Func, opts disasm.Options) *disasm.Code {

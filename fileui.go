@@ -156,11 +156,12 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		_ = ui.File.Close()
 	}
 	ui.File = file
+	ui.LoadError = nil
 	ui.Funcs.SetItems(file.Funcs())
 	if ui.Funcs.Selected != "" {
 		for _, fn := range file.Funcs() {
 			if fn.Name() == ui.Funcs.Selected {
-				ui.Code.Code = fn.Load(ui.loadOptions())
+				ui.Code.Code, ui.LoadError = fn.Load(ui.loadOptions())
 			}
 		}
 	}
@@ -182,7 +183,7 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 	if !ui.Code.Loaded() || ui.Code.Name != ui.Funcs.Selected {
 		selected := ui.Funcs.SelectedItem
 		if selected != nil {
-			ui.Code.Code = selected.Load(ui.loadOptions())
+			ui.Code.Code, ui.LoadError = selected.Load(ui.loadOptions())
 		}
 	}
 
@@ -268,7 +269,11 @@ func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
 		return
 	}
 
-	load := fn.Load(ui.loadOptions())
+	load, err := fn.Load(ui.loadOptions())
+	if err != nil {
+		ui.LoadError = err
+		return
+	}
 	ui.Funcs.Selected = load.Name
 	ui.Funcs.SelectedItem = fn
 	ui.Funcs.List.Selected = -1

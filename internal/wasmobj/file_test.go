@@ -17,7 +17,10 @@ func TestLoadFormatsBytes(t *testing.T) {
 	}
 
 	for _, fn := range file.funcs {
-		code := fn.Load(disasm.Options{})
+		code, err := fn.Load(disasm.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(code.Insts) == 0 {
 			continue
 		}

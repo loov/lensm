@@ -1,8 +1,6 @@
 package goobj
 
 import (
-	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -21,7 +19,14 @@ type File struct {
 	disasm  *godisasm.Disasm
 	funcs   []disasm.Func
 
-	cache map[*Function]*disasm.Code
+	cache map[*Function]cacheEntry
+}
+
+// cacheEntry also caches failures, so an erroring function isn't
+// re-disassembled on every frame.
+type cacheEntry struct {
+	code *disasm.Code
+	err  error
 }
 
 func (file *File) Funcs() []disasm.Func { return file.funcs }
@@ -55,7 +60,7 @@ func Load(path string) (*File, error) {
 	file := &File{
 		objfile: f,
 		disasm:  dis,
-		cache:   make(map[*Function]*disasm.Code),
+		cache:   make(map[*Function]cacheEntry),
 	}
 
 	for _, sym := range dis.Syms() {
@@ -77,22 +82,17 @@ func Load(path string) (*File, error) {
 	return file, nil
 }
 
-func (fn *Function) Load(opts disasm.Options) *disasm.Code {
+func (fn *Function) Load(opts disasm.Options) (*disasm.Code, error) {
 	return fn.obj.LoadCode(fn, opts)
 }
 
-func (file *File) LoadCode(fn *Function, opts disasm.Options) *disasm.Code {
-	code, ok := file.cache[fn]
+func (file *File) LoadCode(fn *Function, opts disasm.Options) (*disasm.Code, error) {
+	entry, ok := file.cache[fn]
 	if !ok {
-		var err error
-		code, err = Disassemble(fn.obj.disasm, fn, opts)
-		file.cache[fn] = code
-		if err != nil {
-			_, _ = fmt.Fprintln(os.Stderr, err)
-		}
+		entry.code, entry.err = Disassemble(fn.obj.disasm, fn, opts)
+		file.cache[fn] = entry
 	}
-
-	return code
+	return entry.code, entry.err
 }
 
 var rxCodeDelimiter = regexp.MustCompile(`[ *().]+`)
