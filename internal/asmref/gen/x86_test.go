@@ -16,27 +16,26 @@ func TestParseX86File(t *testing.T) {
 	if !ok {
 		t.Fatal("ADD missing")
 	}
-	if !strings.HasPrefix(add.Description, "Adds the destination operand") {
-		t.Errorf("ADD description = %q", add.Description)
+	// summary attribute becomes the brief; uops.info has no description prose.
+	if add.Brief != "Add" {
+		t.Errorf("ADD brief = %q", add.Brief)
 	}
-	// Both width variants merge; within each instruction the Intel form
-	// precedes its AT&T form.
-	wantSyntax := []string{"ADD r/m32, r32", "add %r32, %r/m32", "ADD r/m8, imm8"}
+	// Both variants merge; the string attribute is the syntax form.
+	wantSyntax := []string{"ADD (R32, R32)", "ADD (R8, I8)"}
 	if strings.Join(add.Syntax, "|") != strings.Join(wantSyntax, "|") {
 		t.Errorf("ADD syntax = %#v", add.Syntax)
 	}
-	if got := add.Operands["r/m32"]; got != "32-bit register, read+written" {
-		t.Errorf("ADD operand r/m32 = %q", got)
-	}
-	if got := add.Operands["imm8"]; got != "8-bit immediate" {
-		t.Errorf("ADD operand imm8 = %q", got)
+	// Operands are intentionally not emitted for x86 (derivable, unused, and
+	// duplicated); the perf subtrees must not leak in either.
+	if len(add.Operands) != 0 {
+		t.Errorf("ADD should have no operands, got %#v", add.Operands)
 	}
 
 	crc, ok := table["CRC32"]
 	if !ok {
 		t.Fatal("CRC32 missing")
 	}
-	if !strings.Contains(crc.Description, "CRC32 value") {
-		t.Errorf("CRC32 description = %q", crc.Description)
+	if crc.Brief != "Accumulate CRC32 Value" {
+		t.Errorf("CRC32 brief = %q", crc.Brief)
 	}
 }

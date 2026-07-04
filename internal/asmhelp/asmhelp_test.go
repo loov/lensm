@@ -71,7 +71,7 @@ func TestGeneratedReferenceReplacesGenericFallback(t *testing.T) {
 	// (no rule fabricates semantics for them).
 	for _, tc := range []struct{ arch, instruction, want string }{
 		{"arm64", "ABS V0.8B, V1.8B", "ABS (vector)"},
-		{"amd64", "CRC32 AX, BL", "Accumulate CRC32 value"},
+		{"amd64", "CRC32 AX, BL", "Accumulate CRC32 Value"},
 	} {
 		help, ok := ForInstruction(tc.arch, tc.instruction)
 		if !ok {

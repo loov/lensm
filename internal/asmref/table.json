@@ -15,30 +15,20 @@
     "description": "Add (immediate) adds a register value and an optionally-shifted immediate value, and writes the result to the destination register.",
     "syntax": [
       "ADD <Wd>, <Wn>, #<imm>",
-      "ADD r/m32, r32",
-      "add %r32, %r/m32",
-      "ADD r/m8, imm8"
+      "ADD (R32, R32)",
+      "ADD (R8, I8)"
     ],
     "operands": {
       "<Wd>": "Is the 32-bit name of the general-purpose destination register",
       "<Wn>": "Is the 32-bit name of the source register",
-      "<imm>": "Is an unsigned immediate, in the range 0 to 4095",
-      "imm8": "8-bit immediate",
-      "r/m32": "32-bit register, read+written",
-      "r/m8": "8-bit register, read+written",
-      "r32": "32-bit register, read"
+      "<imm>": "Is an unsigned immediate, in the range 0 to 4095"
     }
   },
   "CRC32": {
-    "brief": "Accumulate CRC32 value",
-    "description": "Starting with an initial value in the first operand, accumulates a CRC32 value for the second operand and stores the result in the destination operand.",
+    "brief": "Accumulate CRC32 Value",
     "syntax": [
-      "CRC32 r32, r/m8"
-    ],
-    "operands": {
-      "r/m8": "8-bit register, read",
-      "r32": "32-bit register, read+written"
-    }
+      "CRC32 (R32, R8)"
+    ]
   },
   "LDR": {
     "brief": "LDR (immediate)",

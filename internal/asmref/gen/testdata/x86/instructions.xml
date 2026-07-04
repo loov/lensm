@@ -1,34 +1,30 @@
-<?xml version="1.0" encoding="utf-8"?>
-<root date="2024-01-01">
+<?xml version="1.0" ?>
+<root date="2026-01-01">
   <extension name="BASE">
-    <instruction asm="ADD" summary="Add" category="BINARY" extension="BASE" iform="ADD_GPR32_GPR32">
-      <description>Adds the destination operand and the source operand and stores the result in the destination operand.</description>
-      <syntax>ADD r/m32, r32</syntax>
-      <syntax att="1">add %r32, %r/m32</syntax>
-      <operand idx="1" type="reg" width="32" r="1" w="1">r/m32</operand>
-      <operand idx="2" type="reg" width="32" r="1">r32</operand>
+    <instruction asm="ADD" category="BINARY" extension="BASE" iclass="ADD" iform="ADD_GPRv_GPRv" isa-set="I86" opcode="01" string="ADD (R32, R32)" summary="Add">
+      <operand idx="1" name="REG0" r="1" type="reg" w="1" width="32" xtype="int">EAX,ECX,EDX,EBX,ESP,EBP,ESI,EDI</operand>
+      <operand idx="2" name="REG1" r="1" type="reg" width="32" xtype="int">EAX,ECX,EDX,EBX,ESP,EBP,ESI,EDI</operand>
+      <operand flag_CF="w" flag_OF="w" idx="3" name="REG2" suppressed="1" type="flags" w="1"/>
       <architecture name="SKL">
-        <measurement TP="0.25" latency="1"/>
+        <measurement>
+          <latency cycles="1"/>
+        </measurement>
       </architecture>
     </instruction>
-    <instruction asm="ADD" summary="Add" category="BINARY" extension="BASE" iform="ADD_GPR8_IMM8">
-      <description>Adds the destination operand and the source operand and stores the result in the destination operand.</description>
-      <syntax>ADD r/m8, imm8</syntax>
-      <operand idx="1" type="reg" width="8" r="1" w="1">r/m8</operand>
-      <operand idx="2" type="imm" width="8">imm8</operand>
+    <instruction asm="ADD" category="BINARY" extension="BASE" iclass="ADD" iform="ADD_GPR8_IMM8" isa-set="I86" opcode="80" string="ADD (R8, I8)" summary="Add">
+      <operand idx="1" name="REG0" r="1" type="reg" w="1" width="8" xtype="int">AL,CL,DL,BL</operand>
+      <operand idx="2" name="IMM0" r="1" type="imm" width="8"/>
       <architecture name="ICL">
-        <measurement TP="0.25" latency="1"/>
+        <measurement><latency cycles="1"/></measurement>
       </architecture>
     </instruction>
   </extension>
   <extension name="SSE4">
-    <instruction asm="CRC32" summary="Accumulate CRC32 value" category="STTNI" extension="SSE4">
-      <description>Starting with an initial value in the first operand, accumulates a CRC32 value for the second operand and stores the result in the destination operand.</description>
-      <syntax>CRC32 r32, r/m8</syntax>
-      <operand idx="1" type="reg" width="32" r="1" w="1">r32</operand>
-      <operand idx="2" type="reg" width="8" r="1">r/m8</operand>
+    <instruction asm="CRC32" category="STTNI" extension="SSE4" iclass="CRC32" iform="CRC32_GPR32_GPR8" isa-set="SSE4" opcode="0F38F0" string="CRC32 (R32, R8)" summary="Accumulate CRC32 Value">
+      <operand idx="1" name="REG0" r="1" type="reg" w="1" width="32" xtype="int">EAX,ECX,EDX,EBX</operand>
+      <operand idx="2" name="REG1" r="1" type="reg" width="8" xtype="int">AL,CL,DL,BL</operand>
       <architecture name="SKL">
-        <measurement TP="1" latency="3"/>
+        <measurement><latency cycles="3"/></measurement>
       </architecture>
     </instruction>
   </extension>

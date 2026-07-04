@@ -1,125 +1,66 @@
 package main
 
 import (
+	"bufio"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
-	"strconv"
 	"strings"
 )
 
-// x86Root mirrors the uops.info (XED-derived) instructions.xml. Only the static
-// "API" is mapped; <architecture>/<measurement> latency and port tables are
-// simply not declared, so encoding/xml skips them.
-type x86Root struct {
-	Extensions []struct {
-		Instructions []x86Instruction `xml:"instruction"`
-	} `xml:"extension"`
-}
-
-type x86Instruction struct {
-	Asm         string       `xml:"asm,attr"`
-	Summary     string       `xml:"summary,attr"`
-	Description string       `xml:"description"`
-	Syntaxes    []x86Syntax  `xml:"syntax"`
-	Operands    []x86Operand `xml:"operand"`
-}
-
-type x86Syntax struct {
-	ATT  string `xml:"att,attr"` // "1" for AT&T-flavored forms
-	Text string `xml:",chardata"`
-}
-
-type x86Operand struct {
-	Type  string `xml:"type,attr"`  // reg, mem, imm, ...
-	Width string `xml:"width,attr"` // bit width, when meaningful
-	R     string `xml:"r,attr"`     // "1" if read
-	W     string `xml:"w,attr"`     // "1" if written
-	Name  string `xml:",chardata"`  // slot as it appears in the syntax, e.g. r/m32
-}
-
 // ParseX86File parses a uops.info instructions.xml and feeds every instruction
-// into the builder, keyed by its base mnemonic (the asm attribute). Width
-// variants (8/16/32/64-bit) of the same instruction merge under one key.
+// into the builder, keyed by its base mnemonic (the asm attribute).
+//
+// uops.info is a benchmark dataset, not an ISA manual: there are no <syntax> or
+// <description> elements. The usable "API" lives in attributes — summary (a
+// human title, the brief) and string (the operand-form, e.g. "ADD (R32, M32)",
+// used as the syntax). The <operand> children are intentionally not emitted:
+// their derived descriptions ("32-bit register") are just a restatement of the
+// token already visible in the syntax, so storing them per instruction
+// duplicated one of ~69 strings tens of thousands of times.
+//
+// Everything else (<architecture>/<measurement>/<latency> micro-op tables) is
+// skipped. The file is ~140MB with over a million perf nodes, so this is a
+// streaming token walk that Skip()s those subtrees.
 func ParseX86File(b *Builder, path string) error {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	var root x86Root
-	if err := xml.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("%s: %w", path, err)
-	}
-	for _, ext := range root.Extensions {
-		for _, inst := range ext.Instructions {
-			mnemonic := strings.ToUpper(strings.TrimSpace(inst.Asm))
+	defer f.Close()
+
+	dec := xml.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		switch start.Name.Local {
+		case "instruction":
+			mnemonic := strings.ToUpper(strings.TrimSpace(attr(start, "asm")))
 			if mnemonic == "" {
-				continue
+				break
 			}
-			brief := inst.Summary
-			description := inst.Description
-
-			// Intel syntax first, AT&T appended so forms stay separable.
-			var intel, att []string
-			for _, s := range inst.Syntaxes {
-				text := strings.TrimSpace(s.Text)
-				if text == "" {
-					continue
-				}
-				if s.ATT == "1" {
-					att = append(att, text)
-				} else {
-					intel = append(intel, text)
-				}
+			var syntax []string
+			if form := strings.TrimSpace(attr(start, "string")); form != "" {
+				syntax = []string{form}
 			}
-			syntax := append(intel, att...)
-
-			operands := map[string]string{}
-			for _, op := range inst.Operands {
-				name := strings.TrimSpace(op.Name)
-				if name == "" {
-					continue
-				}
-				operands[name] = describeX86Operand(op)
+			// summary is the only human text; it serves as the brief.
+			b.Add(mnemonic, attr(start, "summary"), "", syntax, nil)
+		case "architecture":
+			// Perf data (measurements, latencies, ports) hangs off here.
+			if err := dec.Skip(); err != nil {
+				return err
 			}
-
-			b.Add(mnemonic, brief, description, syntax, operands)
 		}
 	}
 	return nil
-}
-
-// describeX86Operand turns the type/width/action attributes into a short human
-// string, e.g. "32-bit register, read+written".
-func describeX86Operand(op x86Operand) string {
-	kind := map[string]string{
-		"reg":   "register",
-		"mem":   "memory operand",
-		"imm":   "immediate",
-		"agen":  "address",
-		"relbr": "relative branch target",
-		"flags": "flags",
-	}[strings.ToLower(op.Type)]
-	if kind == "" {
-		kind = strings.ToLower(op.Type)
-	}
-	if kind == "" {
-		kind = "operand"
-	}
-
-	prefix := ""
-	if w, err := strconv.Atoi(strings.TrimSpace(op.Width)); err == nil && w > 0 {
-		prefix = strconv.Itoa(w) + "-bit "
-	}
-
-	action := ""
-	switch {
-	case op.R == "1" && op.W == "1":
-		action = ", read+written"
-	case op.W == "1":
-		action = ", written"
-	case op.R == "1":
-		action = ", read"
-	}
-	return prefix + kind + action
 }

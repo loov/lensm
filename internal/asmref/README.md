@@ -35,8 +35,13 @@ decoders know but the table is missing — a coverage hint, not an error.
   developer.arm.com (the `ISA_A64_xml_*` bundle, one XML file per instruction).
   Files starting with `sysreg_` (system registers) and `AArch64-` (shared
   pseudocode) are skipped.
-- **x86 / AMD64** — `instructions.xml` from https://uops.info (XED-derived).
-  `<architecture>`/`<measurement>` micro-op tables are ignored.
+- **x86 / AMD64** — `instructions.xml` from https://uops.info (XED-derived,
+  ~140MB). It is a benchmark dataset, not a manual: there are no description or
+  syntax elements, so the `summary` attribute becomes the brief and the `string`
+  attribute (e.g. `ADD (R32, M32)`) becomes the syntax. Per-operand descriptions
+  are not emitted — they are derivable from the token already in the syntax and
+  would otherwise duplicate ~69 generic strings tens of thousands of times.
+  `<architecture>`/`<measurement>` micro-op tables are skipped.
 
 These dumps are large and not redistributed here; download them into a local
 directory and pass the paths above. Record the exact release version you used
