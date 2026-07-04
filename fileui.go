@@ -74,11 +74,22 @@ type FileUI struct {
 	invalidate         chan struct{}
 	settingsEvents     chan event.Event
 	settingsAcks       chan struct{}
+	pickerResults      chan pickerResult
 	exited             chan struct{}
+	flushTimer         *time.Timer
+	sessionDirty       bool
 	commentKey         string
 	copyStatus         string
+	saveError          string
 	settingsWindowOpen bool
+	pickerOpen         bool
 	loadGeneration     uint64
+}
+
+type pickerResult struct {
+	path string
+	ok   bool
+	err  error
 }
 
 type CodeTab struct {
@@ -146,14 +157,22 @@ func (ui *FileUI) Run(w *app.Window) error {
 	settingsAcks := make(chan struct{})
 	ui.settingsEvents = settingsEvents
 	ui.settingsAcks = settingsAcks
+	pickerResults := make(chan pickerResult, 1)
+	ui.pickerResults = pickerResults
 	ui.exited = exited
+	flushTimer := time.NewTimer(time.Hour)
+	flushTimer.Stop()
+	ui.flushTimer = flushTimer
 	var settingsOps op.Ops
+	defer ui.flushPending()
 	defer func() {
 		ui.loadRequests = nil
 		ui.invalidate = nil
 		ui.settingsEvents = nil
 		ui.settingsAcks = nil
+		ui.pickerResults = nil
 		ui.exited = nil
+		ui.flushTimer = nil
 	}()
 
 	loadFinished := func(result fileLoadResult) {
@@ -262,6 +281,20 @@ func (ui *FileUI) Run(w *app.Window) error {
 			ui.SetFile(result.file)
 			w.Invalidate()
 		case <-invalidate:
+			w.Invalidate()
+		case <-flushTimer.C:
+			ui.flushPending()
+			w.Invalidate()
+		case res := <-pickerResults:
+			ui.pickerOpen = false
+			if res.err != nil {
+				ui.LoadError = res.err
+			} else if res.ok {
+				ui.Config.Path = res.path
+				ui.LoadError = nil
+				ui.copyStatus = ""
+				ui.requestLoad(res.path)
+			}
 			w.Invalidate()
 		case ev := <-settingsEvents:
 			switch e := ev.(type) {
@@ -613,6 +646,15 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dime
 				label.Color = colors.MutedText
 				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
 			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if ui.saveError == "" {
+					return layout.Dimensions{}
+				}
+				label := material.Body1(ui.Theme, ui.saveError)
+				label.TextSize *= 0.75
+				label.Color = colors.Error
+				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
+			}),
 		)
 	})
 }
@@ -872,11 +914,36 @@ func (ui *FileUI) saveMCPSettings() {
 }
 
 func (ui *FileUI) saveSettings(settings AppSettings) {
-	if err := SaveAppSettings(settings); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to save settings: %v\n", err)
+	ui.Settings = settings
+	ui.sessionDirty = true
+	ui.scheduleFlush()
+}
+
+// scheduleFlush arranges for buffered comment and settings changes to
+// reach disk once the user pauses, instead of on every keystroke or tab
+// switch. Main event loop only.
+func (ui *FileUI) scheduleFlush() {
+	if ui.flushTimer == nil {
+		ui.flushPending()
 		return
 	}
-	ui.Settings = settings
+	ui.flushTimer.Reset(time.Second)
+}
+
+func (ui *FileUI) flushPending() {
+	ui.saveError = ""
+	if ui.sessionDirty {
+		if err := SaveAppSettings(ui.Settings); err != nil {
+			ui.saveError = "settings not saved: " + err.Error()
+			fmt.Fprintf(os.Stderr, "unable to save settings: %v\n", err)
+		} else {
+			ui.sessionDirty = false
+		}
+	}
+	if err := ui.Comments.Flush(); err != nil {
+		ui.saveError = "comments not saved: " + err.Error()
+		fmt.Fprintf(os.Stderr, "unable to save comments: %v\n", err)
+	}
 }
 
 func (ui *FileUI) invalidateMain() {
@@ -919,18 +986,20 @@ func (ui *FileUI) stopMCP() {
 }
 
 func (ui *FileUI) chooseFile() {
-	path, ok, err := chooseExecutableFile()
-	if err != nil {
-		ui.LoadError = err
+	if ui.pickerOpen || ui.pickerResults == nil {
 		return
 	}
-	if !ok {
-		return
-	}
-	ui.Config.Path = path
-	ui.LoadError = nil
-	ui.copyStatus = ""
-	ui.requestLoad(path)
+	// The native picker blocks until dismissed; running it here would
+	// stall the frame in progress and freeze the window.
+	ui.pickerOpen = true
+	results, exited := ui.pickerResults, ui.exited
+	go func() {
+		path, ok, err := chooseExecutableFile()
+		select {
+		case results <- pickerResult{path: path, ok: ok, err: err}:
+		case <-exited:
+		}
+	}()
 }
 
 func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dimensions {
@@ -1199,15 +1268,16 @@ func (ui *FileUI) saveSessionState() {
 		return
 	}
 
-	if err := SaveAppSettings(settings); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to save settings: %v\n", err)
-		return
-	}
 	ui.Settings = settings
+	ui.sessionDirty = true
+	ui.scheduleFlush()
 }
 
-
 func (ui *FileUI) loadCommentsForPath(exePath string) {
+	// Write out anything buffered for the previous binary first.
+	if err := ui.Comments.Flush(); err != nil {
+		fmt.Fprintf(os.Stderr, "unable to save comments: %v\n", err)
+	}
 	commentsPath := ui.Config.CommentsPath
 	if commentsPath == "" {
 		commentsPath = defaultCommentPath(exePath)
@@ -1232,7 +1302,8 @@ func (ui *FileUI) commentKeyForCode(code *disasm.Code, inst disasm.Inst) string 
 	if code == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s:%s:%x", code.Name, CommentViewGoAsm, inst.PC)
+	// The view is prefixed by layoutInlineAsmCommentEditor.
+	return code.Name + ":" + formatPC(inst.PC)
 }
 
 func (ui *FileUI) commentFor(inst disasm.Inst) string {
@@ -1264,9 +1335,22 @@ func (ui *FileUI) setCommentForInst(inst disasm.Inst, text string) {
 	if code == nil || !code.Loaded() {
 		return
 	}
-	if err := ui.Comments.SetAsm(code.Name, CommentViewGoAsm, inst.PC, text); err != nil {
+	ui.setBufferedComment(CommentCoord{
+		Function: code.Name,
+		View:     CommentViewGoAsm,
+		PC:       inst.PC,
+	}, text)
+}
+
+// setBufferedComment records the comment in memory and schedules the
+// disk write, so typing doesn't rewrite the sidecar per keystroke.
+func (ui *FileUI) setBufferedComment(coord CommentCoord, text string) {
+	if err := ui.Comments.SetBuffered(coord, text); err != nil {
+		ui.saveError = "comment not saved: " + err.Error()
 		fmt.Fprintln(os.Stderr, err)
+		return
 	}
+	ui.scheduleFlush()
 }
 
 func (ui *FileUI) setNativeCommentForInst(inst disasm.Inst, text string) {
@@ -1274,9 +1358,11 @@ func (ui *FileUI) setNativeCommentForInst(inst disasm.Inst, text string) {
 	if code == nil || !code.Loaded() {
 		return
 	}
-	if err := ui.Comments.SetAsm(code.Name, CommentViewNativeAsm, inst.PC, text); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-	}
+	ui.setBufferedComment(CommentCoord{
+		Function: code.Name,
+		View:     CommentViewNativeAsm,
+		PC:       inst.PC,
+	}, text)
 }
 
 func (ui *FileUI) setSourceCommentForLine(file string, line int, text string) {
@@ -1284,9 +1370,12 @@ func (ui *FileUI) setSourceCommentForLine(file string, line int, text string) {
 	if code == nil || !code.Loaded() {
 		return
 	}
-	if err := ui.Comments.SetSource(code.Name, file, line, text); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-	}
+	ui.setBufferedComment(CommentCoord{
+		Function: code.Name,
+		View:     CommentViewSource,
+		File:     file,
+		Line:     line,
+	}, text)
 }
 
 func (ui *FileUI) copyAssembly(gtx layout.Context) {

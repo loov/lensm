@@ -50,6 +50,8 @@ type CommentStore struct {
 	path    string
 	binary  string
 	records map[string]CommentRecord
+	// dirty marks in-memory changes not yet written by Flush.
+	dirty bool
 	// preserved holds records this version doesn't understand (e.g. views
 	// added by a newer lensm), kept verbatim so saving doesn't destroy them.
 	preserved []json.RawMessage
@@ -99,6 +101,17 @@ func (store *CommentStore) Get(coord CommentCoord) string {
 }
 
 func (store *CommentStore) Set(coord CommentCoord, text string) error {
+	return store.set(coord, text, true)
+}
+
+// SetBuffered updates the comment in memory and defers the disk write
+// until Flush, so typing in an editor doesn't rewrite the sidecar on
+// every keystroke.
+func (store *CommentStore) SetBuffered(coord CommentCoord, text string) error {
+	return store.set(coord, text, false)
+}
+
+func (store *CommentStore) set(coord CommentCoord, text string, persist bool) error {
 	if store == nil {
 		return errors.New("comment store is not initialized")
 	}
@@ -108,18 +121,17 @@ func (store *CommentStore) Set(coord CommentCoord, text string) error {
 	}
 
 	store.mu.Lock()
+	defer store.mu.Unlock()
 	key := store.key(coord)
 	existing, exists := store.records[key]
 	if text == "" {
 		if !exists {
-			store.mu.Unlock()
 			return nil
 		}
 		delete(store.records, key)
 	} else {
 		coord = store.normalize(coord)
 		if exists && existing.Text == text {
-			store.mu.Unlock()
 			return nil
 		}
 		store.records[key] = CommentRecord{
@@ -128,9 +140,32 @@ func (store *CommentStore) Set(coord CommentCoord, text string) error {
 			UpdatedAt:    time.Now().UTC(),
 		}
 	}
-	err := store.saveLocked()
-	store.mu.Unlock()
-	return err
+	store.dirty = true
+	if !persist {
+		return nil
+	}
+	if err := store.saveLocked(); err != nil {
+		return err
+	}
+	store.dirty = false
+	return nil
+}
+
+// Flush writes buffered changes to disk.
+func (store *CommentStore) Flush() error {
+	if store == nil {
+		return nil
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if !store.dirty {
+		return nil
+	}
+	if err := store.saveLocked(); err != nil {
+		return err
+	}
+	store.dirty = false
+	return nil
 }
 
 func (store *CommentStore) All() []CommentRecord {
