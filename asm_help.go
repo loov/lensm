@@ -28,7 +28,9 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"LEA"}, Description: "Load an effective address without reading memory.", Explain: explainLEA},
 	{Prefixes: []string{"ADD", "ADC"}, Description: "Add values; ADC also includes the carry flag.", Explain: explainBinary("+")},
 	{Prefixes: []string{"SUB", "SBB"}, Description: "Subtract values; SBB also includes the borrow flag.", Explain: explainBinary("-")},
-	{Prefixes: []string{"MUL", "IMUL", "MADD", "MSUB"}, Description: "Multiply values, optionally adding or subtracting another value.", Explain: explainBinary("*")},
+	{Prefixes: []string{"MUL", "IMUL"}, Description: "Multiply values (IMUL is signed multiplication).", Explain: explainBinary("*")},
+	{Prefixes: []string{"MADD"}, Description: "Multiply two values and add a third.", Explain: explainMADD},
+	{Prefixes: []string{"MSUB"}, Description: "Multiply two values and subtract the product from a third.", Explain: explainMSUB},
 	{Prefixes: []string{"DIV", "IDIV", "SDIV", "UDIV"}, Description: "Divide values (signed or unsigned according to the mnemonic).", Explain: explainBinary("/")},
 	{Prefixes: []string{"CQO", "CDQ", "CWD", "CBW"}, Description: "Sign-extend the accumulator for a wider signed operation."},
 	{Prefixes: []string{"AND"}, Description: "Compute a bitwise AND.", Explain: explainBinary("&")},
@@ -41,7 +43,7 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"INC"}, Description: "Increment a value by one.", Explain: explainUnaryDelta("+", "1")},
 	{Prefixes: []string{"DEC"}, Description: "Decrement a value by one.", Explain: explainUnaryDelta("-", "1")},
 	{Prefixes: []string{"NEG"}, Description: "Negate a signed value.", Explain: explainUnaryPrefix("-")},
-	{Prefixes: []string{"NOT"}, Description: "Invert every bit in a value.", Explain: explainUnaryPrefix("^")},
+	{Prefixes: []string{"NOT", "MVN"}, Description: "Invert every bit in a value.", Explain: explainUnaryPrefix("^")},
 	{Prefixes: []string{"CMP"}, Description: "Compare values and update condition flags.", ExplainArch: explainCompare},
 	{Prefixes: []string{"CMOV"}, Description: "Conditionally move a value when the selected flags match.", Explain: explainMove},
 	{Prefixes: []string{"SET"}, Description: "Set a byte to 0 or 1 according to condition flags."},
@@ -51,6 +53,7 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"FADD"}, Description: "Add floating-point values.", Explain: explainBinary("+")},
 	{Prefixes: []string{"FSUB"}, Description: "Subtract floating-point values.", Explain: explainBinary("-")},
 	{Prefixes: []string{"FMUL"}, Description: "Multiply floating-point values.", Explain: explainBinary("*")},
+	{Prefixes: []string{"FMOV"}, Description: "Move a floating-point value.", Explain: explainMove},
 	{Prefixes: []string{"LDR", "LDUR", "LOAD"}, Description: "Load a value from memory into a register.", Explain: explainLoad},
 	{Prefixes: []string{"STR", "STUR", "STORE"}, Description: "Store a register value in memory.", Explain: explainStore},
 	{Prefixes: []string{"ADR", "ADRP"}, Description: "Form a PC-relative address."},
@@ -58,7 +61,8 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"STP"}, Description: "Store a pair of registers to memory."},
 	{Prefixes: []string{"XCHG", "SWAP"}, Description: "Exchange two values."},
 	{Prefixes: []string{"BSWAP", "REV"}, Description: "Reverse the byte order of a value."},
-	{Prefixes: []string{"BSF", "BSR", "CLZ", "CTZ"}, Description: "Find or count significant zero bits."},
+	{Prefixes: []string{"BSF", "BSR"}, Description: "Scan for the position of the first or last set bit."},
+	{Prefixes: []string{"CLZ", "CTZ"}, Description: "Count leading or trailing zero bits."},
 	{Prefixes: []string{"POPCNT"}, Description: "Count the one bits in a value."},
 	{Prefixes: []string{"PUSH"}, Description: "Push a value onto the stack."},
 	{Prefixes: []string{"POP"}, Description: "Pop the top stack value."},
@@ -71,6 +75,7 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"JNE", "JNZ", "BNE"}, Description: "Jump when values are not equal."},
 	{Prefixes: []string{"JG", "JGE", "JL", "JLE", "BGT", "BGE", "BLT", "BLE"}, Description: "Conditional jump after a signed comparison."},
 	{Prefixes: []string{"JA", "JAE", "JB", "JBE", "BHI", "BHS", "BLO", "BLS"}, Description: "Conditional jump after an unsigned comparison."},
+	{Prefixes: []string{"BMI", "BPL", "BVS", "BVC"}, Description: "Conditional jump testing the sign or overflow flag."},
 	{Prefixes: []string{"CBZ"}, Description: "Jump when a register is zero."},
 	{Prefixes: []string{"CBNZ"}, Description: "Jump when a register is not zero."},
 	{Prefixes: []string{"TBZ"}, Description: "Jump when a selected bit is zero."},
@@ -148,9 +153,20 @@ func canonicalNativeMnemonic(mnemonic string) string {
 			return "BLO"
 		case "LS":
 			return "BLS"
+		case "MI":
+			return "BMI"
+		case "PL":
+			return "BPL"
+		case "VS":
+			return "BVS"
+		case "VC":
+			return "BVC"
+		case "AL", "NV":
+			// Both encode "always" on modern cores.
+			return "B"
 		}
 	}
-	for _, base := range []string{"PUSH", "POP", "CALL", "RET", "XCHG", "POPCNT", "BSWAP", "INC", "DEC", "NEG", "NOT"} {
+	for _, base := range []string{"PUSH", "POP", "CALL", "JMP", "RET", "XCHG", "POPCNT", "BSWAP", "INC", "DEC", "NEG", "NOT"} {
 		if mnemonic == base+"B" || mnemonic == base+"W" || mnemonic == base+"L" || mnemonic == base+"Q" {
 			return base
 		}
@@ -204,6 +220,14 @@ func explainNativeEffect(mnemonic string, operands []string) string {
 		return "if unsigned lower than (C == 0), PC := " + operand(0)
 	case mnemonic == "BLS":
 		return "if unsigned lower than or equal (C == 0 or Z == 1), PC := " + operand(0)
+	case mnemonic == "BMI":
+		return "if negative (N == 1), PC := " + operand(0)
+	case mnemonic == "BPL":
+		return "if positive or zero (N == 0), PC := " + operand(0)
+	case mnemonic == "BVS":
+		return "if overflow (V == 1), PC := " + operand(0)
+	case mnemonic == "BVC":
+		return "if no overflow (V == 0), PC := " + operand(0)
 	case mnemonic == "JA":
 		return "if unsigned above (CF == 0 and ZF == 0), PC := " + operand(0)
 	case mnemonic == "JAE":
@@ -291,6 +315,11 @@ func explainNativeInstruction(mnemonic string, operands []string) string {
 			return destination + " := " + value(operands[1]) + " * " + value(operands[2]) + " + " + value(operands[3])
 		case mnemonic == "MSUB" && len(operands) >= 4:
 			return destination + " := " + value(operands[3]) + " - " + value(operands[1]) + " * " + value(operands[2])
+		case mnemonic == "NEG":
+			// arm64 two-operand form: neg x0, x1 is x0 := -x1.
+			return destination + " := -" + value(operands[1])
+		case mnemonic == "NOT" || mnemonic == "MVN":
+			return destination + " := ^" + value(operands[1])
 		case mnemonic == "DIV" || mnemonic == "IDIV" || mnemonic == "SDIV" || mnemonic == "UDIV":
 			return explainNativeDestinationFirst(destination, operands[1:], "/", value)
 		case mnemonic == "AND":
@@ -488,16 +517,35 @@ func mnemonicMatches(mnemonic, prefix string) bool {
 	return nativeSizeSuffixes(prefix)[suffix]
 }
 
+// Suffix sets are package-level: nativeSizeSuffixes runs in the per-frame
+// hover lookup and must not allocate.
+var (
+	x86IntegerSuffixes    = map[string]bool{"B": true, "W": true, "L": true, "Q": true}
+	floatOrVectorSuffixes = map[string]bool{"S": true, "D": true}
+	// arm64 Go assembly sizes moves with D/H/W/B plus zero-extending
+	// BU/HU/WU: MOVD, MOVWU, ... The x86 sizes stay valid alongside.
+	movSuffixes = map[string]bool{
+		"B": true, "W": true, "L": true, "Q": true,
+		"D": true, "H": true, "BU": true, "HU": true, "WU": true,
+	}
+	// arm64 32-bit register variants: SDIVW, MADDW, LSLW, ...
+	arm64WordSuffixes = map[string]bool{"W": true}
+)
+
 func nativeSizeSuffixes(mnemonic string) map[string]bool {
-	x86Integer := map[string]bool{"B": true, "W": true, "L": true, "Q": true}
-	floatOrVector := map[string]bool{"S": true, "D": true}
 	switch mnemonic {
-	case "MOV", "LEA", "ADD", "ADC", "SUB", "SBB", "MUL", "IMUL", "DIV", "IDIV",
+	case "MOV":
+		return movSuffixes
+	case "FMOV":
+		return floatOrVectorSuffixes
+	case "LEA", "ADD", "ADC", "SUB", "SBB", "MUL", "IMUL", "DIV", "IDIV",
 		"AND", "OR", "XOR", "SHL", "SAL", "SHR", "SAR", "INC", "DEC", "NEG", "NOT",
 		"CMP", "TEST", "PUSH", "POP", "CALL", "RET", "XCHG", "BSWAP", "POPCNT":
-		return x86Integer
+		return x86IntegerSuffixes
+	case "SDIV", "UDIV", "MADD", "MSUB", "ORR", "EOR", "LSL", "LSR", "ASR", "BIC", "MVN":
+		return arm64WordSuffixes
 	case "FADD", "FSUB", "FMUL", "FMADD":
-		return floatOrVector
+		return floatOrVectorSuffixes
 	default:
 		return nil
 	}
@@ -625,6 +673,24 @@ func explainFMADD(operands []string) string {
 	}
 	destination := formatDestination(operands[3])
 	return destination + " := " + formatValue(operands[0]) + " * " + formatValue(operands[2]) + " + " + formatValue(operands[1])
+}
+
+// Go arm64 assembly orders MADD/MSUB as "Rm, Ra, Rn, Rd":
+// MADD R2, R3, R1, R0 computes R0 = R1*R2 + R3.
+func explainMADD(operands []string) string {
+	if len(operands) < 4 {
+		return ""
+	}
+	destination := formatDestination(operands[3])
+	return destination + " := " + formatValue(operands[2]) + " * " + formatValue(operands[0]) + " + " + formatValue(operands[1])
+}
+
+func explainMSUB(operands []string) string {
+	if len(operands) < 4 {
+		return ""
+	}
+	destination := formatDestination(operands[3])
+	return destination + " := " + formatValue(operands[1]) + " - " + formatValue(operands[2]) + " * " + formatValue(operands[0])
 }
 
 func explainLoad(operands []string) string {

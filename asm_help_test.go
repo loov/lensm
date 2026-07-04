@@ -23,6 +23,15 @@ func TestAssemblyInstructionExplanations(t *testing.T) {
 		// Three-operand arm64 forms compute dst := second op first.
 		{"arm64", "SUB R1, R5, R3", "R3 := R5 - R1"},
 		{"arm64", "LSL $3, R5, R3", "R3 := R5 << 3"},
+		// arm64 sized moves and 32-bit variants must keep matching their
+		// base rules.
+		{"arm64", "MOVD (R1), R0", "R0 := memory[R1]"},
+		{"arm64", "MOVWU (R1), R0", "R0 := memory[R1]"},
+		{"arm64", "SDIVW R1, R2, R0", "R0 := R2 / R1"},
+		{"arm64", "FMOVD F1, F0", "F0 := F1"},
+		// MADD R2, R3, R1, R0 computes R0 = R1*R2 + R3.
+		{"arm64", "MADD R2, R3, R1, R0", "R0 := R1 * R2 + R3"},
+		{"arm64", "MSUB R2, R3, R1, R0", "R0 := R3 - R1 * R2"},
 	}
 	for _, test := range tests {
 		help, ok := AssemblyInstructionHelp(test.arch, test.instruction)
@@ -86,6 +95,34 @@ func TestNativeARMIndexedMemoryExplanations(t *testing.T) {
 		if !ok || help.Explanation != want {
 			t.Errorf("%q explanation = %q, want %q", instruction, help.Explanation, want)
 		}
+	}
+}
+
+func TestNativeDirectJumpHasHelp(t *testing.T) {
+	// x86 GNU syntax spells direct jumps jmpq.
+	help, ok := NativeAssemblyInstructionHelp("jmpq .+0x100")
+	if !ok {
+		t.Fatal("no native help for jmpq")
+	}
+	if help.Explanation != "PC := .+0x100" {
+		t.Fatalf("jmpq explanation = %q", help.Explanation)
+	}
+}
+
+func TestNativeARMTwoOperandNeg(t *testing.T) {
+	help, ok := NativeAssemblyInstructionHelp("neg x0, x1")
+	if !ok {
+		t.Fatal("no native help for neg")
+	}
+	if help.Explanation != "x0 := -x1" {
+		t.Fatalf("neg explanation = %q", help.Explanation)
+	}
+	help, ok = NativeAssemblyInstructionHelp("mvn x0, x1")
+	if !ok {
+		t.Fatal("no native help for mvn")
+	}
+	if help.Explanation != "x0 := ^x1" {
+		t.Fatalf("mvn explanation = %q", help.Explanation)
 	}
 }
 
