@@ -87,6 +87,7 @@ type FileUI struct {
 	settingsWindowOpen bool
 	pickerOpen         bool
 	loadGeneration     uint64
+	loadedPath         string
 	Navigation         NavigationHistory
 	navigatingHistory  bool
 }
@@ -336,7 +337,14 @@ func (ui *FileUI) SetFile(file disasm.File) {
 			ui.Navigation.Visit(tab.Name)
 		}
 	}()
-	ui.Navigation.Reset()
+	// Keep history across watch-mode reloads of the same binary; open
+	// tabs are preserved there too. Entries whose functions vanished are
+	// skipped during navigation.
+	path := cleanPath(ui.Config.Path)
+	if ui.File == nil || path != ui.loadedPath {
+		ui.Navigation.Reset()
+	}
+	ui.loadedPath = path
 
 	initialLoad := ui.File == nil
 	if ui.File != nil {
@@ -595,13 +603,23 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 }
 
 func (ui *FileUI) handleActions(gtx layout.Context) {
-	for {
-		ev, ok := gtx.Event(
+	// widget.Editor claims Option+arrow word-jumps on macOS, and this
+	// unfocused poll runs before any editor's Update, so it would steal
+	// them from a focused editor. Only listen for Alt+arrows while no
+	// text editor has focus.
+	editorFocused := gtx.Focused(&ui.Comment) || gtx.Focused(&ui.Funcs.Filter)
+	filters := []event.Filter{
+		key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
+		key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
+	}
+	if !editorFocused {
+		filters = append(filters,
 			key.Filter{Required: key.ModAlt, Name: key.NameLeftArrow},
 			key.Filter{Required: key.ModAlt, Name: key.NameRightArrow},
-			key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
-			key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
 		)
+	}
+	for {
+		ev, ok := gtx.Event(filters...)
 		if !ok {
 			break
 		}

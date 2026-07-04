@@ -8,56 +8,56 @@ type NavigationHistory struct {
 	index   int
 }
 
-func (history *NavigationHistory) Reset() {
-	history.entries = nil
-	history.index = -1
+func (h *NavigationHistory) Reset() {
+	h.entries = nil
+	h.index = -1
 }
 
-func (history *NavigationHistory) Visit(name string) {
+func (h *NavigationHistory) Visit(name string) {
 	if name == "" {
 		return
 	}
-	if history.index >= 0 && history.index < len(history.entries) && history.entries[history.index] == name {
+	if h.index >= 0 && h.index < len(h.entries) && h.entries[h.index] == name {
 		return
 	}
-	if history.index+1 < len(history.entries) {
-		history.entries = history.entries[:history.index+1]
+	if h.index+1 < len(h.entries) {
+		h.entries = h.entries[:h.index+1]
 	}
-	history.entries = append(history.entries, name)
-	if len(history.entries) > navigationHistoryLimit {
-		drop := len(history.entries) - navigationHistoryLimit
-		history.entries = history.entries[drop:]
+	h.entries = append(h.entries, name)
+	if len(h.entries) > navigationHistoryLimit {
+		drop := len(h.entries) - navigationHistoryLimit
+		h.entries = h.entries[drop:]
 	}
-	history.index = len(history.entries) - 1
+	h.index = len(h.entries) - 1
 }
 
-func (history *NavigationHistory) CanBack() bool {
-	return history.index > 0
+func (h *NavigationHistory) CanBack() bool {
+	return h.index > 0
 }
 
-func (history *NavigationHistory) CanForward() bool {
-	return history.index >= 0 && history.index+1 < len(history.entries)
+func (h *NavigationHistory) CanForward() bool {
+	return h.index >= 0 && h.index+1 < len(h.entries)
 }
 
-func (history *NavigationHistory) Back() (string, bool) {
-	if !history.CanBack() {
+func (h *NavigationHistory) Back() (string, bool) {
+	if !h.CanBack() {
 		return "", false
 	}
-	history.index--
-	return history.entries[history.index], true
+	h.index--
+	return h.entries[h.index], true
 }
 
-func (history *NavigationHistory) Forward() (string, bool) {
-	if !history.CanForward() {
+func (h *NavigationHistory) Forward() (string, bool) {
+	if !h.CanForward() {
 		return "", false
 	}
-	history.index++
-	return history.entries[history.index], true
+	h.index++
+	return h.entries[h.index], true
 }
 
-func (history *NavigationHistory) Current() string {
-	if history.index < 0 || history.index >= len(history.entries) {
+func (h *NavigationHistory) Current() string {
+	if h.index < 0 || h.index >= len(h.entries) {
 		return ""
 	}
-	return history.entries[history.index]
+	return h.entries[h.index]
 }
