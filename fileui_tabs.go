@@ -8,7 +8,6 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
-	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 )
 
@@ -45,7 +44,7 @@ func (ui *FileUI) appendCodeTab(fn disasm.Func) *CodeTab {
 	}
 	tab.Code.Code, ui.LoadError = fn.Load(ui.loadOptions())
 	tab.Code.SelectedAsm = -1
-	tab.Code.SelectedView = comments.ViewGoAsm
+	tab.Code.SelectedView = CodeViewGoAsm
 	tab.Code.ResetScroll()
 	ui.CodeTabs = append(ui.CodeTabs, tab)
 	return tab

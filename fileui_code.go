@@ -48,7 +48,7 @@ type CodeUI struct {
 
 	mousePosition f32.Point
 	SelectedAsm   int
-	SelectedView  comments.View
+	SelectedView  CodeView
 	SelectedFile  string
 	SelectedLine  int
 	Selection     TextSelection
@@ -429,7 +429,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			pointer.CursorPointer.Add(gtx.Ops)
 			if mouseClicked {
 				ui.SelectedAsm = highlightAsmIndex
-				ui.SelectedView = comments.ViewGoAsm
+				ui.SelectedView = CodeViewGoAsm
 				ui.SelectedFile = ""
 				ui.SelectedLine = 0
 				ui.TryOpen(gtx, ix.Call)
@@ -441,9 +441,9 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			ui.SelectedFile = ""
 			ui.SelectedLine = 0
 			if ui.ShowNative && native.Contains(mousePosition.X) {
-				ui.SelectedView = comments.ViewNativeAsm
+				ui.SelectedView = CodeViewNativeAsm
 			} else {
-				ui.SelectedView = comments.ViewGoAsm
+				ui.SelectedView = CodeViewGoAsm
 			}
 			if ui.CommentEditor != nil {
 				gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
@@ -566,9 +566,9 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			Color:      ui.Syntax.Plain,
 		}.Layout(ui.Theme, gtx)
 		if commentWidth > 0 && ix.Text != "" {
-			comment := ui.Comments.Get(ui.asmCoord(comments.ViewGoAsm, ix))
-			if ui.SelectedAsm == i && ui.SelectedView == comments.ViewGoAsm {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(comments.ViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), commentLeft, commentWidth, lineHeight)
+			comment := ui.Comments.Get(ui.asmCoord(CodeViewGoAsm, ix))
+			if ui.SelectedAsm == i && ui.SelectedView == CodeViewGoAsm {
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(CodeViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), commentLeft, commentWidth, lineHeight)
 			} else if comment != "" {
 				SourceLine{
 					TopLeft:    image.Pt(commentLeft, i*lineHeight+int(ui.asm.scroll)),
@@ -581,9 +581,9 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			}
 		}
 		if ui.ShowNative {
-			nativeComment := ui.Comments.Get(ui.asmCoord(comments.ViewNativeAsm, ix))
+			nativeComment := ui.Comments.Get(ui.asmCoord(CodeViewNativeAsm, ix))
 			width := nativeTextWidth
-			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == comments.ViewNativeAsm)) && nativeCommentWidth > 0 {
+			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == CodeViewNativeAsm)) && nativeCommentWidth > 0 {
 				width = nativeInstructionWidth
 			}
 			SourceLine{
@@ -595,8 +595,8 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 				Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 				Color:      ui.Syntax.Plain,
 			}.Layout(ui.Theme, gtx)
-			if ui.SelectedAsm == i && ui.SelectedView == comments.ViewNativeAsm && nativeCommentWidth > 0 {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(comments.ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), nativeCommentLeft, nativeCommentWidth, lineHeight)
+			if ui.SelectedAsm == i && ui.SelectedView == CodeViewNativeAsm && nativeCommentWidth > 0 {
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(CodeViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), nativeCommentLeft, nativeCommentWidth, lineHeight)
 			} else if nativeComment != "" && nativeCommentWidth > 0 {
 				SourceLine{
 					TopLeft:    image.Pt(nativeCommentLeft, i*lineHeight+int(ui.asm.scroll)),
@@ -687,7 +687,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 				lineNo := block.From + off
 				if highlight && mouseClicked {
 					ui.SelectedAsm = -1
-					ui.SelectedView = comments.ViewSource
+					ui.SelectedView = CodeViewSource
 					ui.SelectedFile = src.File
 					ui.SelectedLine = lineNo
 					if ui.CommentEditor != nil {
@@ -696,7 +696,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 				}
 				sourceComment := ui.Comments.Get(ui.sourceCoord(src.File, lineNo))
 				width := sourceTextWidth
-				selectedSource := ui.SelectedView == comments.ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
+				selectedSource := ui.SelectedView == CodeViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
 				if (sourceComment != "" || selectedSource) && sourceCommentWidth > 0 {
 					width = sourceCodeWidth
 				}
@@ -934,12 +934,13 @@ func (ui CodeUIStyle) measureAsmTextWidth(gtx layout.Context, f font.Font, text 
 	return dims.Size.X
 }
 
-func (ui CodeUIStyle) asmCoord(view comments.View, inst disasm.Inst) comments.Coord {
+func (ui CodeUIStyle) asmCoord(view CodeView, inst disasm.Inst) comments.Coord {
 	name := ""
 	if ui.Code != nil {
 		name = ui.Code.Name
 	}
-	return comments.Coord{Function: name, View: view, PC: inst.PC}
+	cview, _ := view.CommentView()
+	return comments.Coord{Function: name, View: cview, PC: inst.PC}
 }
 
 func (ui CodeUIStyle) sourceCoord(file string, line int) comments.Coord {

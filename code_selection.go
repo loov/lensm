@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 
+	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 )
 
@@ -14,6 +15,21 @@ const (
 	CodeViewNativeAsm
 	CodeViewSource
 )
+
+// CommentView maps a pane to its comment-store view. ok is false for
+// CodeViewNone, which has no comments.
+func (v CodeView) CommentView() (view comments.View, ok bool) {
+	switch v {
+	case CodeViewGoAsm:
+		return comments.ViewGoAsm, true
+	case CodeViewNativeAsm:
+		return comments.ViewNativeAsm, true
+	case CodeViewSource:
+		return comments.ViewSource, true
+	default:
+		return "", false
+	}
+}
 
 type TextSelection struct {
 	View   CodeView
