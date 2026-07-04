@@ -64,6 +64,28 @@ func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
 	}
 }
 
+func TestGeneratedReferenceReplacesGenericFallback(t *testing.T) {
+	// ABS and CRC32 are absent from the curated rules, so they used to get the
+	// generic "Execute the X instruction." line. The generated asmref table now
+	// supplies real reference text, while the bespoke Explanation stays empty
+	// (no rule fabricates semantics for them).
+	for _, tc := range []struct{ arch, instruction, want string }{
+		{"arm64", "ABS V0.8B, V1.8B", "ABS (vector)"},
+		{"amd64", "CRC32 AX, BL", "Accumulate CRC32 value"},
+	} {
+		help, ok := ForInstruction(tc.arch, tc.instruction)
+		if !ok {
+			t.Fatalf("no help for %q", tc.instruction)
+		}
+		if help.Description != tc.want {
+			t.Errorf("description for %q = %q, want %q", tc.instruction, help.Description, tc.want)
+		}
+		if help.Explanation != "" {
+			t.Errorf("unexpected explanation for %q: %q", tc.instruction, help.Explanation)
+		}
+	}
+}
+
 func TestUndecodableInstructionHasNoFallback(t *testing.T) {
 	// Undecodable bytes render as "?" in the Go column.
 	if help, ok := ForInstruction("amd64", "?"); ok {

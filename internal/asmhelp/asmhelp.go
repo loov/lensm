@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"loov.dev/lensm/internal/asmref"
 )
 
 type Help struct {
@@ -480,6 +482,12 @@ func ForInstruction(arch, text string) (Help, bool) {
 	if help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands); ok {
 		return help, true
 	}
+	// The curated rules above own the bespoke Explanation semantics. For
+	// mnemonics they don't cover, fall back to the generated reference so the
+	// tooltip shows real ARM/x86 text instead of the generic line below.
+	if description := referenceDescription(mnemonic); description != "" {
+		return Help{Mnemonic: mnemonic, Description: description}, true
+	}
 	if !plausibleMnemonic(mnemonic) {
 		return Help{}, false
 	}
@@ -487,6 +495,20 @@ func ForInstruction(arch, text string) (Help, bool) {
 		Mnemonic:    mnemonic,
 		Description: "Execute the " + mnemonic + " instruction.",
 	}, true
+}
+
+// referenceDescription returns a short human description for a mnemonic from
+// the generated asmref table, preferring the brief title over the full first
+// paragraph. Empty when the mnemonic is not in the table.
+func referenceDescription(mnemonic string) string {
+	ref, ok := asmref.Lookup(mnemonic)
+	if !ok {
+		return ""
+	}
+	if ref.Brief != "" {
+		return ref.Brief
+	}
+	return ref.Description
 }
 
 // plausibleMnemonic reports whether a token looks like an instruction
