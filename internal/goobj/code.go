@@ -17,7 +17,7 @@ var rxRefRel = regexp.MustCompile(`\s-?\d+\(PC\)$`)
 var rxCallOrJump = regexp.MustCompile(`^(?:CALL|JMP)\s+(.+?)\(SB\)`)
 
 // Disassemble disassembles the specified symbol.
-func Disassemble(dis *godisasm.Disasm, sym *Function, opts disasm.Options) (*disasm.Code, error) {
+func Disassemble(dis *godisasm.Disasm, sym *Func, opts disasm.Options) (*disasm.Code, error) {
 	neededLines := make(map[string]*disasm.LineSet)
 
 	file, _, _ := dis.PCLN().PCToLine(sym.sym.Addr)

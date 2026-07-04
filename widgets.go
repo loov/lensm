@@ -173,3 +173,5 @@ func easeInOutCubic(t float32) float32 {
 	}
 	return (t-1)*(2*t-2)*(2*t-2) + 1
 }
+
+const maxLineWidth = 10 * 1024

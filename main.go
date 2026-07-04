@@ -52,7 +52,7 @@ func main() {
 	theme.Shaper = text.NewShaper(text.WithCollection(LoadFonts(*font)))
 	theme.TextSize = unit.Sp(*textSize)
 
-	ui := NewExeUI(windows, theme)
+	ui := NewFileUI(windows, theme)
 	if !explicitTextSize {
 		theme.TextSize = unit.Sp(ui.Settings.TextSize)
 	}

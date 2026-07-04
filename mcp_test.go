@@ -12,7 +12,7 @@ import (
 
 func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
 	server := &AppMCPServer{
-		session: &LensmSession{Path: "old"},
+		session: &Session{Path: "old"},
 	}
 
 	server.SetPath(filepath.Join(t.TempDir(), "missing-binary"), nil)

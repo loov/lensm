@@ -61,3 +61,40 @@ func (h *NavigationHistory) Current() string {
 	}
 	return h.entries[h.index]
 }
+
+func (ui *FileUI) recordNavigation(name string) {
+	if !ui.navigatingHistory {
+		ui.Navigation.Visit(name)
+	}
+}
+
+func (ui *FileUI) navigateBack() {
+	for ui.Navigation.CanBack() {
+		name, _ := ui.Navigation.Back()
+		if ui.navigateHistoryEntry(name) {
+			return
+		}
+	}
+}
+
+func (ui *FileUI) navigateForward() {
+	for ui.Navigation.CanForward() {
+		name, _ := ui.Navigation.Forward()
+		if ui.navigateHistoryEntry(name) {
+			return
+		}
+	}
+}
+
+func (ui *FileUI) navigateHistoryEntry(name string) bool {
+	fn := ui.findFunc(name)
+	if fn == nil {
+		return false
+	}
+	ui.navigatingHistory = true
+	ui.openFuncTab(fn)
+	ui.navigatingHistory = false
+	ui.copyStatus = ""
+	ui.invalidateMain()
+	return true
+}

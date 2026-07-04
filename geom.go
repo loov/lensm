@@ -15,3 +15,8 @@ func (b Bounds) Lerp(p float32) float32 {
 func (b Bounds) Contains(v float32) bool {
 	return b.Min <= v && v <= b.Max
 }
+
+// InRange checks whether v is in bounds for length.
+func InRange(v int, length int) bool {
+	return 0 <= v && v < length
+}

@@ -8,17 +8,17 @@ import (
 	"loov.dev/lensm/internal/wasmobj"
 )
 
-type LensmSession struct {
+type Session struct {
 	Path     string
 	File     disasm.File
 	Comments *CommentStore
 }
 
-func NewLensmSession(path string, commentsPath string) (*LensmSession, error) {
-	return NewLensmSessionWithComments(path, commentsPath, nil)
+func NewSession(path string, commentsPath string) (*Session, error) {
+	return NewSessionWithComments(path, commentsPath, nil)
 }
 
-func NewLensmSessionWithComments(path string, commentsPath string, comments *CommentStore) (*LensmSession, error) {
+func NewSessionWithComments(path string, commentsPath string, comments *CommentStore) (*Session, error) {
 	file, err := loadDisasmFile(path)
 	if err != nil {
 		return nil, err
@@ -34,7 +34,7 @@ func NewLensmSessionWithComments(path string, commentsPath string, comments *Com
 			return nil, err
 		}
 	}
-	return &LensmSession{
+	return &Session{
 		Path:     cleanPath(path),
 		File:     file,
 		Comments: comments,
@@ -48,22 +48,22 @@ func loadDisasmFile(path string) (disasm.File, error) {
 	return goobj.Load(path)
 }
 
-func (session *LensmSession) Close() error {
-	if session == nil || session.File == nil {
+func (s *Session) Close() error {
+	if s == nil || s.File == nil {
 		return nil
 	}
-	return session.File.Close()
+	return s.File.Close()
 }
 
-func (session *LensmSession) Funcs() []disasm.Func {
-	if session == nil || session.File == nil {
+func (s *Session) Funcs() []disasm.Func {
+	if s == nil || s.File == nil {
 		return nil
 	}
-	return session.File.Funcs()
+	return s.File.Funcs()
 }
 
-func (session *LensmSession) FindFunc(name string) disasm.Func {
-	for _, fn := range session.Funcs() {
+func (s *Session) FindFunc(name string) disasm.Func {
+	for _, fn := range s.Funcs() {
 		if fn.Name() == name {
 			return fn
 		}
@@ -71,8 +71,8 @@ func (session *LensmSession) FindFunc(name string) disasm.Func {
 	return nil
 }
 
-func (session *LensmSession) LoadCode(name string, context int) (*disasm.Code, error) {
-	fn := session.FindFunc(name)
+func (s *Session) LoadCode(name string, context int) (*disasm.Code, error) {
+	fn := s.FindFunc(name)
 	if fn == nil {
 		return nil, fmt.Errorf("function %q not found", name)
 	}

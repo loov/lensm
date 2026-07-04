@@ -12,7 +12,7 @@ import (
 )
 
 var _ disasm.File = (*File)(nil)
-var _ disasm.Func = (*Function)(nil)
+var _ disasm.Func = (*Func)(nil)
 
 // File contains information about the object file.
 type File struct {
@@ -31,7 +31,7 @@ type File struct {
 // per call, and a cache keyed by function alone would silently serve
 // whichever context happened to load first.
 type cacheKey struct {
-	fn      *Function
+	fn      *Func
 	context int
 }
 
@@ -45,14 +45,14 @@ type cacheEntry struct {
 func (file *File) Funcs() []disasm.Func { return file.funcs }
 
 // Function contains information about the executable.
-type Function struct {
+type Func struct {
 	obj *File
 	sym objfile.Sym
 
 	sortName string
 }
 
-func (fn *Function) Name() string { return fn.sym.Name }
+func (fn *Func) Name() string { return fn.sym.Name }
 
 func (file *File) Close() error {
 	return file.objfile.Close()
@@ -80,7 +80,7 @@ func Load(path string) (*File, error) {
 		if sym.Code != 'T' && sym.Code != 't' || sym.Addr < dis.TextStart() {
 			continue
 		}
-		sym := &Function{
+		sym := &Func{
 			obj:      file,
 			sym:      sym,
 			sortName: sortingName(sym.Name),
@@ -95,11 +95,11 @@ func Load(path string) (*File, error) {
 	return file, nil
 }
 
-func (fn *Function) Load(opts disasm.Options) (*disasm.Code, error) {
+func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 	return fn.obj.LoadCode(fn, opts)
 }
 
-func (file *File) LoadCode(fn *Function, opts disasm.Options) (*disasm.Code, error) {
+func (file *File) LoadCode(fn *Func, opts disasm.Options) (*disasm.Code, error) {
 	file.mu.Lock()
 	defer file.mu.Unlock()
 	key := cacheKey{fn: fn, context: opts.Context}
