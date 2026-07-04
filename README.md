@@ -59,7 +59,7 @@ Inside the code view:
 Run lensm as an MCP server over stdio:
 
 ```
-lensm mcp [-context 3] [-comments ./lensm.lensm-comments.json] ./lensm
+lensm mcp [-comments ./lensm.lensm-comments.json] ./lensm
 ```
 
 The MCP server exposes tools for listing functions, reading a function's

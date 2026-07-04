@@ -22,6 +22,11 @@ import (
 const mcpProtocolVersion = "2025-06-18"
 const defaultMCPSourceContext = 3
 
+// maxMCPSourceContext bounds the per-call context: an unbounded value
+// overflows the line-range arithmetic and panics with a slice bounds
+// error, letting one request kill the stdio server.
+const maxMCPSourceContext = 1000
+
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -520,6 +525,9 @@ func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 	}
 	if context < 0 {
 		return nil, errors.New("context must be non-negative")
+	}
+	if context > maxMCPSourceContext {
+		return nil, fmt.Errorf("context must be at most %d", maxMCPSourceContext)
 	}
 	code, err := server.session.LoadCode(req.Name, context)
 	if err != nil {

@@ -24,7 +24,15 @@ type File struct {
 	// lazily populates line-table caches inside disasm, which is not
 	// safe for concurrent use.
 	mu    sync.Mutex
-	cache map[*Function]cacheEntry
+	cache map[cacheKey]cacheEntry
+}
+
+// cacheKey includes the options: MCP callers choose the source context
+// per call, and a cache keyed by function alone would silently serve
+// whichever context happened to load first.
+type cacheKey struct {
+	fn      *Function
+	context int
 }
 
 // cacheEntry also caches failures, so an erroring function isn't
@@ -65,7 +73,7 @@ func Load(path string) (*File, error) {
 	file := &File{
 		objfile: f,
 		disasm:  dis,
-		cache:   make(map[*Function]cacheEntry),
+		cache:   make(map[cacheKey]cacheEntry),
 	}
 
 	for _, sym := range dis.Syms() {
@@ -94,10 +102,11 @@ func (fn *Function) Load(opts disasm.Options) (*disasm.Code, error) {
 func (file *File) LoadCode(fn *Function, opts disasm.Options) (*disasm.Code, error) {
 	file.mu.Lock()
 	defer file.mu.Unlock()
-	entry, ok := file.cache[fn]
+	key := cacheKey{fn: fn, context: opts.Context}
+	entry, ok := file.cache[key]
 	if !ok {
 		entry.code, entry.err = Disassemble(fn.obj.disasm, fn, opts)
-		file.cache[fn] = entry
+		file.cache[key] = entry
 	}
 	return entry.code, entry.err
 }
