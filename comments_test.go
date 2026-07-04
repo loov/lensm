@@ -171,6 +171,50 @@ func TestCommentStoreSkipsMissingCommentDelete(t *testing.T) {
 	}
 }
 
+func TestCommentStoreMergesConcurrentProcessWrites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "comments.json")
+	first, err := NewCommentStore(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewCommentStore(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each store simulates a separate lensm process holding a stale
+	// full-file snapshot of the same sidecar.
+	if err := first.SetAsm("main.add", CommentViewGoAsm, 0x1000, "from first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.SetAsm("main.add", CommentViewGoAsm, 0x2000, "from second"); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := NewCommentStore(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "from first" {
+		t.Fatalf("first process's comment = %q, want it to survive the second save", got)
+	}
+	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x2000); got != "from second" {
+		t.Fatalf("second process's comment = %q", got)
+	}
+
+	// A deletion must not be resurrected by the other process's stale copy.
+	if err := first.SetAsm("main.add", CommentViewGoAsm, 0x2000, ""); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err = NewCommentStore(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x2000); got != "" {
+		t.Fatalf("deleted comment resurrected: %q", got)
+	}
+}
+
 func TestCommentStoreRollsBackFailedSave(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "comments.json")

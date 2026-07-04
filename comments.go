@@ -50,6 +50,11 @@ type CommentStore struct {
 	path    string
 	binary  string
 	records map[string]CommentRecord
+	// touched marks keys mutated since the last sync with the file;
+	// saves merge the on-disk state for all other keys, so another lensm
+	// process writing the same sidecar loses only conflicting edits to
+	// the same record, not its whole set of comments.
+	touched map[string]bool
 	// dirty marks in-memory changes not yet written by Flush.
 	dirty bool
 	// preserved holds records this version doesn't understand (e.g. views
@@ -70,6 +75,7 @@ func NewCommentStore(path, binaryPath string) (*CommentStore, error) {
 		path:    path,
 		binary:  binaryPath,
 		records: map[string]CommentRecord{},
+		touched: map[string]bool{},
 	}
 	if path == "" {
 		return store, nil
@@ -125,9 +131,10 @@ func (store *CommentStore) set(coord CommentCoord, text string, persist bool) er
 	key := store.key(coord)
 	existing, exists := store.records[key]
 	if text == "" {
-		if !exists {
-			return nil
-		}
+		// Even when the record isn't in memory it may exist on disk,
+		// written by another process sharing the sidecar; fall through so
+		// the deletion is recorded and the next save drops it instead of
+		// re-adopting it.
 		delete(store.records, key)
 	} else {
 		coord = store.normalize(coord)
@@ -140,6 +147,8 @@ func (store *CommentStore) set(coord CommentCoord, text string, persist bool) er
 			UpdatedAt:    time.Now().UTC(),
 		}
 	}
+	wasTouched := store.touched[key]
+	store.touched[key] = true
 	wasDirty := store.dirty
 	store.dirty = true
 	if !persist {
@@ -151,6 +160,9 @@ func (store *CommentStore) set(coord CommentCoord, text string, persist bool) er
 			store.records[key] = existing
 		} else {
 			delete(store.records, key)
+		}
+		if !wasTouched {
+			delete(store.touched, key)
 		}
 		store.dirty = wasDirty
 		return err
@@ -286,11 +298,21 @@ func (store *CommentStore) saveLocked() error {
 	if store.path == "" {
 		return nil
 	}
+	store.mergeExternalLocked()
 	records := make([]CommentRecord, 0, len(store.records))
 	for _, rec := range store.records {
 		records = append(records, rec)
 	}
 	sortCommentRecords(records)
+
+	// Don't create a file just to record that nothing exists, e.g. after
+	// deleting a comment that was never saved.
+	if len(records) == 0 && len(store.preserved) == 0 {
+		if _, err := os.Stat(store.path); errors.Is(err, os.ErrNotExist) {
+			clear(store.touched)
+			return nil
+		}
+	}
 
 	comments := make([]json.RawMessage, 0, len(records)+len(store.preserved))
 	for _, rec := range records {
@@ -315,7 +337,64 @@ func (store *CommentStore) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(store.path), 0o755); err != nil {
 		return err
 	}
-	return atomicWriteFile(store.path, data, 0o644)
+	if err := atomicWriteFile(store.path, data, 0o644); err != nil {
+		return err
+	}
+	// The in-memory state now matches the file again.
+	clear(store.touched)
+	return nil
+}
+
+// mergeExternalLocked folds records another lensm process wrote to the
+// sidecar into the in-memory store before a full-file rewrite. Keys
+// mutated locally since the last sync win; everything else — additions,
+// edits, and deletions from the other process — is adopted, so two
+// processes sharing a sidecar lose at most conflicting edits to the
+// same record instead of each other's whole comment sets.
+func (store *CommentStore) mergeExternalLocked() {
+	data, err := os.ReadFile(store.path)
+	if err != nil {
+		return // nothing on disk to merge
+	}
+	var disk commentsDiskFile
+	if err := json.Unmarshal(data, &disk); err != nil {
+		return
+	}
+	if disk.Version != 0 && disk.Version != commentsFileVersion {
+		return
+	}
+
+	merged := make(map[string]CommentRecord, len(store.records))
+	for key, rec := range store.records {
+		if store.touched[key] {
+			merged[key] = rec
+		}
+	}
+	store.preserved = nil
+	for _, raw := range disk.Comments {
+		var rec CommentRecord
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			store.preserved = append(store.preserved, raw)
+			continue
+		}
+		if rec.Binary == "" {
+			rec.Binary = firstNonEmpty(disk.Binary, store.binary)
+		}
+		rec.PCHex = commentPCHex(rec.CommentCoord)
+		if err := rec.CommentCoord.validate(); err != nil {
+			store.preserved = append(store.preserved, raw)
+			continue
+		}
+		if rec.Text == "" {
+			continue
+		}
+		key := store.key(rec.CommentCoord)
+		if store.touched[key] {
+			continue
+		}
+		merged[key] = rec
+	}
+	store.records = merged
 }
 
 func (store *CommentStore) normalize(coord CommentCoord) CommentCoord {

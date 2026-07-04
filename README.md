@@ -67,6 +67,11 @@ Go source, Go assembly and native assembly, and reading or writing comments.
 By default comments are stored in a sidecar file named
 `<executable>.lensm-comments.json`.
 
+When the GUI and a separate `lensm mcp` process write the same sidecar,
+saves merge per comment: each process's additions, edits, and deletions
+survive, and only conflicting edits to the same comment resolve to the
+last writer.
+
 Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
 
 ## Why?
