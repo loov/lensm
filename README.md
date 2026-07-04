@@ -26,7 +26,7 @@ go build -tags nox11 -o lensm .
 ```
 
 Run the program with an executable path, or start it without arguments
-and load an executable from the top bar. On macOS, use Browse to select
+and load an executable from the top bar. On macOS, use Choose... to select
 the executable with the native Finder file dialog. The function filter is
 available inside the UI. `-watch` allows to automatically reload the
 executable and information when it changes.
