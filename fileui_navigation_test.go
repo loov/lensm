@@ -52,3 +52,41 @@ func TestFileUINavigationBackAndForward(t *testing.T) {
 		t.Fatalf("active tab after Forward = %q", got)
 	}
 }
+
+func TestFileUIPreviewTab(t *testing.T) {
+	functions := []disasm.Func{
+		navigationTestFunc("main.A"),
+		navigationTestFunc("main.B"),
+		navigationTestFunc("main.C"),
+	}
+	theme := material.NewTheme()
+	ui := &FileUI{
+		Theme:     theme,
+		File:      navigationTestFile{funcs: functions},
+		Funcs:     NewFilterList[disasm.Func](theme),
+		ActiveTab: -1,
+	}
+	ui.Navigation.Reset()
+	ui.Funcs.SetItems(functions)
+
+	// Browsing the list only ever keeps a single preview tab.
+	ui.previewTab(functions[0])
+	ui.previewTab(functions[1])
+	ui.previewTab(functions[2])
+	if len(ui.CodeTabs) != 1 {
+		t.Fatalf("preview browsing tabs = %d, want 1", len(ui.CodeTabs))
+	}
+	if got := ui.activeTab().Name; got != "main.C" {
+		t.Fatalf("preview tab name = %q", got)
+	}
+
+	// Clicking the tab keeps it; the next preview opens a second tab.
+	ui.selectTab(0)
+	if ui.CodeTabs[0].Preview {
+		t.Fatalf("tab still preview after selectTab")
+	}
+	ui.previewTab(functions[0])
+	if len(ui.CodeTabs) != 2 {
+		t.Fatalf("tabs after keeping = %d, want 2", len(ui.CodeTabs))
+	}
+}

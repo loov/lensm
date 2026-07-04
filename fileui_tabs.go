@@ -12,11 +12,12 @@ import (
 )
 
 type CodeTab struct {
-	Name  string
-	Func  disasm.Func
-	Code  CodeUI
-	Tab   widget.Clickable
-	Close widget.Clickable
+	Name    string
+	Func    disasm.Func
+	Code    CodeUI
+	Preview bool
+	Tab     widget.Clickable
+	Close   widget.Clickable
 }
 
 func (ui *FileUI) activeTab() *CodeTab {
@@ -34,19 +35,64 @@ func (ui *FileUI) activeCode() *CodeUI {
 	return &tab.Code
 }
 
-func (ui *FileUI) appendCodeTab(fn disasm.Func) *CodeTab {
-	if fn == nil {
-		return nil
-	}
-	tab := &CodeTab{
-		Name: fn.Name(),
-		Func: fn,
-	}
+func (ui *FileUI) loadTabCode(tab *CodeTab, fn disasm.Func) {
+	tab.Name = fn.Name()
+	tab.Func = fn
+	tab.Code = CodeUI{}
 	tab.Code.Code, ui.LoadError = fn.Load(ui.loadOptions())
 	tab.Code.SelectedAsm = -1
 	tab.Code.SelectedView = CodeViewGoAsm
 	tab.Code.ResetScroll()
+}
+
+func (ui *FileUI) appendCodeTab(fn disasm.Func) *CodeTab {
+	if fn == nil {
+		return nil
+	}
+	tab := &CodeTab{}
+	ui.loadTabCode(tab, fn)
 	ui.CodeTabs = append(ui.CodeTabs, tab)
+	return tab
+}
+
+// previewIndex returns the index of the single preview tab, or -1.
+func (ui *FileUI) previewIndex() int {
+	for i, tab := range ui.CodeTabs {
+		if tab.Preview {
+			return i
+		}
+	}
+	return -1
+}
+
+// previewTab shows fn in a single reusable preview tab. Browsing the function
+// list (keyboard up/down or clicking a name) replaces the preview in place
+// instead of piling up permanent tabs. Clicking the tab keeps it open, see
+// selectTab, which clears Preview.
+func (ui *FileUI) previewTab(fn disasm.Func) *CodeTab {
+	if fn == nil {
+		return nil
+	}
+	name := fn.Name()
+	tab := ui.findCodeTab(name, fn)
+	if tab == nil {
+		if slot := ui.previewIndex(); slot >= 0 {
+			tab = ui.CodeTabs[slot]
+			ui.loadTabCode(tab, fn)
+			ui.ActiveTab = slot
+		} else {
+			tab = ui.appendCodeTab(fn)
+			if tab == nil {
+				return nil
+			}
+			ui.ActiveTab = len(ui.CodeTabs) - 1
+		}
+		tab.Preview = true
+	}
+	ui.selectFuncByName(name)
+	ui.commentKey = ""
+	ui.recordNavigation(name)
+	ui.saveSessionState()
 	return tab
 }
 
@@ -75,6 +121,7 @@ func (ui *FileUI) openTab(fn disasm.Func, next bool) *CodeTab {
 		}
 		ui.ActiveTab = index
 	}
+	tab.Preview = false
 	ui.selectFuncByName(name)
 	ui.commentKey = ""
 	ui.recordNavigation(name)
@@ -100,6 +147,7 @@ func (ui *FileUI) selectTab(index int) {
 		return
 	}
 	ui.ActiveTab = index
+	ui.CodeTabs[index].Preview = false
 	ui.commentKey = ""
 	ui.selectFuncByName(ui.CodeTabs[index].Name)
 	ui.recordNavigation(ui.CodeTabs[index].Name)
@@ -207,6 +255,9 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors UIColors, tab *CodeTa
 					label.Color = colors.Text
 					if active {
 						label.Font.Weight = font.Black
+					}
+					if tab.Preview {
+						label.Font.Style = font.Italic
 					}
 					dims := layout.W.Layout(gtx, label.Layout)
 					return layout.Dimensions{Size: size, Baseline: dims.Baseline}

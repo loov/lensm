@@ -631,7 +631,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 	if active == nil || !active.Loaded() || active.Name != ui.Funcs.Selected {
 		selected := ui.Funcs.SelectedItem
 		if selected != nil {
-			ui.openTab(selected, false)
+			ui.previewTab(selected)
 		}
 	}
 
@@ -755,7 +755,7 @@ func (ui *FileUI) saveSessionState() {
 
 	openTabs := make([]string, 0, len(ui.CodeTabs))
 	for _, tab := range ui.CodeTabs {
-		if tab.Name != "" {
+		if tab.Name != "" && !tab.Preview {
 			openTabs = append(openTabs, tab.Name)
 		}
 	}
