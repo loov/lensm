@@ -51,7 +51,9 @@ plutil -lint "$contents/Info.plist"
   CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o "$contents/MacOS/lensm" .
 )
 
-codesign --force --deep --sign - "$app"
+# --deep is deprecated for signing (macOS 13+); sign nested code first.
+codesign --force --sign - "$contents/MacOS/lensm"
+codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 
 image="$work/image"
