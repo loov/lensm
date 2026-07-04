@@ -23,7 +23,7 @@ jobs:
       - run: go test ./...
 
   build-macos:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || (github.ref_type == 'tag' && startsWith(github.ref_name, 'v'))
     needs: test
     name: macOS ${{ matrix.goarch }}
     strategy:
