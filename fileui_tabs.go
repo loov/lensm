@@ -142,6 +142,15 @@ func (ui *FileUI) findCodeTab(name string, fn disasm.Func) *CodeTab {
 	return nil
 }
 
+// keepActiveTab promotes the active preview tab to a permanent one, called
+// when the user acts on the tab's content.
+func (ui *FileUI) keepActiveTab() {
+	if tab := ui.activeTab(); tab != nil && tab.Preview {
+		tab.Preview = false
+		ui.saveSessionState()
+	}
+}
+
 func (ui *FileUI) selectTab(index int) {
 	if !InRange(index, len(ui.CodeTabs)) {
 		return

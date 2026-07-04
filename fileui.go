@@ -699,7 +699,8 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 							return CodeUIStyle{
 								CodeUI: code,
 
-								TryOpen: ui.tryOpen,
+								TryOpen:    ui.tryOpen,
+								OnInteract: ui.keepActiveTab,
 								CopyText: func(gtx layout.Context, text string) {
 									ui.writeClipboardText(gtx, text, "Copied selection")
 								},

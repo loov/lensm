@@ -119,6 +119,9 @@ type CodeUIStyle struct {
 
 	TryOpen  func(gtx layout.Context, funcname string)
 	CopyText func(gtx layout.Context, text string)
+	// OnInteract fires on a primary press in the content, used to keep a
+	// preview tab open once the user acts on it.
+	OnInteract func()
 
 	// Comments backs inline comment display and editing. Reads go through
 	// the store directly; SetComment records an edit (buffered write plus
@@ -363,6 +366,9 @@ func (ui CodeUIStyle) handleInput(gtx layout.Context, c codeColumns) (mouseClick
 			case pointer.Press:
 				ui.mousePosition = ev.Position
 				if ev.Buttons.Contain(pointer.ButtonPrimary) {
+					if ui.OnInteract != nil {
+						ui.OnInteract()
+					}
 					view, line, selectable := selectionAt(ev.Position)
 					if selectable {
 						ui.Selection.Begin(view, line, ev.Modifiers.Contain(key.ModShift))

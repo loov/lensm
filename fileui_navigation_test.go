@@ -89,4 +89,13 @@ func TestFileUIPreviewTab(t *testing.T) {
 	if len(ui.CodeTabs) != 2 {
 		t.Fatalf("tabs after keeping = %d, want 2", len(ui.CodeTabs))
 	}
+
+	// Acting on the preview content keeps it too.
+	if !ui.activeTab().Preview {
+		t.Fatalf("expected active tab to be preview")
+	}
+	ui.keepActiveTab()
+	if ui.activeTab().Preview {
+		t.Fatalf("keepActiveTab did not clear Preview")
+	}
 }
