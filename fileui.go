@@ -461,6 +461,7 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	filters := []event.Filter{
 		key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
+		key.Filter{Required: key.ModShortcut, Name: key.Name("W")},
 	}
 	if !editorFocused {
 		filters = append(filters,
@@ -482,6 +483,8 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			ui.navigateBack()
 		case key.NameRightArrow, key.Name("]"):
 			ui.navigateForward()
+		case key.Name("W"):
+			ui.closeTab(ui.ActiveTab)
 		}
 	}
 	for ui.BrowseButton.Clicked(gtx) {
