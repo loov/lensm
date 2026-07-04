@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root date="2024-01-01">
+  <extension name="BASE">
+    <instruction asm="ADD" summary="Add" category="BINARY" extension="BASE" iform="ADD_GPR32_GPR32">
+      <description>Adds the destination operand and the source operand and stores the result in the destination operand.</description>
+      <syntax>ADD r/m32, r32</syntax>
+      <syntax att="1">add %r32, %r/m32</syntax>
+      <operand idx="1" type="reg" width="32" r="1" w="1">r/m32</operand>
+      <operand idx="2" type="reg" width="32" r="1">r32</operand>
+      <architecture name="SKL">
+        <measurement TP="0.25" latency="1"/>
+      </architecture>
+    </instruction>
+    <instruction asm="ADD" summary="Add" category="BINARY" extension="BASE" iform="ADD_GPR8_IMM8">
+      <description>Adds the destination operand and the source operand and stores the result in the destination operand.</description>
+      <syntax>ADD r/m8, imm8</syntax>
+      <operand idx="1" type="reg" width="8" r="1" w="1">r/m8</operand>
+      <operand idx="2" type="imm" width="8">imm8</operand>
+      <architecture name="ICL">
+        <measurement TP="0.25" latency="1"/>
+      </architecture>
+    </instruction>
+  </extension>
+  <extension name="SSE4">
+    <instruction asm="CRC32" summary="Accumulate CRC32 value" category="STTNI" extension="SSE4">
+      <description>Starting with an initial value in the first operand, accumulates a CRC32 value for the second operand and stores the result in the destination operand.</description>
+      <syntax>CRC32 r32, r/m8</syntax>
+      <operand idx="1" type="reg" width="32" r="1" w="1">r32</operand>
+      <operand idx="2" type="reg" width="8" r="1">r/m8</operand>
+      <architecture name="SKL">
+        <measurement TP="1" latency="3"/>
+      </architecture>
+    </instruction>
+  </extension>
+</root>

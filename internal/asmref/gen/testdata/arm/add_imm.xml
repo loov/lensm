@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<instructionsection id="ADD_addsub_imm" title="ADD (immediate)" type="instruction">
+  <docvars>
+    <docvar key="instr-class" value="general"/>
+  </docvars>
+  <desc>
+    <brief><para>Add (immediate)</para></brief>
+    <authored>
+      <para>Add (immediate) adds a register value and an optionally-shifted immediate value, and writes the result to the destination register.</para>
+      <para>This second paragraph must be ignored.</para>
+    </authored>
+  </desc>
+  <classes>
+    <iclass name="ADD" id="iclass_add">
+      <docvars>
+        <docvar key="mnemonic" value="ADD"/>
+      </docvars>
+      <regdiagram form="32-bit">
+        <box hibit="31" name="sf"><c>1</c></box>
+        <box hibit="30" name="op"><c>0</c></box>
+      </regdiagram>
+      <encoding name="ADD_32_addsub_imm" oneofinclass="1">
+        <docvars>
+          <docvar key="mnemonic" value="ADD"/>
+        </docvars>
+        <asmtemplate><text>ADD  </text><a link="wd" hover="Is the 32-bit name of the general-purpose destination register">&lt;Wd&gt;</a><text>, </text><a link="wn" hover="Is the 32-bit name of the source register">&lt;Wn&gt;</a><text>, #</text><a link="imm" hover="Is an unsigned immediate, in the range 0 to 4095">&lt;imm&gt;</a></asmtemplate>
+      </encoding>
+    </iclass>
+  </classes>
+  <ps_section howmany="1">
+    <ps name="aarch64/instrs/integer/arithmetic/add" mylink="execute" enclabels="" sections="1" secttype="noheading">
+      <pstext mayhavelinks="1" section="Execute" rep_section="execute">if d == 31 then SP[] = result; else X[d] = result;</pstext>
+    </ps>
+  </ps_section>
+</instructionsection>

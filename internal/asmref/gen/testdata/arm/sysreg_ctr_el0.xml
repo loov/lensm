@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Must be skipped: sysreg_ prefix (system register description, not an instruction). -->
+<instructionsection id="CTR_EL0" title="CTR_EL0, Cache Type Register" type="register">
+  <classes>
+    <iclass name="MRS"><docvars><docvar key="mnemonic" value="SHOULDNOTAPPEAR"/></docvars>
+      <encoding><asmtemplate><text>MRS SHOULDNOTAPPEAR</text></asmtemplate></encoding>
+    </iclass>
+  </classes>
+</instructionsection>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<instructionsection id="LDR_imm_gen" title="LDR (immediate)" type="instruction">
+  <desc>
+    <brief><para>Load register (immediate)</para></brief>
+    <authored>
+      <para>Load Register (immediate) loads a word or doubleword from memory and writes it to a register.</para>
+    </authored>
+  </desc>
+  <classes>
+    <iclass name="LDR" id="iclass_ldr_post">
+      <docvars>
+        <docvar key="mnemonic" value="LDR"/>
+      </docvars>
+      <regdiagram form="32-bit"><box hibit="31" name="size"><c>1</c></box></regdiagram>
+      <encoding name="LDR_32_ldst_immpost" oneofinclass="1">
+        <docvars><docvar key="mnemonic" value="LDR"/></docvars>
+        <asmtemplate><text>LDR  </text><a link="wt" hover="Is the 32-bit name of the general-purpose register to be loaded">&lt;Wt&gt;</a><text>, [</text><a link="xn" hover="Is the 64-bit name of the base register">&lt;Xn|SP&gt;</a><text>], #</text><a link="simm" hover="Is the signed immediate byte offset">&lt;simm&gt;</a></asmtemplate>
+      </encoding>
+    </iclass>
+    <iclass name="LDR" id="iclass_ldr_pre">
+      <docvars>
+        <docvar key="mnemonic" value="LDR"/>
+      </docvars>
+      <encoding name="LDR_32_ldst_immpre" oneofinclass="1">
+        <docvars><docvar key="mnemonic" value="LDR"/></docvars>
+        <asmtemplate><text>LDR  </text><a link="wt" hover="Is the 32-bit name of the general-purpose register to be loaded">&lt;Wt&gt;</a><text>, [</text><a link="xn" hover="Is the 64-bit name of the base register">&lt;Xn|SP&gt;</a><text>, #</text><a link="simm" hover="Is the signed immediate byte offset">&lt;simm&gt;</a><text>]!</text></asmtemplate>
+      </encoding>
+    </iclass>
+  </classes>
+</instructionsection>

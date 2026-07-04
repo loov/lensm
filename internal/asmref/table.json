@@ -1,0 +1,56 @@
+{
+  "ABS": {
+    "brief": "ABS (vector)",
+    "description": "Absolute value (vector) computes the absolute value of each vector element and writes the result to the destination vector.",
+    "syntax": [
+      "ABS <Vd>, <Vn>"
+    ],
+    "operands": {
+      "<Vd>": "Is the name of the SIMD&FP destination register",
+      "<Vn>": "Is the name of the SIMD&FP source register"
+    }
+  },
+  "ADD": {
+    "brief": "ADD (immediate)",
+    "description": "Add (immediate) adds a register value and an optionally-shifted immediate value, and writes the result to the destination register.",
+    "syntax": [
+      "ADD <Wd>, <Wn>, #<imm>",
+      "ADD r/m32, r32",
+      "add %r32, %r/m32",
+      "ADD r/m8, imm8"
+    ],
+    "operands": {
+      "<Wd>": "Is the 32-bit name of the general-purpose destination register",
+      "<Wn>": "Is the 32-bit name of the source register",
+      "<imm>": "Is an unsigned immediate, in the range 0 to 4095",
+      "imm8": "8-bit immediate",
+      "r/m32": "32-bit register, read+written",
+      "r/m8": "8-bit register, read+written",
+      "r32": "32-bit register, read"
+    }
+  },
+  "CRC32": {
+    "brief": "Accumulate CRC32 value",
+    "description": "Starting with an initial value in the first operand, accumulates a CRC32 value for the second operand and stores the result in the destination operand.",
+    "syntax": [
+      "CRC32 r32, r/m8"
+    ],
+    "operands": {
+      "r/m8": "8-bit register, read",
+      "r32": "32-bit register, read+written"
+    }
+  },
+  "LDR": {
+    "brief": "LDR (immediate)",
+    "description": "Load Register (immediate) loads a word or doubleword from memory and writes it to a register.",
+    "syntax": [
+      "LDR <Wt>, [<Xn|SP>], #<simm>",
+      "LDR <Wt>, [<Xn|SP>, #<simm>]!"
+    ],
+    "operands": {
+      "<Wt>": "Is the 32-bit name of the general-purpose register to be loaded",
+      "<Xn|SP>": "Is the 64-bit name of the base register",
+      "<simm>": "Is the signed immediate byte offset"
+    }
+  }
+}

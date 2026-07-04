@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Must be skipped: AArch64- prefix (shared pseudocode, not an instruction). -->
+<instructionsection id="shared" title="Shared" type="pseudocode">
+  <classes>
+    <iclass><docvars><docvar key="mnemonic" value="SHOULDNOTAPPEAR"/></docvars>
+      <encoding><asmtemplate><text>SHOULDNOTAPPEAR</text></asmtemplate></encoding>
+    </iclass>
+  </classes>
+</instructionsection>

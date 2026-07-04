@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<instructionsection id="ABS_advsimd" title="ABS (vector)" type="instruction">
+  <desc>
+    <brief><para>Absolute value (vector)</para></brief>
+    <authored>
+      <para>Absolute value (vector) computes the absolute value of each vector element and writes the result to the destination vector.</para>
+    </authored>
+  </desc>
+  <classes>
+    <iclass name="ABS" id="iclass_abs">
+      <docvars><docvar key="mnemonic" value="ABS"/></docvars>
+      <regdiagram form="32-bit"><box hibit="31"><c>0</c></box></regdiagram>
+      <encoding name="ABS_asimdmisc_R" oneofinclass="1">
+        <docvars><docvar key="mnemonic" value="ABS"/></docvars>
+        <asmtemplate><text>ABS  </text><a link="vd" hover="Is the name of the SIMD&amp;FP destination register">&lt;Vd&gt;</a><text>, </text><a link="vn" hover="Is the name of the SIMD&amp;FP source register">&lt;Vn&gt;</a></asmtemplate>
+      </encoding>
+    </iclass>
+  </classes>
+</instructionsection>
