@@ -48,12 +48,12 @@ lensm -watch lensm
 
 Inside the code view:
 
-- follow call targets and use the back/forward buttons (or `Alt+Left/Right`,
-  `Cmd/Ctrl+[` and `Cmd/Ctrl+]`) to navigate between functions;
+- follow call targets and use `Alt+Left/Right` (or `Cmd/Ctrl+[` and
+  `Cmd/Ctrl+]`) to navigate between functions;
 - hover an assembly instruction to see its reference and a simplified
   explanation when Lensm has a matching rule;
 - drag across Go assembly, native assembly, or source lines to select a block,
-  then use `Cmd/Ctrl+C` or the copy button. `Shift` extends a selection and
+  then use `Cmd/Ctrl+C` to copy it. `Shift` extends a selection and
   `Escape` clears it.
 
 Run lensm as an MCP server over stdio:

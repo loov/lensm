@@ -11,8 +11,6 @@ import (
 	"gioui.org/font"
 	"gioui.org/font/gofont"
 	"gioui.org/font/opentype"
-	"gioui.org/layout"
-	"gioui.org/op"
 	"gioui.org/unit"
 )
 
@@ -36,24 +34,6 @@ func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Win
 
 func (windows *Windows) Wait() {
 	windows.active.Wait()
-}
-
-func WidgetWindow(widget layout.Widget) func(*app.Window) error {
-	return func(w *app.Window) error {
-		var ops op.Ops
-		for {
-			e := w.Event()
-			switch e := e.(type) {
-			case app.FrameEvent:
-				gtx := app.NewContext(&ops, e)
-				widget(gtx)
-				e.Frame(gtx.Ops)
-
-			case app.DestroyEvent:
-				return e.Err
-			}
-		}
-	}
 }
 
 func LoadFonts(userfont string) []font.FontFace {
