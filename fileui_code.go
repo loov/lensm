@@ -260,10 +260,7 @@ func (ui CodeUIStyle) columns(gtx layout.Context) codeColumns {
 	minimumCommentWidth := lineHeight * 4
 
 	c.sourceTextLeft = int(source.Min)
-	c.sourceTextWidth = int(source.Max) - c.sourceTextLeft
-	if c.sourceTextWidth < 0 {
-		c.sourceTextWidth = 0
-	}
+	c.sourceTextWidth = max(int(source.Max)-c.sourceTextLeft, 0)
 	c.sourceCommentLeft = c.sourceTextLeft + c.sourceTextWidth*70/100
 	c.sourceCommentWidth = int(source.Max) - c.sourceCommentLeft
 	c.sourceCodeWidth = c.sourceCommentLeft - c.sourceTextLeft - pad/2
@@ -273,15 +270,9 @@ func (ui CodeUIStyle) columns(gtx layout.Context) codeColumns {
 	}
 
 	c.goTextLeft = int(asm.Min) + pad/2
-	goTextWidth := int(asm.Max) - c.goTextLeft
-	if goTextWidth < 0 {
-		goTextWidth = 0
-	}
+	goTextWidth := max(int(asm.Max)-c.goTextLeft, 0)
 	c.nativeTextLeft = int(native.Min)
-	c.nativeTextWidth = int(native.Max) - c.nativeTextLeft
-	if c.nativeTextWidth < 0 {
-		c.nativeTextWidth = 0
-	}
+	c.nativeTextWidth = max(int(native.Max)-c.nativeTextLeft, 0)
 	c.nativeCommentLeft = c.nativeTextLeft + c.nativeTextWidth*62/100
 	c.nativeCommentWidth = int(native.Max) - c.nativeCommentLeft
 	c.nativeInstructionWidth = c.nativeCommentLeft - c.nativeTextLeft - pad/2
@@ -289,14 +280,8 @@ func (ui CodeUIStyle) columns(gtx layout.Context) codeColumns {
 		c.nativeInstructionWidth = c.nativeTextWidth
 		c.nativeCommentWidth = 0
 	}
-	c.commentLeft = c.goTextLeft + goTextWidth*62/100
-	if c.commentLeft < c.goTextLeft {
-		c.commentLeft = c.goTextLeft
-	}
-	c.commentWidth = int(asm.Max) - c.commentLeft
-	if c.commentWidth < 0 {
-		c.commentWidth = 0
-	}
+	c.commentLeft = max(c.goTextLeft+goTextWidth*62/100, c.goTextLeft)
+	c.commentWidth = max(int(asm.Max)-c.commentLeft, 0)
 	c.goInstructionWidth = c.commentLeft - c.goTextLeft - pad/2
 	if c.goInstructionWidth < 0 || c.commentWidth < minimumCommentWidth {
 		c.goInstructionWidth = goTextWidth
@@ -1136,10 +1121,7 @@ func (ui CodeUIStyle) layoutInlineCommentEditor(gtx layout.Context, coord commen
 	}.Layout(ui.Theme, gtx)
 
 	editorLeft := left + prefixWidth
-	editorWidth := width - prefixWidth
-	if editorWidth < 0 {
-		editorWidth = 0
-	}
+	editorWidth := max(width-prefixWidth, 0)
 	stack := op.Offset(image.Pt(editorLeft, top)).Push(gtx.Ops)
 	gtx.Constraints = layout.Exact(image.Pt(editorWidth, lineHeight))
 	editor := material.Editor(ui.Theme, ui.CommentEditor, "comment")

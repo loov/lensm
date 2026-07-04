@@ -17,9 +17,8 @@ func chooseExecutableFile() (string, bool, error) {
 	)
 	out, err := cmd.Output()
 	if err != nil {
-		var exitErr *exec.ExitError
 		msg := err.Error()
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			msg = strings.TrimSpace(string(exitErr.Stderr))
 			if msg == "" {
 				msg = err.Error()

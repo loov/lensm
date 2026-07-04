@@ -2,6 +2,7 @@ package asmhelp
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -458,8 +459,8 @@ func parseNativeMemory(operand string) (base, address string, preIndex bool) {
 
 func addNativeOffset(base, offset string) string {
 	offset = strings.TrimSpace(strings.ReplaceAll(offset, "#", ""))
-	if strings.HasPrefix(offset, "-") {
-		return base + " - " + strings.TrimPrefix(offset, "-")
+	if after, ok := strings.CutPrefix(offset, "-"); ok {
+		return base + " - " + after
 	}
 	return base + " + " + offset
 }
@@ -509,10 +510,8 @@ func knownAssemblyInstructionHelp(arch, mnemonic string, operands []string) (Hel
 	// Resolve exact mnemonics first. Otherwise BLS can be mistaken for BL with
 	// an S size suffix, and similar prefix collisions produce wrong semantics.
 	for _, rule := range asmInstructionRules {
-		for _, prefix := range rule.Prefixes {
-			if mnemonic == prefix {
-				return assemblyHelpFromRule(arch, mnemonic, operands, rule), true
-			}
+		if slices.Contains(rule.Prefixes, mnemonic) {
+			return assemblyHelpFromRule(arch, mnemonic, operands, rule), true
 		}
 	}
 	for _, rule := range asmInstructionRules {
@@ -741,8 +740,8 @@ var plan9Address = regexp.MustCompile(`^([^()]*)\(([^)]+)\)(?:\(([^)]+)\))?$`)
 
 func formatValue(operand string) string {
 	operand = strings.TrimSpace(operand)
-	if strings.HasPrefix(operand, "$") {
-		return strings.TrimPrefix(operand, "$")
+	if after, ok := strings.CutPrefix(operand, "$"); ok {
+		return after
 	}
 	if plan9Address.MatchString(operand) {
 		return "memory[" + formatAddress(operand) + "]"

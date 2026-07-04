@@ -428,7 +428,7 @@ func invalidParams(err error) *rpcError {
 func toolSuccess(value any) mcpToolResult {
 	text, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		text = []byte(fmt.Sprint(value))
+		text = fmt.Append(nil, value)
 	}
 	return mcpToolResult{
 		Content: []mcpTextContent{{

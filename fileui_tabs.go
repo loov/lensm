@@ -152,10 +152,7 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors UIColors) layout.Dim
 		return layout.Dimensions{}
 	}
 
-	height := gtx.Metric.Dp(22)
-	if height < 20 {
-		height = 20
-	}
+	height := max(gtx.Metric.Dp(22), 20)
 	availableWidth := gtx.Constraints.Max.X
 	gtx.Constraints = layout.Exact(image.Pt(availableWidth, height))
 	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
