@@ -64,6 +64,16 @@ func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
 	}
 }
 
+func TestUndecodableInstructionHasNoFallback(t *testing.T) {
+	// Undecodable bytes render as "?" in the Go column.
+	if help, ok := AssemblyInstructionHelp("amd64", "?"); ok {
+		t.Fatalf("unexpected fallback for undecodable instruction: %#v", help)
+	}
+	if help, ok := AssemblyInstructionHelp("amd64", "// pseudo"); ok {
+		t.Fatalf("unexpected fallback for non-mnemonic token: %#v", help)
+	}
+}
+
 func TestUnknownNativeAssemblyInstructionHasNoGoFallback(t *testing.T) {
 	if help, ok := NativeAssemblyInstructionHelp("unknownop %rax"); ok {
 		t.Fatalf("unexpected native fallback: %#v", help)

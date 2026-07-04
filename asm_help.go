@@ -479,10 +479,30 @@ func AssemblyInstructionHelp(arch, text string) (AssemblyHelp, bool) {
 	if help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands); ok {
 		return help, true
 	}
+	if !plausibleMnemonic(mnemonic) {
+		return AssemblyHelp{}, false
+	}
 	return AssemblyHelp{
 		Mnemonic:    mnemonic,
 		Description: "Execute the " + mnemonic + " instruction.",
 	}, true
+}
+
+// plausibleMnemonic reports whether a token looks like an instruction
+// mnemonic. Undecodable bytes render as "?", which must not get an
+// authoritative-sounding "Execute the ? instruction." fallback.
+func plausibleMnemonic(mnemonic string) bool {
+	if r := mnemonic[0]; r < 'A' || r > 'Z' {
+		return false
+	}
+	for _, r := range mnemonic {
+		switch {
+		case 'A' <= r && r <= 'Z', '0' <= r && r <= '9', r == '.', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func knownAssemblyInstructionHelp(arch, mnemonic string, operands []string) (AssemblyHelp, bool) {
