@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"loov.dev/lensm/internal/comments"
 )
 
 const mcpProtocolVersion = "2025-06-18"
@@ -306,7 +307,7 @@ func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 	var req struct {
 		Name string          `json:"name"`
-		View CommentView     `json:"view"`
+		View comments.View     `json:"view"`
 		File string          `json:"file"`
 		Line int             `json:"line"`
 		PC   json.RawMessage `json:"pc"`
@@ -326,19 +327,19 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 		return nil, err
 	}
 
-	var coord CommentCoord
+	var coord comments.Coord
 	switch req.View {
-	case CommentViewSource:
+	case comments.ViewSource:
 		if !sourceLineExists(code, req.File, req.Line) {
 			return nil, fmt.Errorf("source line %s:%d is not present in function %q", req.File, req.Line, req.Name)
 		}
-		coord = CommentCoord{
+		coord = comments.Coord{
 			Function: req.Name,
-			View:     CommentViewSource,
+			View:     comments.ViewSource,
 			File:     req.File,
 			Line:     req.Line,
 		}
-	case CommentViewGoAsm, CommentViewNativeAsm:
+	case comments.ViewGoAsm, comments.ViewNativeAsm:
 		pc, ok, err := parsePC(req.PC)
 		if err != nil {
 			return nil, err
@@ -347,9 +348,9 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 			return nil, errors.New("pc is required for asm comments")
 		}
 		if !asmPCExists(code, req.View, pc) {
-			return nil, fmt.Errorf("pc %s is not present in %s for function %q", formatPC(pc), req.View, req.Name)
+			return nil, fmt.Errorf("pc %s is not present in %s for function %q", comments.FormatPC(pc), req.View, req.Name)
 		}
-		coord = CommentCoord{
+		coord = comments.Coord{
 			Function: req.Name,
 			View:     req.View,
 			PC:       pc,
@@ -361,7 +362,7 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 	if err := server.session.Comments.Set(coord, req.Text); err != nil {
 		return nil, err
 	}
-	coord = server.session.Comments.normalize(coord)
+	coord = server.session.Comments.Normalize(coord)
 	return map[string]any{
 		"comment": coord,
 		"deleted": strings.TrimSpace(req.Text) == "",
@@ -372,14 +373,14 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 func (server *mcpServer) toolGetComments(args json.RawMessage) (any, error) {
 	var req struct {
 		Name string      `json:"name"`
-		View CommentView `json:"view"`
+		View comments.View `json:"view"`
 	}
 	if err := decodeJSON(args, &req); err != nil {
 		return nil, err
 	}
 	if req.View != "" {
 		switch req.View {
-		case CommentViewSource, CommentViewGoAsm, CommentViewNativeAsm:
+		case comments.ViewSource, comments.ViewGoAsm, comments.ViewNativeAsm:
 		default:
 			return nil, fmt.Errorf("unsupported view %q", req.View)
 		}
@@ -486,9 +487,9 @@ func mcpTools() []mcpTool {
 			InputSchema: objectSchema(map[string]any{
 				"name": stringSchema("Exact function name."),
 				"view": enumSchema("Code view for the comment.", []string{
-					string(CommentViewSource),
-					string(CommentViewGoAsm),
-					string(CommentViewNativeAsm),
+					string(comments.ViewSource),
+					string(comments.ViewGoAsm),
+					string(comments.ViewNativeAsm),
 				}),
 				"file": stringSchema("Source file path. Required for source comments."),
 				"line": integerSchema("Source line number. Required for source comments."),
@@ -503,9 +504,9 @@ func mcpTools() []mcpTool {
 			InputSchema: objectSchema(map[string]any{
 				"name": stringSchema("Optional exact function name."),
 				"view": enumSchema("Optional code view filter.", []string{
-					string(CommentViewSource),
-					string(CommentViewGoAsm),
-					string(CommentViewNativeAsm),
+					string(comments.ViewSource),
+					string(comments.ViewGoAsm),
+					string(comments.ViewNativeAsm),
 				}),
 			}, nil),
 		},

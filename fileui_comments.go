@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"loov.dev/lensm/internal/disasm"
 	"os"
+	"loov.dev/lensm/internal/comments"
 )
 
 func (ui *FileUI) loadCommentsForPath(exePath string) {
@@ -13,14 +14,14 @@ func (ui *FileUI) loadCommentsForPath(exePath string) {
 	}
 	commentsPath := ui.Config.CommentsPath
 	if commentsPath == "" {
-		commentsPath = defaultCommentPath(exePath)
+		commentsPath = comments.DefaultPath(exePath)
 	}
-	comments, err := NewCommentStore(commentsPath, exePath)
+	store, err := comments.Open(commentsPath, exePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "unable to load comments from %q: %v\n", commentsPath, err)
-		comments, _ = NewCommentStore("", exePath)
+		store, _ = comments.Open("", exePath)
 	}
-	ui.Comments = comments
+	ui.Comments = store
 }
 
 func (ui *FileUI) commentKeyFor(inst disasm.Inst) string {
@@ -36,7 +37,7 @@ func (ui *FileUI) commentKeyForCode(code *disasm.Code, inst disasm.Inst) string 
 		return ""
 	}
 	// The view is prefixed by layoutInlineAsmCommentEditor.
-	return code.Name + ":" + formatPC(inst.PC)
+	return code.Name + ":" + comments.FormatPC(inst.PC)
 }
 
 func (ui *FileUI) commentFor(inst disasm.Inst) string {
@@ -44,7 +45,7 @@ func (ui *FileUI) commentFor(inst disasm.Inst) string {
 	if code == nil || !code.Loaded() {
 		return ""
 	}
-	return ui.Comments.ForAsm(code.Name, CommentViewGoAsm, inst.PC)
+	return ui.Comments.ForAsm(code.Name, comments.ViewGoAsm, inst.PC)
 }
 
 func (ui *FileUI) nativeCommentFor(inst disasm.Inst) string {
@@ -52,7 +53,7 @@ func (ui *FileUI) nativeCommentFor(inst disasm.Inst) string {
 	if code == nil || !code.Loaded() {
 		return ""
 	}
-	return ui.Comments.ForAsm(code.Name, CommentViewNativeAsm, inst.PC)
+	return ui.Comments.ForAsm(code.Name, comments.ViewNativeAsm, inst.PC)
 }
 
 func (ui *FileUI) sourceCommentFor(file string, line int) string {
@@ -68,16 +69,16 @@ func (ui *FileUI) setCommentForInst(inst disasm.Inst, text string) {
 	if code == nil || !code.Loaded() {
 		return
 	}
-	ui.setBufferedComment(CommentCoord{
+	ui.setBufferedComment(comments.Coord{
 		Function: code.Name,
-		View:     CommentViewGoAsm,
+		View:     comments.ViewGoAsm,
 		PC:       inst.PC,
 	}, text)
 }
 
 // setBufferedComment records the comment in memory and schedules the
 // disk write, so typing doesn't rewrite the sidecar per keystroke.
-func (ui *FileUI) setBufferedComment(coord CommentCoord, text string) {
+func (ui *FileUI) setBufferedComment(coord comments.Coord, text string) {
 	if err := ui.Comments.SetBuffered(coord, text); err != nil {
 		ui.saveError = "comment not saved: " + err.Error()
 		fmt.Fprintln(os.Stderr, err)
@@ -91,9 +92,9 @@ func (ui *FileUI) setNativeCommentForInst(inst disasm.Inst, text string) {
 	if code == nil || !code.Loaded() {
 		return
 	}
-	ui.setBufferedComment(CommentCoord{
+	ui.setBufferedComment(comments.Coord{
 		Function: code.Name,
-		View:     CommentViewNativeAsm,
+		View:     comments.ViewNativeAsm,
 		PC:       inst.PC,
 	}, text)
 }
@@ -103,9 +104,9 @@ func (ui *FileUI) setSourceCommentForLine(file string, line int, text string) {
 	if code == nil || !code.Loaded() {
 		return
 	}
-	ui.setBufferedComment(CommentCoord{
+	ui.setBufferedComment(comments.Coord{
 		Function: code.Name,
-		View:     CommentViewSource,
+		View:     comments.ViewSource,
 		File:     file,
 		Line:     line,
 	}, text)

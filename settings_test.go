@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"loov.dev/lensm/internal/atomicfile"
 )
 
 func TestAtomicWriteFileReplacesContentsAndCleansTemporaryFile(t *testing.T) {
@@ -13,7 +14,7 @@ func TestAtomicWriteFileReplacesContentsAndCleansTemporaryFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := atomicWriteFile(path, []byte("new"), 0o644); err != nil {
+	if err := atomicfile.Write(path, []byte("new"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)

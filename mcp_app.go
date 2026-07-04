@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"loov.dev/lensm/internal/comments"
 )
 
 func (ui *FileUI) startMCP() {
@@ -98,11 +99,11 @@ func (server *AppMCPServer) URL() string {
 	return server.url
 }
 
-func (server *AppMCPServer) SetPath(path string, comments *CommentStore) {
+func (server *AppMCPServer) SetPath(path string, store *comments.Store) {
 	if server == nil {
 		return
 	}
-	path = cleanPath(path)
+	path = comments.CleanPath(path)
 
 	server.mu.Lock()
 	server.generation++
@@ -121,7 +122,7 @@ func (server *AppMCPServer) SetPath(path string, comments *CommentStore) {
 	}
 
 	go func() {
-		session, err := NewSessionWithComments(path, commentsPath, comments)
+		session, err := NewSessionWithComments(path, commentsPath, store)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to load MCP session for %q: %v\n", path, err)
 			server.replaceSession(generation, nil, err)

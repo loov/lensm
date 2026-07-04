@@ -6,38 +6,39 @@ import (
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/goobj"
 	"loov.dev/lensm/internal/wasmobj"
+	"loov.dev/lensm/internal/comments"
 )
 
 type Session struct {
 	Path     string
 	File     disasm.File
-	Comments *CommentStore
+	Comments *comments.Store
 }
 
 func NewSession(path string, commentsPath string) (*Session, error) {
 	return NewSessionWithComments(path, commentsPath, nil)
 }
 
-func NewSessionWithComments(path string, commentsPath string, comments *CommentStore) (*Session, error) {
+func NewSessionWithComments(path string, commentsPath string, store *comments.Store) (*Session, error) {
 	file, err := loadDisasmFile(path)
 	if err != nil {
 		return nil, err
 	}
-	if comments == nil {
+	if store == nil {
 		if commentsPath == "" {
-			commentsPath = defaultCommentPath(path)
+			commentsPath = comments.DefaultPath(path)
 		}
 		var err error
-		comments, err = NewCommentStore(commentsPath, path)
+		store, err = comments.Open(commentsPath, path)
 		if err != nil {
 			_ = file.Close()
 			return nil, err
 		}
 	}
 	return &Session{
-		Path:     cleanPath(path),
+		Path:     comments.CleanPath(path),
 		File:     file,
-		Comments: comments,
+		Comments: store,
 	}, nil
 }
 

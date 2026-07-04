@@ -1,6 +1,9 @@
 package main
 
-import "loov.dev/lensm/internal/disasm"
+import (
+	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/comments"
+)
 
 type LineRangeDTO struct {
 	From int `json:"from"`
@@ -14,7 +17,7 @@ type FunctionCodeDTO struct {
 	Source    []SourceFileDTO `json:"source"`
 	GoAsm     []AsmLineDTO    `json:"go_asm"`
 	NativeAsm []AsmLineDTO    `json:"native_asm"`
-	Comments  []CommentRecord `json:"comments,omitempty"`
+	Comments  []comments.Record `json:"comments,omitempty"`
 }
 
 type SourceFileDTO struct {
@@ -50,16 +53,16 @@ type AsmLineDTO struct {
 	Comment   string `json:"comment,omitempty"`
 }
 
-func BuildFunctionCodeDTO(binary string, code *disasm.Code, comments *CommentStore) FunctionCodeDTO {
+func BuildFunctionCodeDTO(binary string, code *disasm.Code, store *comments.Store) FunctionCodeDTO {
 	if code == nil {
-		return FunctionCodeDTO{Binary: cleanPath(binary)}
+		return FunctionCodeDTO{Binary: comments.CleanPath(binary)}
 	}
 
 	dto := FunctionCodeDTO{
-		Binary:   cleanPath(binary),
+		Binary:   comments.CleanPath(binary),
 		Name:     code.Name,
 		File:     code.File,
-		Comments: comments.Filter(code.Name, ""),
+		Comments: store.Filter(code.Name, ""),
 	}
 	for _, src := range code.Source {
 		srcDTO := SourceFileDTO{File: src.File}
@@ -78,8 +81,8 @@ func BuildFunctionCodeDTO(binary string, code *disasm.Code, comments *CommentSto
 				if off < len(block.Related) {
 					lineDTO.Related = lineRangesDTO(block.Related[off])
 				}
-				if comments != nil {
-					lineDTO.Comment = comments.ForSource(code.Name, src.File, line)
+				if store != nil {
+					lineDTO.Comment = store.ForSource(code.Name, src.File, line)
 				}
 				blockDTO.Lines = append(blockDTO.Lines, lineDTO)
 			}
@@ -91,11 +94,11 @@ func BuildFunctionCodeDTO(binary string, code *disasm.Code, comments *CommentSto
 	for i, inst := range code.Insts {
 		goLine := asmLineDTO(i, inst, inst.Text)
 		nativeLine := asmLineDTO(i, inst, inst.NativeText)
-		if comments != nil && inst.Text != "" {
-			goLine.Comment = comments.ForAsm(code.Name, CommentViewGoAsm, inst.PC)
+		if store != nil && inst.Text != "" {
+			goLine.Comment = store.ForAsm(code.Name, comments.ViewGoAsm, inst.PC)
 		}
-		if comments != nil && inst.NativeText != "" {
-			nativeLine.Comment = comments.ForAsm(code.Name, CommentViewNativeAsm, inst.PC)
+		if store != nil && inst.NativeText != "" {
+			nativeLine.Comment = store.ForAsm(code.Name, comments.ViewNativeAsm, inst.PC)
 		}
 		dto.GoAsm = append(dto.GoAsm, goLine)
 		dto.NativeAsm = append(dto.NativeAsm, nativeLine)
@@ -119,7 +122,7 @@ func asmLineDTO(index int, inst disasm.Inst, text string) AsmLineDTO {
 	line := AsmLineDTO{
 		Index:     index,
 		PC:        inst.PC,
-		PCHex:     formatPC(inst.PC),
+		PCHex:     comments.FormatPC(inst.PC),
 		Text:      text,
 		File:      inst.File,
 		Line:      inst.Line,
@@ -128,7 +131,7 @@ func asmLineDTO(index int, inst disasm.Inst, text string) AsmLineDTO {
 		RefOffset: inst.RefOffset,
 	}
 	if inst.RefPC != 0 {
-		line.RefPCHex = formatPC(inst.RefPC)
+		line.RefPCHex = comments.FormatPC(inst.RefPC)
 	}
 	return line
 }
@@ -138,7 +141,7 @@ func sourceLineExists(code *disasm.Code, file string, line int) bool {
 		return false
 	}
 	for _, src := range code.Source {
-		if src.File != file && cleanPath(src.File) != cleanPath(file) {
+		if src.File != file && comments.CleanPath(src.File) != comments.CleanPath(file) {
 			continue
 		}
 		for _, block := range src.Blocks {
@@ -150,17 +153,17 @@ func sourceLineExists(code *disasm.Code, file string, line int) bool {
 	return false
 }
 
-func asmPCExists(code *disasm.Code, view CommentView, pc uint64) bool {
+func asmPCExists(code *disasm.Code, view comments.View, pc uint64) bool {
 	if code == nil {
 		return false
 	}
 	for _, inst := range code.Insts {
 		switch view {
-		case CommentViewGoAsm:
+		case comments.ViewGoAsm:
 			if inst.PC == pc && inst.Text != "" {
 				return true
 			}
-		case CommentViewNativeAsm:
+		case comments.ViewNativeAsm:
 			if inst.PC == pc && inst.NativeText != "" {
 				return true
 			}

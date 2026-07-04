@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"loov.dev/lensm/internal/atomicfile"
+	"loov.dev/lensm/internal/comments"
 )
 
 type AppSettings struct {
@@ -57,7 +59,7 @@ func LoadAppSettings() (AppSettings, error) {
 	if settings.TextSize <= 0 {
 		settings.TextSize = DefaultAppSettings().TextSize
 	}
-	settings.LastPath = cleanPath(settings.LastPath)
+	settings.LastPath = comments.CleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
 	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
 		settings.ActiveTab = ""
@@ -70,7 +72,7 @@ func SaveAppSettings(settings AppSettings) error {
 	if settings.TextSize <= 0 {
 		settings.TextSize = DefaultAppSettings().TextSize
 	}
-	settings.LastPath = cleanPath(settings.LastPath)
+	settings.LastPath = comments.CleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
 	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
 		settings.ActiveTab = ""
@@ -87,7 +89,7 @@ func SaveAppSettings(settings AppSettings) error {
 		return err
 	}
 	data = append(data, '\n')
-	return atomicWriteFile(path, data, 0o644)
+	return atomicfile.Write(path, data, 0o644)
 }
 
 func appSettingsPath() (string, error) {

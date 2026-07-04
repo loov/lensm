@@ -24,6 +24,7 @@ import (
 	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/comments"
 )
 
 var workInProgressWASM bool
@@ -65,7 +66,7 @@ type FileUI struct {
 	StartMCP       widget.Clickable
 	StopMCP        widget.Clickable
 
-	Comments *CommentStore
+	Comments *comments.Store
 	MCP      *AppMCPServer
 
 	loadRequests       chan fileLoadRequest
@@ -125,7 +126,7 @@ func NewFileUI(windows *Windows, theme *material.Theme) *FileUI {
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
 	ui.TextSizeEditor.SetText(strconv.Itoa(settings.TextSize))
-	ui.Comments, _ = NewCommentStore("", "")
+	ui.Comments, _ = comments.Open("", "")
 	return ui
 }
 
@@ -325,7 +326,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	// Keep history across watch-mode reloads of the same binary; open
 	// tabs are preserved there too. Entries whose functions vanished are
 	// skipped during navigation.
-	path := cleanPath(ui.Config.Path)
+	path := comments.CleanPath(ui.Config.Path)
 	if ui.File == nil || path != ui.loadedPath {
 		ui.Navigation.Reset()
 	}
@@ -344,7 +345,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	if tab := ui.activeTab(); tab != nil {
 		activeName = tab.Name
 	}
-	if initialLoad && cleanPath(ui.Config.Path) == ui.Settings.LastPath && len(ui.Settings.OpenTabs) > 0 {
+	if initialLoad && comments.CleanPath(ui.Config.Path) == ui.Settings.LastPath && len(ui.Settings.OpenTabs) > 0 {
 		openNames = append(openNames[:0], ui.Settings.OpenTabs...)
 		activeName = ui.Settings.ActiveTab
 		if activeName == "" && len(openNames) > 0 {
@@ -747,7 +748,7 @@ func (ui *FileUI) saveSessionState() {
 	if ui.File == nil {
 		return
 	}
-	path := cleanPath(ui.Config.Path)
+	path := comments.CleanPath(ui.Config.Path)
 	if path == "" {
 		return
 	}

@@ -1,4 +1,4 @@
-package main
+package comments
 
 import (
 	"cmp"
@@ -11,30 +11,31 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"loov.dev/lensm/internal/atomicfile"
 )
 
 const commentsFileVersion = 1
 
-type CommentView string
+type View string
 
 const (
-	CommentViewSource    CommentView = "source"
-	CommentViewGoAsm     CommentView = "go_asm"
-	CommentViewNativeAsm CommentView = "native_asm"
+	ViewSource    View = "source"
+	ViewGoAsm     View = "go_asm"
+	ViewNativeAsm View = "native_asm"
 )
 
-type CommentCoord struct {
+type Coord struct {
 	Binary   string      `json:"binary,omitempty"`
 	Function string      `json:"function"`
-	View     CommentView `json:"view"`
+	View     View `json:"view"`
 	File     string      `json:"file,omitempty"`
 	Line     int         `json:"line,omitempty"`
 	PC       uint64      `json:"pc,omitempty"`
 	PCHex    string      `json:"pc_hex,omitempty"`
 }
 
-type CommentRecord struct {
-	CommentCoord
+type Record struct {
+	Coord
 	Text      string    `json:"text"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -45,11 +46,11 @@ type commentsDiskFile struct {
 	Comments []json.RawMessage `json:"comments"`
 }
 
-type CommentStore struct {
+type Store struct {
 	mu      sync.RWMutex
 	path    string
 	binary  string
-	records map[string]CommentRecord
+	records map[string]Record
 	// touched marks keys mutated since the last sync with the file;
 	// saves merge the on-disk state for all other keys, so another lensm
 	// process writing the same sidecar loses only conflicting edits to
@@ -62,19 +63,19 @@ type CommentStore struct {
 	preserved []json.RawMessage
 }
 
-func defaultCommentPath(binaryPath string) string {
+func DefaultPath(binaryPath string) string {
 	if binaryPath == "" {
 		return ""
 	}
 	return binaryPath + ".lensm-comments.json"
 }
 
-func NewCommentStore(path, binaryPath string) (*CommentStore, error) {
-	binaryPath = cleanPath(binaryPath)
-	store := &CommentStore{
+func Open(path, binaryPath string) (*Store, error) {
+	binaryPath = CleanPath(binaryPath)
+	store := &Store{
 		path:    path,
 		binary:  binaryPath,
-		records: map[string]CommentRecord{},
+		records: map[string]Record{},
 		touched: map[string]bool{},
 	}
 	if path == "" {
@@ -86,14 +87,14 @@ func NewCommentStore(path, binaryPath string) (*CommentStore, error) {
 	return store, nil
 }
 
-func (store *CommentStore) Path() string {
+func (store *Store) Path() string {
 	if store == nil {
 		return ""
 	}
 	return store.path
 }
 
-func (store *CommentStore) Get(coord CommentCoord) string {
+func (store *Store) Get(coord Coord) string {
 	if store == nil {
 		return ""
 	}
@@ -106,18 +107,18 @@ func (store *CommentStore) Get(coord CommentCoord) string {
 	return rec.Text
 }
 
-func (store *CommentStore) Set(coord CommentCoord, text string) error {
+func (store *Store) Set(coord Coord, text string) error {
 	return store.set(coord, text, true)
 }
 
 // SetBuffered updates the comment in memory and defers the disk write
 // until Flush, so typing in an editor doesn't rewrite the sidecar on
 // every keystroke.
-func (store *CommentStore) SetBuffered(coord CommentCoord, text string) error {
+func (store *Store) SetBuffered(coord Coord, text string) error {
 	return store.set(coord, text, false)
 }
 
-func (store *CommentStore) set(coord CommentCoord, text string, persist bool) error {
+func (store *Store) set(coord Coord, text string, persist bool) error {
 	if store == nil {
 		return errors.New("comment store is not initialized")
 	}
@@ -137,12 +138,12 @@ func (store *CommentStore) set(coord CommentCoord, text string, persist bool) er
 		// re-adopting it.
 		delete(store.records, key)
 	} else {
-		coord = store.normalize(coord)
+		coord = store.Normalize(coord)
 		if exists && existing.Text == text {
 			return nil
 		}
-		store.records[key] = CommentRecord{
-			CommentCoord: coord,
+		store.records[key] = Record{
+			Coord: coord,
 			Text:         text,
 			UpdatedAt:    time.Now().UTC(),
 		}
@@ -172,7 +173,7 @@ func (store *CommentStore) set(coord CommentCoord, text string, persist bool) er
 }
 
 // Flush writes buffered changes to disk.
-func (store *CommentStore) Flush() error {
+func (store *Store) Flush() error {
 	if store == nil {
 		return nil
 	}
@@ -188,13 +189,13 @@ func (store *CommentStore) Flush() error {
 	return nil
 }
 
-func (store *CommentStore) All() []CommentRecord {
+func (store *Store) All() []Record {
 	if store == nil {
 		return nil
 	}
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	out := make([]CommentRecord, 0, len(store.records))
+	out := make([]Record, 0, len(store.records))
 	for _, rec := range store.records {
 		out = append(out, rec)
 	}
@@ -202,13 +203,13 @@ func (store *CommentStore) All() []CommentRecord {
 	return out
 }
 
-func (store *CommentStore) Filter(function string, view CommentView) []CommentRecord {
+func (store *Store) Filter(function string, view View) []Record {
 	if store == nil {
 		return nil
 	}
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	var out []CommentRecord
+	var out []Record
 	for _, rec := range store.records {
 		if function != "" && rec.Function != function {
 			continue
@@ -222,41 +223,41 @@ func (store *CommentStore) Filter(function string, view CommentView) []CommentRe
 	return out
 }
 
-func (store *CommentStore) ForSource(function, file string, line int) string {
-	return store.Get(CommentCoord{
+func (store *Store) ForSource(function, file string, line int) string {
+	return store.Get(Coord{
 		Function: function,
-		View:     CommentViewSource,
+		View:     ViewSource,
 		File:     file,
 		Line:     line,
 	})
 }
 
-func (store *CommentStore) ForAsm(function string, view CommentView, pc uint64) string {
-	return store.Get(CommentCoord{
+func (store *Store) ForAsm(function string, view View, pc uint64) string {
+	return store.Get(Coord{
 		Function: function,
 		View:     view,
 		PC:       pc,
 	})
 }
 
-func (store *CommentStore) SetSource(function, file string, line int, text string) error {
-	return store.Set(CommentCoord{
+func (store *Store) SetSource(function, file string, line int, text string) error {
+	return store.Set(Coord{
 		Function: function,
-		View:     CommentViewSource,
+		View:     ViewSource,
 		File:     file,
 		Line:     line,
 	}, text)
 }
 
-func (store *CommentStore) SetAsm(function string, view CommentView, pc uint64, text string) error {
-	return store.Set(CommentCoord{
+func (store *Store) SetAsm(function string, view View, pc uint64, text string) error {
+	return store.Set(Coord{
 		Function: function,
 		View:     view,
 		PC:       pc,
 	}, text)
 }
 
-func (store *CommentStore) load() error {
+func (store *Store) load() error {
 	data, err := os.ReadFile(store.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -273,7 +274,7 @@ func (store *CommentStore) load() error {
 		return fmt.Errorf("unsupported comments file version %d", disk.Version)
 	}
 	for _, raw := range disk.Comments {
-		var rec CommentRecord
+		var rec Record
 		if err := json.Unmarshal(raw, &rec); err != nil {
 			store.preserved = append(store.preserved, raw)
 			continue
@@ -281,25 +282,25 @@ func (store *CommentStore) load() error {
 		if rec.Binary == "" {
 			rec.Binary = firstNonEmpty(disk.Binary, store.binary)
 		}
-		rec.PCHex = commentPCHex(rec.CommentCoord)
-		if err := rec.CommentCoord.validate(); err != nil {
+		rec.PCHex = commentPCHex(rec.Coord)
+		if err := rec.Coord.validate(); err != nil {
 			store.preserved = append(store.preserved, raw)
 			continue
 		}
 		if rec.Text == "" {
 			continue
 		}
-		store.records[store.key(rec.CommentCoord)] = rec
+		store.records[store.key(rec.Coord)] = rec
 	}
 	return nil
 }
 
-func (store *CommentStore) saveLocked() error {
+func (store *Store) saveLocked() error {
 	if store.path == "" {
 		return nil
 	}
 	store.mergeExternalLocked()
-	records := make([]CommentRecord, 0, len(store.records))
+	records := make([]Record, 0, len(store.records))
 	for _, rec := range store.records {
 		records = append(records, rec)
 	}
@@ -337,7 +338,7 @@ func (store *CommentStore) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(store.path), 0o755); err != nil {
 		return err
 	}
-	if err := atomicWriteFile(store.path, data, 0o644); err != nil {
+	if err := atomicfile.Write(store.path, data, 0o644); err != nil {
 		return err
 	}
 	// The in-memory state now matches the file again.
@@ -351,7 +352,7 @@ func (store *CommentStore) saveLocked() error {
 // edits, and deletions from the other process — is adopted, so two
 // processes sharing a sidecar lose at most conflicting edits to the
 // same record instead of each other's whole comment sets.
-func (store *CommentStore) mergeExternalLocked() {
+func (store *Store) mergeExternalLocked() {
 	data, err := os.ReadFile(store.path)
 	if err != nil {
 		return // nothing on disk to merge
@@ -364,7 +365,7 @@ func (store *CommentStore) mergeExternalLocked() {
 		return
 	}
 
-	merged := make(map[string]CommentRecord, len(store.records))
+	merged := make(map[string]Record, len(store.records))
 	for key, rec := range store.records {
 		if store.touched[key] {
 			merged[key] = rec
@@ -372,7 +373,7 @@ func (store *CommentStore) mergeExternalLocked() {
 	}
 	store.preserved = nil
 	for _, raw := range disk.Comments {
-		var rec CommentRecord
+		var rec Record
 		if err := json.Unmarshal(raw, &rec); err != nil {
 			store.preserved = append(store.preserved, raw)
 			continue
@@ -380,15 +381,15 @@ func (store *CommentStore) mergeExternalLocked() {
 		if rec.Binary == "" {
 			rec.Binary = firstNonEmpty(disk.Binary, store.binary)
 		}
-		rec.PCHex = commentPCHex(rec.CommentCoord)
-		if err := rec.CommentCoord.validate(); err != nil {
+		rec.PCHex = commentPCHex(rec.Coord)
+		if err := rec.Coord.validate(); err != nil {
 			store.preserved = append(store.preserved, raw)
 			continue
 		}
 		if rec.Text == "" {
 			continue
 		}
-		key := store.key(rec.CommentCoord)
+		key := store.key(rec.Coord)
 		if store.touched[key] {
 			continue
 		}
@@ -397,46 +398,46 @@ func (store *CommentStore) mergeExternalLocked() {
 	store.records = merged
 }
 
-func (store *CommentStore) normalize(coord CommentCoord) CommentCoord {
+func (store *Store) Normalize(coord Coord) Coord {
 	coord.Binary = firstNonEmpty(coord.Binary, store.binary)
-	coord.Binary = cleanPath(coord.Binary)
+	coord.Binary = CleanPath(coord.Binary)
 	coord.PCHex = commentPCHex(coord)
 	return coord
 }
 
-func (store *CommentStore) key(coord CommentCoord) string {
-	coord = store.normalize(coord)
+func (store *Store) key(coord Coord) string {
+	coord = store.Normalize(coord)
 	switch coord.View {
-	case CommentViewSource:
-		return fmt.Sprintf("%s\x00%s\x00%s\x00%d", coord.Function, coord.View, cleanPath(coord.File), coord.Line)
-	case CommentViewGoAsm, CommentViewNativeAsm:
+	case ViewSource:
+		return fmt.Sprintf("%s\x00%s\x00%s\x00%d", coord.Function, coord.View, CleanPath(coord.File), coord.Line)
+	case ViewGoAsm, ViewNativeAsm:
 		return fmt.Sprintf("%s\x00%s\x00%x", coord.Function, coord.View, coord.PC)
 	default:
-		return fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%x", coord.Function, coord.View, cleanPath(coord.File), coord.Line, coord.PC)
+		return fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%x", coord.Function, coord.View, CleanPath(coord.File), coord.Line, coord.PC)
 	}
 }
 
-func (coord CommentCoord) validate() error {
+func (coord Coord) validate() error {
 	if coord.Function == "" {
 		return errors.New("function is required")
 	}
 	switch coord.View {
-	case CommentViewSource:
+	case ViewSource:
 		if coord.File == "" {
 			return errors.New("file is required for source comments")
 		}
 		if coord.Line <= 0 {
 			return errors.New("line must be positive for source comments")
 		}
-	case CommentViewGoAsm, CommentViewNativeAsm:
+	case ViewGoAsm, ViewNativeAsm:
 	default:
 		return fmt.Errorf("unsupported comment view %q", coord.View)
 	}
 	return nil
 }
 
-func sortCommentRecords(records []CommentRecord) {
-	slices.SortFunc(records, func(a, b CommentRecord) int {
+func sortCommentRecords(records []Record) {
+	slices.SortFunc(records, func(a, b Record) int {
 		if c := cmp.Compare(a.Function, b.Function); c != 0 {
 			return c
 		}
@@ -453,7 +454,7 @@ func sortCommentRecords(records []CommentRecord) {
 	})
 }
 
-func cleanPath(path string) string {
+func CleanPath(path string) string {
 	if path == "" {
 		return ""
 	}
@@ -463,13 +464,13 @@ func cleanPath(path string) string {
 	return filepath.Clean(path)
 }
 
-func formatPC(pc uint64) string {
+func FormatPC(pc uint64) string {
 	return fmt.Sprintf("0x%x", pc)
 }
 
-func commentPCHex(coord CommentCoord) string {
-	if coord.View == CommentViewGoAsm || coord.View == CommentViewNativeAsm || coord.PC != 0 {
-		return formatPC(coord.PC)
+func commentPCHex(coord Coord) string {
+	if coord.View == ViewGoAsm || coord.View == ViewNativeAsm || coord.PC != 0 {
+		return FormatPC(coord.PC)
 	}
 	return ""
 }

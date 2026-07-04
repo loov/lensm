@@ -1,4 +1,4 @@
-package main
+package comments
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 
 func TestCommentStoreRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "comments.json")
-	store, err := NewCommentStore(path, "/tmp/app")
+	store, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,46 +18,46 @@ func TestCommentStoreRoundTrip(t *testing.T) {
 	if err := store.SetSource("main.add", "/tmp/main.go", 12, "source note"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "go asm note"); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "go asm note"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewNativeAsm, 0x1000, "native asm note"); err != nil {
+	if err := store.SetAsm("main.add", ViewNativeAsm, 0x1000, "native asm note"); err != nil {
 		t.Fatal(err)
 	}
 
-	reloaded, err := NewCommentStore(path, "/tmp/app")
+	reloaded, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := reloaded.ForSource("main.add", "/tmp/main.go", 12); got != "source note" {
 		t.Fatalf("source comment = %q", got)
 	}
-	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "go asm note" {
+	if got := reloaded.ForAsm("main.add", ViewGoAsm, 0x1000); got != "go asm note" {
 		t.Fatalf("go asm comment = %q", got)
 	}
-	if got := reloaded.ForAsm("main.add", CommentViewNativeAsm, 0x1000); got != "native asm note" {
+	if got := reloaded.ForAsm("main.add", ViewNativeAsm, 0x1000); got != "native asm note" {
 		t.Fatalf("native asm comment = %q", got)
 	}
 }
 
 func TestCommentStoreDeletesEmptyComment(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "comments.json")
-	store, err := NewCommentStore(path, "/tmp/app")
+	store, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "note"); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "note"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "  "); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "  "); err != nil {
 		t.Fatal(err)
 	}
 
-	reloaded, err := NewCommentStore(path, "/tmp/app")
+	reloaded, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "" {
+	if got := reloaded.ForAsm("main.add", ViewGoAsm, 0x1000); got != "" {
 		t.Fatalf("deleted comment = %q", got)
 	}
 	if got := len(reloaded.All()); got != 0 {
@@ -67,11 +67,11 @@ func TestCommentStoreDeletesEmptyComment(t *testing.T) {
 
 func TestCommentStoreSkipsUnchangedCommentWrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "comments.json")
-	store, err := NewCommentStore(path, "/tmp/app")
+	store, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "note"); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "note"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +86,7 @@ func TestCommentStoreSkipsUnchangedCommentWrite(t *testing.T) {
 	updatedAt := records[0].UpdatedAt
 
 	time.Sleep(time.Millisecond)
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "note"); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "note"); err != nil {
 		t.Fatal(err)
 	}
 	after, err := os.ReadFile(path)
@@ -118,12 +118,12 @@ func TestCommentStorePreservesUnknownRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := NewCommentStore(path, "/tmp/app")
+	store, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Trigger a full rewrite of the file.
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x2000, "new note"); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x2000, "new note"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,11 +141,11 @@ func TestCommentStorePreservesUnknownRecords(t *testing.T) {
 
 func TestCommentStoreSaveKeepsFileShareable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "comments.json")
-	store, err := NewCommentStore(path, "/tmp/app")
+	store, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "note"); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "note"); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)
@@ -159,11 +159,11 @@ func TestCommentStoreSaveKeepsFileShareable(t *testing.T) {
 
 func TestCommentStoreSkipsMissingCommentDelete(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "comments.json")
-	store, err := NewCommentStore(path, "/tmp/app")
+	store, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, ""); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -173,44 +173,44 @@ func TestCommentStoreSkipsMissingCommentDelete(t *testing.T) {
 
 func TestCommentStoreMergesConcurrentProcessWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "comments.json")
-	first, err := NewCommentStore(path, "/tmp/app")
+	first, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := NewCommentStore(path, "/tmp/app")
+	second, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Each store simulates a separate lensm process holding a stale
 	// full-file snapshot of the same sidecar.
-	if err := first.SetAsm("main.add", CommentViewGoAsm, 0x1000, "from first"); err != nil {
+	if err := first.SetAsm("main.add", ViewGoAsm, 0x1000, "from first"); err != nil {
 		t.Fatal(err)
 	}
-	if err := second.SetAsm("main.add", CommentViewGoAsm, 0x2000, "from second"); err != nil {
+	if err := second.SetAsm("main.add", ViewGoAsm, 0x2000, "from second"); err != nil {
 		t.Fatal(err)
 	}
 
-	reloaded, err := NewCommentStore(path, "/tmp/app")
+	reloaded, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "from first" {
+	if got := reloaded.ForAsm("main.add", ViewGoAsm, 0x1000); got != "from first" {
 		t.Fatalf("first process's comment = %q, want it to survive the second save", got)
 	}
-	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x2000); got != "from second" {
+	if got := reloaded.ForAsm("main.add", ViewGoAsm, 0x2000); got != "from second" {
 		t.Fatalf("second process's comment = %q", got)
 	}
 
 	// A deletion must not be resurrected by the other process's stale copy.
-	if err := first.SetAsm("main.add", CommentViewGoAsm, 0x2000, ""); err != nil {
+	if err := first.SetAsm("main.add", ViewGoAsm, 0x2000, ""); err != nil {
 		t.Fatal(err)
 	}
-	reloaded, err = NewCommentStore(path, "/tmp/app")
+	reloaded, err = Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := reloaded.ForAsm("main.add", CommentViewGoAsm, 0x2000); got != "" {
+	if got := reloaded.ForAsm("main.add", ViewGoAsm, 0x2000); got != "" {
 		t.Fatalf("deleted comment resurrected: %q", got)
 	}
 }
@@ -218,11 +218,11 @@ func TestCommentStoreMergesConcurrentProcessWrites(t *testing.T) {
 func TestCommentStoreRollsBackFailedSave(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "comments.json")
-	store, err := NewCommentStore(path, "/tmp/app")
+	store, err := Open(path, "/tmp/app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "old"); err != nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "old"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,17 +230,17 @@ func TestCommentStoreRollsBackFailedSave(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "missing"), []byte("not a directory"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, "new"); err == nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, "new"); err == nil {
 		t.Fatal("updating comment unexpectedly succeeded")
 	}
-	if got := store.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "old" {
+	if got := store.ForAsm("main.add", ViewGoAsm, 0x1000); got != "old" {
 		t.Fatalf("comment after failed update = %q, want old", got)
 	}
 
-	if err := store.SetAsm("main.add", CommentViewGoAsm, 0x1000, ""); err == nil {
+	if err := store.SetAsm("main.add", ViewGoAsm, 0x1000, ""); err == nil {
 		t.Fatal("deleting comment unexpectedly succeeded")
 	}
-	if got := store.ForAsm("main.add", CommentViewGoAsm, 0x1000); got != "old" {
+	if got := store.ForAsm("main.add", ViewGoAsm, 0x1000); got != "old" {
 		t.Fatalf("comment after failed delete = %q, want old", got)
 	}
 }

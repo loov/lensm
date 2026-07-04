@@ -1,4 +1,4 @@
-package main
+package atomicfile
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 // fsynced so a crash cannot leave a truncated file behind the
 // already-journaled rename, renamed over the target, and the parent
 // directory is best-effort synced so the rename itself survives a crash.
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+func Write(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*.tmp")
 	if err != nil {
