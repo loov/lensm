@@ -1,10 +1,6 @@
 package disasm
 
-import (
-	"sort"
-
-	"golang.org/x/exp/slices"
-)
+import "slices"
 
 // LineSet represents a set of needed lines.
 type LineSet struct {
@@ -13,14 +9,7 @@ type LineSet struct {
 
 // Add adds line to the needed set.
 func (rs *LineSet) Add(line int) {
-	if len(rs.list) == 0 {
-		rs.list = append(rs.list, line)
-		return
-	}
-	at := sort.SearchInts(rs.list, line)
-	if at >= len(rs.list) {
-		rs.list = append(rs.list, line)
-	} else if rs.list[at] != line {
+	if at, found := slices.BinarySearch(rs.list, line); !found {
 		rs.list = slices.Insert(rs.list, at, line)
 	}
 }

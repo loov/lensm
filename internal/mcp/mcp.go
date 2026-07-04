@@ -75,7 +75,7 @@ func RunCommand(load LoadFile, args []string) int {
 		return 2
 	}
 
-	session, err := NewSession(load, fs.Arg(0), *commentsPath)
+	session, err := NewSessionWithComments(load, fs.Arg(0), *commentsPath, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -258,13 +258,9 @@ func (server *mcpServer) toolListFunctions(args json.RawMessage) (any, error) {
 		all = append(all, functionInfo{Index: i, Name: name})
 	}
 
-	end := req.Offset + req.Limit
-	if end > len(all) {
-		end = len(all)
-	}
 	var page []functionInfo
 	if req.Offset < len(all) {
-		page = all[req.Offset:end]
+		page = all[req.Offset:min(req.Offset+req.Limit, len(all))]
 	}
 	return map[string]any{
 		"binary":    server.session.Path,
@@ -408,12 +404,7 @@ func parsePC(data json.RawMessage) (uint64, bool, error) {
 	var text string
 	if err := json.Unmarshal(data, &text); err == nil {
 		text = strings.TrimSpace(text)
-		base := 10
-		if strings.HasPrefix(strings.ToLower(text), "0x") {
-			base = 16
-			text = text[2:]
-		}
-		pc, err := strconv.ParseUint(text, base, 64)
+		pc, err := strconv.ParseUint(text, 0, 64)
 		if err != nil {
 			return 0, true, fmt.Errorf("invalid pc %q", text)
 		}

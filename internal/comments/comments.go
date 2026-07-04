@@ -280,7 +280,7 @@ func (store *Store) load() error {
 			continue
 		}
 		if rec.Binary == "" {
-			rec.Binary = firstNonEmpty(disk.Binary, store.binary)
+			rec.Binary = cmp.Or(disk.Binary, store.binary)
 		}
 		rec.PCHex = commentPCHex(rec.Coord)
 		if err := rec.Coord.validate(); err != nil {
@@ -379,7 +379,7 @@ func (store *Store) mergeExternalLocked() {
 			continue
 		}
 		if rec.Binary == "" {
-			rec.Binary = firstNonEmpty(disk.Binary, store.binary)
+			rec.Binary = cmp.Or(disk.Binary, store.binary)
 		}
 		rec.PCHex = commentPCHex(rec.Coord)
 		if err := rec.Coord.validate(); err != nil {
@@ -399,7 +399,7 @@ func (store *Store) mergeExternalLocked() {
 }
 
 func (store *Store) Normalize(coord Coord) Coord {
-	coord.Binary = firstNonEmpty(coord.Binary, store.binary)
+	coord.Binary = cmp.Or(coord.Binary, store.binary)
 	coord.Binary = CleanPath(coord.Binary)
 	coord.PCHex = commentPCHex(coord)
 	return coord
@@ -471,15 +471,6 @@ func FormatPC(pc uint64) string {
 func commentPCHex(coord Coord) string {
 	if coord.View == ViewGoAsm || coord.View == ViewNativeAsm || coord.PC != 0 {
 		return FormatPC(coord.PC)
-	}
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
 	}
 	return ""
 }

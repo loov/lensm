@@ -384,7 +384,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		if ui.Funcs.SelectedItem == nil && len(ui.Funcs.Filtered) > 0 {
 			ui.Funcs.SelectIndex(0)
 		}
-		ui.openFuncTab(ui.Funcs.SelectedItem)
+		ui.openTab(ui.Funcs.SelectedItem, false)
 		ui.afterFileLoaded()
 		return
 	}
@@ -631,7 +631,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 	if active == nil || !active.Loaded() || active.Name != ui.Funcs.Selected {
 		selected := ui.Funcs.SelectedItem
 		if selected != nil {
-			ui.openFuncTab(selected)
+			ui.openTab(selected, false)
 		}
 	}
 
@@ -799,7 +799,7 @@ func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
 		return
 	}
 
-	ui.openFuncTabNext(fn)
+	ui.openTab(fn, true)
 	gtx.Execute(op.InvalidateCmd{})
 }
 

@@ -17,10 +17,6 @@ type Session struct {
 // implementation so sessions stay independent of the object-file formats.
 type LoadFile func(path string) (disasm.File, error)
 
-func NewSession(load LoadFile, path string, commentsPath string) (*Session, error) {
-	return NewSessionWithComments(load, path, commentsPath, nil)
-}
-
 func NewSessionWithComments(load LoadFile, path string, commentsPath string, store *comments.Store) (*Session, error) {
 	file, err := load(path)
 	if err != nil {

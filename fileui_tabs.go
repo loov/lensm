@@ -50,28 +50,31 @@ func (ui *FileUI) appendCodeTab(fn disasm.Func) *CodeTab {
 	return tab
 }
 
-func (ui *FileUI) openFuncTab(fn disasm.Func) *CodeTab {
+// openTab opens fn in a tab and activates it. When next is true a newly
+// created tab is inserted right after the active tab instead of appended
+// at the end; an already-open tab is activated in place regardless.
+func (ui *FileUI) openTab(fn disasm.Func, next bool) *CodeTab {
 	if fn == nil {
 		return nil
 	}
 	name := fn.Name()
-	for i, tab := range ui.CodeTabs {
-		if tab.Name == name {
-			tab.Func = fn
-			ui.ActiveTab = i
-			ui.selectFuncByName(name)
-			ui.commentKey = ""
-			ui.recordNavigation(name)
-			ui.saveSessionState()
-			return tab
-		}
-	}
-
-	tab := ui.appendCodeTab(fn)
+	tab := ui.findCodeTab(name, fn)
 	if tab == nil {
-		return nil
+		tab = ui.appendCodeTab(fn)
+		if tab == nil {
+			return nil
+		}
+		index := len(ui.CodeTabs) - 1
+		if next && InRange(ui.ActiveTab, index) {
+			at := ui.ActiveTab + 1
+			if at < index {
+				copy(ui.CodeTabs[at+1:], ui.CodeTabs[at:index])
+				ui.CodeTabs[at] = tab
+				index = at
+			}
+		}
+		ui.ActiveTab = index
 	}
-	ui.ActiveTab = len(ui.CodeTabs) - 1
 	ui.selectFuncByName(name)
 	ui.commentKey = ""
 	ui.recordNavigation(name)
@@ -79,42 +82,17 @@ func (ui *FileUI) openFuncTab(fn disasm.Func) *CodeTab {
 	return tab
 }
 
-func (ui *FileUI) openFuncTabNext(fn disasm.Func) *CodeTab {
-	if fn == nil {
-		return nil
-	}
-	name := fn.Name()
+// findCodeTab returns the open tab for name, refreshing its Func and
+// making it active, or nil if no tab is open for it.
+func (ui *FileUI) findCodeTab(name string, fn disasm.Func) *CodeTab {
 	for i, tab := range ui.CodeTabs {
 		if tab.Name == name {
 			tab.Func = fn
 			ui.ActiveTab = i
-			ui.selectFuncByName(name)
-			ui.commentKey = ""
-			ui.recordNavigation(name)
-			ui.saveSessionState()
 			return tab
 		}
 	}
-
-	tab := ui.appendCodeTab(fn)
-	if tab == nil {
-		return nil
-	}
-	index := len(ui.CodeTabs) - 1
-	if InRange(ui.ActiveTab, index) {
-		next := ui.ActiveTab + 1
-		if next < index {
-			copy(ui.CodeTabs[next+1:], ui.CodeTabs[next:index])
-			ui.CodeTabs[next] = tab
-			index = next
-		}
-	}
-	ui.ActiveTab = index
-	ui.selectFuncByName(name)
-	ui.commentKey = ""
-	ui.recordNavigation(name)
-	ui.saveSessionState()
-	return tab
+	return nil
 }
 
 func (ui *FileUI) selectTab(index int) {

@@ -92,7 +92,7 @@ func (ui *FileUI) navigateHistoryEntry(name string) bool {
 		return false
 	}
 	ui.navigatingHistory = true
-	ui.openFuncTab(fn)
+	ui.openTab(fn, false)
 	ui.navigatingHistory = false
 	ui.copyStatus = ""
 	ui.invalidateMain()

@@ -36,9 +36,9 @@ func TestFileUINavigationBackAndForward(t *testing.T) {
 	ui.Navigation.Reset()
 	ui.Funcs.SetItems(functions)
 
-	ui.openFuncTab(functions[0])
-	ui.openFuncTabNext(functions[1])
-	ui.openFuncTabNext(functions[2])
+	ui.openTab(functions[0], false)
+	ui.openTab(functions[1], true)
+	ui.openTab(functions[2], true)
 	if got := ui.Navigation.Current(); got != "main.C" {
 		t.Fatalf("current history entry = %q", got)
 	}
