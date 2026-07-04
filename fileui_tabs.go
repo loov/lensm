@@ -8,8 +8,8 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
-	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/disasm"
 )
 
 type CodeTab struct {

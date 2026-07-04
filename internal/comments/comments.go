@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"loov.dev/lensm/internal/atomicfile"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"time"
-	"loov.dev/lensm/internal/atomicfile"
 )
 
 const commentsFileVersion = 1
@@ -25,13 +25,13 @@ const (
 )
 
 type Coord struct {
-	Binary   string      `json:"binary,omitempty"`
-	Function string      `json:"function"`
-	View     View `json:"view"`
-	File     string      `json:"file,omitempty"`
-	Line     int         `json:"line,omitempty"`
-	PC       uint64      `json:"pc,omitempty"`
-	PCHex    string      `json:"pc_hex,omitempty"`
+	Binary   string `json:"binary,omitempty"`
+	Function string `json:"function"`
+	View     View   `json:"view"`
+	File     string `json:"file,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	PC       uint64 `json:"pc,omitempty"`
+	PCHex    string `json:"pc_hex,omitempty"`
 }
 
 type Record struct {
@@ -143,9 +143,9 @@ func (store *Store) set(coord Coord, text string, persist bool) error {
 			return nil
 		}
 		store.records[key] = Record{
-			Coord: coord,
-			Text:         text,
-			UpdatedAt:    time.Now().UTC(),
+			Coord:     coord,
+			Text:      text,
+			UpdatedAt: time.Now().UTC(),
 		}
 	}
 	wasTouched := store.touched[key]

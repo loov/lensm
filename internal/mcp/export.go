@@ -1,8 +1,8 @@
-package main
+package mcp
 
 import (
-	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/disasm"
 )
 
 type LineRangeDTO struct {
@@ -11,12 +11,12 @@ type LineRangeDTO struct {
 }
 
 type FunctionCodeDTO struct {
-	Binary    string          `json:"binary,omitempty"`
-	Name      string          `json:"name"`
-	File      string          `json:"file,omitempty"`
-	Source    []SourceFileDTO `json:"source"`
-	GoAsm     []AsmLineDTO    `json:"go_asm"`
-	NativeAsm []AsmLineDTO    `json:"native_asm"`
+	Binary    string            `json:"binary,omitempty"`
+	Name      string            `json:"name"`
+	File      string            `json:"file,omitempty"`
+	Source    []SourceFileDTO   `json:"source"`
+	GoAsm     []AsmLineDTO      `json:"go_asm"`
+	NativeAsm []AsmLineDTO      `json:"native_asm"`
 	Comments  []comments.Record `json:"comments,omitempty"`
 }
 

@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"os"
-	"loov.dev/lensm/internal/comments"
 )
 
 func (ui *FileUI) loadCommentsForPath(exePath string) {

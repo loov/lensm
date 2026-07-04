@@ -1,10 +1,10 @@
 package main
 
 import (
+	"loov.dev/lensm/internal/atomicfile"
 	"os"
 	"path/filepath"
 	"testing"
-	"loov.dev/lensm/internal/atomicfile"
 )
 
 func TestAtomicWriteFileReplacesContentsAndCleansTemporaryFile(t *testing.T) {

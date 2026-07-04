@@ -1,4 +1,4 @@
-package main
+package mcp
 
 import (
 	"bufio"
@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
 	"loov.dev/lensm/internal/comments"
 )
 
@@ -62,7 +63,7 @@ type mcpServer struct {
 	out     *bufio.Writer
 }
 
-func runMCPCommand(args []string) int {
+func RunCommand(load LoadFile, args []string) int {
 	fs := flag.NewFlagSet("lensm mcp", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	commentsPath := fs.String("comments", "", "comments sidecar path")
@@ -74,9 +75,7 @@ func runMCPCommand(args []string) int {
 		return 2
 	}
 
-	workInProgressWASM = os.Getenv("LENSM_EXPERIMENT_WASM") != ""
-
-	session, err := NewSession(fs.Arg(0), *commentsPath)
+	session, err := NewSession(load, fs.Arg(0), *commentsPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -307,7 +306,7 @@ func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 	var req struct {
 		Name string          `json:"name"`
-		View comments.View     `json:"view"`
+		View comments.View   `json:"view"`
 		File string          `json:"file"`
 		Line int             `json:"line"`
 		PC   json.RawMessage `json:"pc"`
@@ -372,7 +371,7 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 
 func (server *mcpServer) toolGetComments(args json.RawMessage) (any, error) {
 	var req struct {
-		Name string      `json:"name"`
+		Name string        `json:"name"`
 		View comments.View `json:"view"`
 	}
 	if err := decodeJSON(args, &req); err != nil {

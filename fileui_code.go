@@ -22,10 +22,10 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/f32color"
 	"loov.dev/lensm/internal/asmhelp"
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/f32color"
 )
 
 type CodeUI struct {

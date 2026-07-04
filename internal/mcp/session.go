@@ -1,12 +1,10 @@
-package main
+package mcp
 
 import (
 	"fmt"
 
-	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/goobj"
-	"loov.dev/lensm/internal/wasmobj"
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/disasm"
 )
 
 type Session struct {
@@ -15,12 +13,16 @@ type Session struct {
 	Comments *comments.Store
 }
 
-func NewSession(path string, commentsPath string) (*Session, error) {
-	return NewSessionWithComments(path, commentsPath, nil)
+// LoadFile opens a binary for disassembly. The caller injects an
+// implementation so sessions stay independent of the object-file formats.
+type LoadFile func(path string) (disasm.File, error)
+
+func NewSession(load LoadFile, path string, commentsPath string) (*Session, error) {
+	return NewSessionWithComments(load, path, commentsPath, nil)
 }
 
-func NewSessionWithComments(path string, commentsPath string, store *comments.Store) (*Session, error) {
-	file, err := loadDisasmFile(path)
+func NewSessionWithComments(load LoadFile, path string, commentsPath string, store *comments.Store) (*Session, error) {
+	file, err := load(path)
 	if err != nil {
 		return nil, err
 	}
@@ -40,13 +42,6 @@ func NewSessionWithComments(path string, commentsPath string, store *comments.St
 		File:     file,
 		Comments: store,
 	}, nil
-}
-
-func loadDisasmFile(path string) (disasm.File, error) {
-	if workInProgressWASM {
-		return wasmobj.Load(path)
-	}
-	return goobj.Load(path)
 }
 
 func (s *Session) Close() error {

@@ -12,11 +12,13 @@ import (
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
+	"loov.dev/lensm/internal/mcp"
 )
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
-		os.Exit(runMCPCommand(os.Args[2:]))
+		workInProgressWASM = os.Getenv("LENSM_EXPERIMENT_WASM") != ""
+		os.Exit(mcp.RunCommand(loadDisasmFile, os.Args[2:]))
 	}
 
 	cpuprofile := flag.String("cpuprofile", "", "enable cpu profiling")

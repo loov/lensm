@@ -1,4 +1,4 @@
-package main
+package mcp
 
 import (
 	"encoding/json"
@@ -8,10 +8,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/goobj"
 )
 
 func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
-	server := &AppMCPServer{
+	server := &AppServer{
+		load:    func(path string) (disasm.File, error) { return goobj.Load(path) },
 		session: &Session{Path: "old"},
 	}
 
@@ -46,7 +50,7 @@ func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
 }
 
 func TestMCPHandleHTTPRejectsRebinding(t *testing.T) {
-	server := &AppMCPServer{}
+	server := &AppServer{}
 
 	cases := []struct {
 		name   string
@@ -78,7 +82,7 @@ func TestMCPHandleHTTPRejectsRebinding(t *testing.T) {
 }
 
 func TestMCPHandleHTTPParseErrorHasNullID(t *testing.T) {
-	server := &AppMCPServer{}
+	server := &AppServer{}
 	req := httptest.NewRequest("POST", "http://127.0.0.1:7077/mcp", strings.NewReader("{not json"))
 	rec := httptest.NewRecorder()
 	server.handleHTTP(rec, req)

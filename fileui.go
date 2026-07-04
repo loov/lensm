@@ -23,8 +23,11 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/goobj"
+	"loov.dev/lensm/internal/mcp"
+	"loov.dev/lensm/internal/wasmobj"
 )
 
 var workInProgressWASM bool
@@ -67,7 +70,7 @@ type FileUI struct {
 	StopMCP        widget.Clickable
 
 	Comments *comments.Store
-	MCP      *AppMCPServer
+	MCP      *mcp.AppServer
 
 	loadRequests       chan fileLoadRequest
 	invalidate         chan struct{}
@@ -801,4 +804,40 @@ func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
 
 	ui.openFuncTabNext(fn)
 	gtx.Execute(op.InvalidateCmd{})
+}
+
+func loadDisasmFile(path string) (disasm.File, error) {
+	if workInProgressWASM {
+		return wasmobj.Load(path)
+	}
+	return goobj.Load(path)
+}
+
+func (ui *FileUI) startMCP() {
+	if ui.MCP != nil {
+		return
+	}
+	server, err := mcp.StartAppServer(loadDisasmFile, ui.Config.CommentsPath)
+	if err != nil {
+		ui.LoadError = fmt.Errorf("unable to start MCP server: %w", err)
+		ui.invalidateMain()
+		return
+	}
+	ui.MCP = server
+	if ui.File != nil {
+		ui.MCP.SetPath(ui.Config.Path, ui.Comments)
+	}
+	fmt.Fprintf(os.Stderr, "lensm MCP server listening at %s\n", server.URL())
+	ui.invalidateMain()
+}
+
+func (ui *FileUI) stopMCP() {
+	if ui.MCP == nil {
+		return
+	}
+	if err := ui.MCP.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "unable to stop MCP server: %v\n", err)
+	}
+	ui.MCP = nil
+	ui.invalidateMain()
 }

@@ -1,4 +1,4 @@
-package main
+package mcp
 
 import (
 	"encoding/json"
@@ -12,41 +12,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	"loov.dev/lensm/internal/comments"
 )
 
-func (ui *FileUI) startMCP() {
-	if ui.MCP != nil {
-		return
-	}
-	server, err := StartAppMCPServer(ui.Config.CommentsPath)
-	if err != nil {
-		ui.LoadError = fmt.Errorf("unable to start MCP server: %w", err)
-		ui.invalidateMain()
-		return
-	}
-	ui.MCP = server
-	if ui.File != nil {
-		ui.MCP.SetPath(ui.Config.Path, ui.Comments)
-	}
-	fmt.Fprintf(os.Stderr, "lensm MCP server listening at %s\n", server.URL())
-	ui.invalidateMain()
-}
-
-func (ui *FileUI) stopMCP() {
-	if ui.MCP == nil {
-		return
-	}
-	if err := ui.MCP.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to stop MCP server: %v\n", err)
-	}
-	ui.MCP = nil
-	ui.invalidateMain()
-}
-
-type AppMCPServer struct {
+type AppServer struct {
 	httpServer   *http.Server
 	url          string
+	load         LoadFile
 	commentsPath string
 
 	// mu guards the fields below.
@@ -59,7 +32,7 @@ type AppMCPServer struct {
 	active *sync.WaitGroup
 }
 
-func StartAppMCPServer(commentsPath string) (*AppMCPServer, error) {
+func StartAppServer(load LoadFile, commentsPath string) (*AppServer, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:7077")
 	if err != nil {
 		listener, err = net.Listen("tcp", "127.0.0.1:0")
@@ -68,8 +41,9 @@ func StartAppMCPServer(commentsPath string) (*AppMCPServer, error) {
 		return nil, err
 	}
 
-	server := &AppMCPServer{
+	server := &AppServer{
 		url:          "http://" + listener.Addr().String() + "/mcp",
+		load:         load,
 		commentsPath: commentsPath,
 		active:       &sync.WaitGroup{},
 	}
@@ -92,14 +66,14 @@ func StartAppMCPServer(commentsPath string) (*AppMCPServer, error) {
 	return server, nil
 }
 
-func (server *AppMCPServer) URL() string {
+func (server *AppServer) URL() string {
 	if server == nil {
 		return ""
 	}
 	return server.url
 }
 
-func (server *AppMCPServer) SetPath(path string, store *comments.Store) {
+func (server *AppServer) SetPath(path string, store *comments.Store) {
 	if server == nil {
 		return
 	}
@@ -122,7 +96,7 @@ func (server *AppMCPServer) SetPath(path string, store *comments.Store) {
 	}
 
 	go func() {
-		session, err := NewSessionWithComments(path, commentsPath, store)
+		session, err := NewSessionWithComments(server.load, path, commentsPath, store)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to load MCP session for %q: %v\n", path, err)
 			server.replaceSession(generation, nil, err)
@@ -132,7 +106,7 @@ func (server *AppMCPServer) SetPath(path string, store *comments.Store) {
 	}()
 }
 
-func (server *AppMCPServer) Close() error {
+func (server *AppServer) Close() error {
 	if server == nil {
 		return nil
 	}
@@ -155,7 +129,7 @@ func (server *AppMCPServer) Close() error {
 	return server.httpServer.Close()
 }
 
-func (server *AppMCPServer) replaceSession(generation uint64, session *Session, loadErr error) {
+func (server *AppServer) replaceSession(generation uint64, session *Session, loadErr error) {
 	server.mu.Lock()
 	if generation != server.generation {
 		server.mu.Unlock()
@@ -186,7 +160,7 @@ func closeSessionWhenIdle(session *Session, active *sync.WaitGroup) {
 	}()
 }
 
-func (server *AppMCPServer) handleHTTP(w http.ResponseWriter, req *http.Request) {
+func (server *AppServer) handleHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.URL.Path != "/" && req.URL.Path != "/mcp" {
 		http.NotFound(w, req)
 		return
@@ -222,7 +196,7 @@ func (server *AppMCPServer) handleHTTP(w http.ResponseWriter, req *http.Request)
 	}
 }
 
-func (server *AppMCPServer) handleHTTPPost(w http.ResponseWriter, req *http.Request) {
+func (server *AppServer) handleHTTPPost(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(req.Body, 64*1024*1024))
 	if err != nil {
@@ -252,7 +226,7 @@ func (server *AppMCPServer) handleHTTPPost(w http.ResponseWriter, req *http.Requ
 	_ = json.NewEncoder(w).Encode(response)
 }
 
-func (server *AppMCPServer) handleHTTPMessage(msg rpcMessage) (rpcMessage, bool) {
+func (server *AppServer) handleHTTPMessage(msg rpcMessage) (rpcMessage, bool) {
 	session, loadErr, release := server.acquireSession()
 	defer release()
 	return (&mcpServer{session: session, loadErr: loadErr}).handle(msg)
@@ -261,7 +235,7 @@ func (server *AppMCPServer) handleHTTPMessage(msg rpcMessage) (rpcMessage, bool)
 // acquireSession snapshots the current session and keeps it open until
 // release is called. The server lock is not held while a request is
 // handled, so concurrent requests and SetPath never wait on a handler.
-func (server *AppMCPServer) acquireSession() (session *Session, loadErr error, release func()) {
+func (server *AppServer) acquireSession() (session *Session, loadErr error, release func()) {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	if server.active == nil {
