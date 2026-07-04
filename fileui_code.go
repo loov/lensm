@@ -340,16 +340,17 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			}
 		}
 	}
-	copyFocus := event.Tag(ui.CodeUI)
+	selectionFocus := event.Tag(ui.CodeUI)
 	commentFocused := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
 	if ui.Selection.Active && !commentFocused {
 		// A drag can leave keyboard focus on a surrounding widget on macOS.
-		// An active line selection still owns Cmd/Ctrl+C unless the user is
-		// editing comment text.
-		copyFocus = nil
+		// An active line selection still owns Cmd/Ctrl+C, Cmd/Ctrl+A, and
+		// Escape unless the user is editing comment text. (A focused text
+		// editor elsewhere still wins: it polls earlier in layout order.)
+		selectionFocus = nil
 	}
 	for {
-		ev, ok := gtx.Event(key.Filter{Focus: copyFocus, Required: key.ModShortcut, Name: key.Name("C")})
+		ev, ok := gtx.Event(key.Filter{Focus: selectionFocus, Required: key.ModShortcut, Name: key.Name("C")})
 		if !ok {
 			break
 		}
@@ -363,8 +364,8 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	for {
 		ev, ok := gtx.Event(
 			key.FocusFilter{Target: ui.CodeUI},
-			key.Filter{Focus: ui.CodeUI, Required: key.ModShortcut, Name: key.Name("A")},
-			key.Filter{Focus: ui.CodeUI, Name: key.NameEscape},
+			key.Filter{Focus: selectionFocus, Required: key.ModShortcut, Name: key.Name("A")},
+			key.Filter{Focus: selectionFocus, Name: key.NameEscape},
 		)
 		if !ok {
 			break
