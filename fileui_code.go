@@ -666,13 +666,13 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		if nativeHovered {
 			hoverText = inst.NativeText
 		}
-		if help, ok := AssemblyInstructionHelp(hoverText); ok {
+		if help, ok := AssemblyInstructionHelp(ui.Code.Arch, hoverText); ok {
 			if nativeHovered {
 				// Rewrites use Go assembler operand order. Never show one based on
 				// native syntax, whose destination order is architecture-specific.
 				help.Explanation = ""
 			}
-			if goHelp, goOK := AssemblyInstructionHelp(inst.Text); goOK && goHelp.Explanation != "" {
+			if goHelp, goOK := AssemblyInstructionHelp(ui.Code.Arch, inst.Text); goOK && goHelp.Explanation != "" {
 				help.Explanation = goHelp.Explanation
 			}
 			ui.layoutAssemblyHelp(gtx, help, mousePosition)

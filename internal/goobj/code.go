@@ -26,6 +26,7 @@ func Disassemble(dis *godisasm.Disasm, sym *Function, opts disasm.Options) (*dis
 	code := &disasm.Code{
 		Name: sym.Name(),
 		File: file,
+		Arch: dis.GOARCH(),
 	}
 	var instructions []disasm.Inst
 	dis.DecodeSyntax(sym.sym.Addr, sym.sym.Addr+uint64(sym.sym.Size), sym.sym.Relocs,

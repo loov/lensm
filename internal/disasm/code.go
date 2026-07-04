@@ -6,6 +6,8 @@ type Code struct {
 	Name string
 	// File is where the code is located.
 	File string
+	// Arch is the GOARCH of the disassembled binary.
+	Arch string
 
 	// Insts is the slice of a all instructions in the code.
 	Insts []Inst

@@ -15,50 +15,53 @@ type asmInstructionRule struct {
 	Prefixes    []string
 	Description string
 	Explain     func([]string) string
+	// ExplainArch is used instead of Explain when the operand meaning
+	// depends on the architecture.
+	ExplainArch func(arch string, operands []string) string
 }
 
 // asmInstructionRules is intentionally data-driven: add a prefix and, when
 // useful, a small operand rewrite to extend the built-in reference.
 var asmInstructionRules = []asmInstructionRule{
-	{[]string{"MOV"}, "Move or copy data between registers and memory.", explainMove},
-	{[]string{"LEA"}, "Load an effective address without reading memory.", explainLEA},
-	{[]string{"ADD", "ADC"}, "Add values; ADC also includes the carry flag.", explainBinary("+")},
-	{[]string{"SUB", "SBB"}, "Subtract values; SBB also includes the borrow flag.", explainBinary("-")},
-	{[]string{"MUL", "IMUL"}, "Multiply values (IMUL is signed multiplication).", explainBinary("*")},
-	{[]string{"DIV", "IDIV"}, "Divide values (IDIV is signed division).", explainBinary("/")},
-	{[]string{"AND"}, "Compute a bitwise AND.", explainBinary("&")},
-	{[]string{"OR"}, "Compute a bitwise OR.", explainBinary("|")},
-	{[]string{"XOR", "EOR"}, "Compute a bitwise exclusive OR.", explainBinary("^")},
-	{[]string{"SHL", "SAL", "LSL"}, "Shift bits left.", explainBinary("<<")},
-	{[]string{"SHR", "LSR"}, "Shift bits right, filling with zeroes.", explainBinary(">>")},
-	{[]string{"SAR", "ASR"}, "Arithmetic right shift, preserving the sign.", explainBinary(">>")},
-	{[]string{"INC"}, "Increment a value by one.", explainUnaryDelta("+", "1")},
-	{[]string{"DEC"}, "Decrement a value by one.", explainUnaryDelta("-", "1")},
-	{[]string{"NEG"}, "Negate a signed value.", explainUnaryPrefix("-")},
-	{[]string{"NOT"}, "Invert every bit in a value.", explainUnaryPrefix("^")},
-	{[]string{"CMP"}, "Compare values and update condition flags.", explainCompare},
-	{[]string{"TEST", "TST"}, "Test bits and update condition flags without storing a result.", explainTest},
-	{[]string{"FMADD"}, "Fused floating-point multiply-add with one rounding step.", explainFMADD},
-	{[]string{"FADD"}, "Add floating-point values.", explainBinary("+")},
-	{[]string{"FSUB"}, "Subtract floating-point values.", explainBinary("-")},
-	{[]string{"FMUL"}, "Multiply floating-point values.", explainBinary("*")},
-	{[]string{"LDR", "LDUR", "LOAD"}, "Load a value from memory into a register.", explainLoad},
-	{[]string{"STR", "STUR", "STORE"}, "Store a register value in memory.", explainStore},
-	{[]string{"PUSH"}, "Push a value onto the stack.", nil},
-	{[]string{"POP"}, "Pop the top stack value.", nil},
-	{[]string{"CALL", "BL", "JAL"}, "Call a function and save a return address.", nil},
-	{[]string{"RET"}, "Return to the caller.", nil},
-	{[]string{"JMP", "B"}, "Jump to another instruction.", nil},
-	{[]string{"JE", "JZ", "BEQ"}, "Jump when values are equal (zero flag set).", nil},
-	{[]string{"JNE", "JNZ", "BNE"}, "Jump when values are not equal.", nil},
-	{[]string{"JG", "JGE", "JL", "JLE", "BGT", "BGE", "BLT", "BLE"}, "Conditional jump after a signed comparison.", nil},
-	{[]string{"JA", "JAE", "JB", "JBE", "BHI", "BHS", "BLO", "BLS"}, "Conditional jump after an unsigned comparison.", nil},
-	{[]string{"CBZ"}, "Jump when a register is zero.", nil},
-	{[]string{"CBNZ"}, "Jump when a register is not zero.", nil},
-	{[]string{"NOP"}, "Do nothing for one instruction slot.", nil},
+	{Prefixes: []string{"MOV"}, Description: "Move or copy data between registers and memory.", Explain: explainMove},
+	{Prefixes: []string{"LEA"}, Description: "Load an effective address without reading memory.", Explain: explainLEA},
+	{Prefixes: []string{"ADD", "ADC"}, Description: "Add values; ADC also includes the carry flag.", Explain: explainBinary("+")},
+	{Prefixes: []string{"SUB", "SBB"}, Description: "Subtract values; SBB also includes the borrow flag.", Explain: explainBinary("-")},
+	{Prefixes: []string{"MUL", "IMUL"}, Description: "Multiply values (IMUL is signed multiplication).", Explain: explainBinary("*")},
+	{Prefixes: []string{"DIV", "IDIV"}, Description: "Divide values (IDIV is signed division).", Explain: explainBinary("/")},
+	{Prefixes: []string{"AND"}, Description: "Compute a bitwise AND.", Explain: explainBinary("&")},
+	{Prefixes: []string{"OR"}, Description: "Compute a bitwise OR.", Explain: explainBinary("|")},
+	{Prefixes: []string{"XOR", "EOR"}, Description: "Compute a bitwise exclusive OR.", Explain: explainBinary("^")},
+	{Prefixes: []string{"SHL", "SAL", "LSL"}, Description: "Shift bits left.", Explain: explainBinary("<<")},
+	{Prefixes: []string{"SHR", "LSR"}, Description: "Shift bits right, filling with zeroes.", Explain: explainBinary(">>")},
+	{Prefixes: []string{"SAR", "ASR"}, Description: "Arithmetic right shift, preserving the sign.", Explain: explainBinary(">>")},
+	{Prefixes: []string{"INC"}, Description: "Increment a value by one.", Explain: explainUnaryDelta("+", "1")},
+	{Prefixes: []string{"DEC"}, Description: "Decrement a value by one.", Explain: explainUnaryDelta("-", "1")},
+	{Prefixes: []string{"NEG"}, Description: "Negate a signed value.", Explain: explainUnaryPrefix("-")},
+	{Prefixes: []string{"NOT"}, Description: "Invert every bit in a value.", Explain: explainUnaryPrefix("^")},
+	{Prefixes: []string{"CMP"}, Description: "Compare values and update condition flags.", ExplainArch: explainCompare},
+	{Prefixes: []string{"TEST", "TST"}, Description: "Test bits and update condition flags without storing a result.", Explain: explainTest},
+	{Prefixes: []string{"FMADD"}, Description: "Fused floating-point multiply-add with one rounding step.", Explain: explainFMADD},
+	{Prefixes: []string{"FADD"}, Description: "Add floating-point values.", Explain: explainBinary("+")},
+	{Prefixes: []string{"FSUB"}, Description: "Subtract floating-point values.", Explain: explainBinary("-")},
+	{Prefixes: []string{"FMUL"}, Description: "Multiply floating-point values.", Explain: explainBinary("*")},
+	{Prefixes: []string{"LDR", "LDUR", "LOAD"}, Description: "Load a value from memory into a register.", Explain: explainLoad},
+	{Prefixes: []string{"STR", "STUR", "STORE"}, Description: "Store a register value in memory.", Explain: explainStore},
+	{Prefixes: []string{"PUSH"}, Description: "Push a value onto the stack."},
+	{Prefixes: []string{"POP"}, Description: "Pop the top stack value."},
+	{Prefixes: []string{"CALL", "BL", "JAL"}, Description: "Call a function and save a return address."},
+	{Prefixes: []string{"RET"}, Description: "Return to the caller."},
+	{Prefixes: []string{"JMP", "B"}, Description: "Jump to another instruction."},
+	{Prefixes: []string{"JE", "JZ", "BEQ"}, Description: "Jump when values are equal (zero flag set)."},
+	{Prefixes: []string{"JNE", "JNZ", "BNE"}, Description: "Jump when values are not equal."},
+	{Prefixes: []string{"JG", "JGE", "JL", "JLE", "BGT", "BGE", "BLT", "BLE"}, Description: "Conditional jump after a signed comparison."},
+	{Prefixes: []string{"JA", "JAE", "JB", "JBE", "BHI", "BHS", "BLO", "BLS"}, Description: "Conditional jump after an unsigned comparison."},
+	{Prefixes: []string{"CBZ"}, Description: "Jump when a register is zero."},
+	{Prefixes: []string{"CBNZ"}, Description: "Jump when a register is not zero."},
+	{Prefixes: []string{"NOP"}, Description: "Do nothing for one instruction slot."},
 }
 
-func AssemblyInstructionHelp(text string) (AssemblyHelp, bool) {
+func AssemblyInstructionHelp(arch, text string) (AssemblyHelp, bool) {
 	mnemonic, operands := splitAssemblyInstruction(text)
 	if mnemonic == "" {
 		return AssemblyHelp{}, false
@@ -67,7 +70,10 @@ func AssemblyInstructionHelp(text string) (AssemblyHelp, bool) {
 		for _, prefix := range rule.Prefixes {
 			if mnemonicMatches(mnemonic, prefix) {
 				help := AssemblyHelp{Mnemonic: mnemonic, Description: rule.Description}
-				if rule.Explain != nil {
+				switch {
+				case rule.ExplainArch != nil:
+					help.Explanation = rule.ExplainArch(arch, operands)
+				case rule.Explain != nil:
 					help.Explanation = rule.Explain(operands)
 				}
 				return help, true
@@ -136,7 +142,9 @@ func explainBinary(operator string) func([]string) string {
 		if len(operands) == 2 {
 			return destination + " := " + destination + " " + operator + " " + formatValue(operands[0])
 		}
-		return destination + " := " + formatValue(operands[0]) + " " + operator + " " + formatValue(operands[1])
+		// Three-operand Go assembly computes dst := second op first:
+		// SUB R1, R5, R3 is R3 = R5 - R1, LSL $3, R5, R3 is R3 = R5 << 3.
+		return destination + " := " + formatValue(operands[len(operands)-2]) + " " + operator + " " + formatValue(operands[0])
 	}
 }
 
@@ -160,9 +168,16 @@ func explainUnaryPrefix(operator string) func([]string) string {
 	}
 }
 
-func explainCompare(operands []string) string {
+func explainCompare(arch string, operands []string) string {
 	if len(operands) < 2 {
 		return ""
+	}
+	// Go assembly for x86 deliberately keeps CMP operands in natural
+	// left-to-right order (CMPQ AX, BX sets flags from AX-BX; see
+	// go.dev/issue/60920), while arm64 and the other ports use
+	// source-first order (CMP R1, R4 sets flags from R4-R1).
+	if arch == "386" || arch == "amd64" {
+		return "flags := compare(" + formatValue(operands[0]) + ", " + formatValue(operands[1]) + ")"
 	}
 	return "flags := compare(" + formatValue(operands[1]) + ", " + formatValue(operands[0]) + ")"
 }
