@@ -312,51 +312,10 @@ func (store *CommentStore) saveLocked() error {
 	}
 	data = append(data, '\n')
 
-	dir := filepath.Dir(store.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(store.path), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".lensm-comments-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	// CreateTemp creates the file 0600; keep the sidecar shareable.
-	if err := tmp.Chmod(0o644); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	// Flush data blocks before the rename, otherwise a crash can leave a
-	// zero-length or truncated file behind the already-journaled rename.
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, store.path); err != nil {
-		return err
-	}
-	syncDir(dir)
-	return nil
-}
-
-// syncDir best-effort flushes directory metadata so a rename survives a
-// crash. Errors are ignored: not all platforms support syncing directories.
-func syncDir(dir string) {
-	d, err := os.Open(dir)
-	if err != nil {
-		return
-	}
-	_ = d.Sync()
-	_ = d.Close()
+	return atomicWriteFile(store.path, data, 0o644)
 }
 
 func (store *CommentStore) normalize(coord CommentCoord) CommentCoord {
