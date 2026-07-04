@@ -247,6 +247,26 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		}
 		return CodeViewNone, -1, false
 	}
+	// selectionDragLine clamps a drag position to the selection view's
+	// content, so a fast drag past an edge selects through to the first
+	// or last line instead of stopping at the last in-range sample.
+	selectionDragLine := func(view CodeView, position f32.Point) (int, bool) {
+		var line, count int
+		switch view {
+		case CodeViewGoAsm, CodeViewNativeAsm:
+			count = len(ui.Code.Insts)
+			line = int(position.Y-ui.asm.scroll) / lineHeight
+		case CodeViewSource:
+			count = sourceRowCount(ui.Code)
+			line = int(position.Y-ui.src.scroll) / lineHeight
+		default:
+			return -1, false
+		}
+		if count == 0 {
+			return -1, false
+		}
+		return min(max(line, 0), count-1), true
+	}
 	mouseClicked := false
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
@@ -290,17 +310,15 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 					if math.Abs(float64(ev.Position.X-ui.selectionStart.X)) > 3 || math.Abs(float64(ev.Position.Y-ui.selectionStart.Y)) > 3 {
 						ui.selectionMoved = true
 					}
-					view, line, selectable := selectionAt(ev.Position)
-					if selectable && view == ui.Selection.View {
-						ui.Selection.Extend(view, line)
+					if line, ok := selectionDragLine(ui.Selection.View, ev.Position); ok {
+						ui.Selection.Extend(ui.Selection.View, line)
 					}
 				}
 			case pointer.Release:
 				ui.mousePosition = ev.Position
 				if ui.selecting && ev.PointerID == ui.selectionPointer {
-					view, line, selectable := selectionAt(ev.Position)
-					if selectable && view == ui.Selection.View {
-						ui.Selection.Extend(view, line)
+					if line, ok := selectionDragLine(ui.Selection.View, ev.Position); ok {
+						ui.Selection.Extend(ui.Selection.View, line)
 					}
 					mouseClicked = !ui.selectionMoved
 					ui.selecting = false
@@ -346,7 +364,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			}
 			lineCount := len(ui.Code.Insts)
 			if view == CodeViewSource {
-				lineCount = len(sourceTextRows(ui.Code))
+				lineCount = sourceRowCount(ui.Code)
 			}
 			if lineCount > 0 {
 				ui.Selection = TextSelection{View: view, Anchor: 0, Head: lineCount - 1, Active: true}

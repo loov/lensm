@@ -93,4 +93,18 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 	if want := "MOV (R2), R1\nADDQ $1, R1\n"; copied != want {
 		t.Fatalf("copied text = %q, want %q", copied, want)
 	}
+
+	// A fast drag past the bottom edge must clamp to the last line, not
+	// stop at the last in-range drag sample.
+	router.Queue(
+		pointer.Event{Source: pointer.Mouse, PointerID: 2, Buttons: pointer.ButtonPrimary, Kind: pointer.Press, Position: f32.Pt(100, 20)},
+		pointer.Event{Source: pointer.Mouse, PointerID: 2, Buttons: pointer.ButtonPrimary, Kind: pointer.Move, Position: f32.Pt(100, 5000)},
+		pointer.Event{Source: pointer.Mouse, PointerID: 2, Buttons: pointer.ButtonPrimary, Kind: pointer.Release, Position: f32.Pt(100, 5000)},
+	)
+	gtx = newContext()
+	style.Layout(gtx)
+	router.Frame(gtx.Ops)
+	if from, to, ok := state.Selection.Range(); !ok || from != 0 || to != len(state.Code.Insts)-1 {
+		t.Fatalf("overshoot drag selection = %#v, range %d..%d", state.Selection, from, to)
+	}
 }

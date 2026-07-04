@@ -22,46 +22,46 @@ type TextSelection struct {
 	Active bool
 }
 
-func (selection *TextSelection) Clear() {
-	*selection = TextSelection{}
+func (s *TextSelection) Clear() {
+	*s = TextSelection{}
 }
 
-func (selection *TextSelection) Begin(view CodeView, line int, extend bool) {
+func (s *TextSelection) Begin(view CodeView, line int, extend bool) {
 	if view == CodeViewNone || line < 0 {
-		selection.Clear()
+		s.Clear()
 		return
 	}
-	if !extend || !selection.Active || selection.View != view {
-		selection.View = view
-		selection.Anchor = line
+	if !extend || !s.Active || s.View != view {
+		s.View = view
+		s.Anchor = line
 	}
-	selection.Head = line
-	selection.Active = true
+	s.Head = line
+	s.Active = true
 }
 
-func (selection *TextSelection) Extend(view CodeView, line int) {
-	if !selection.Active || selection.View != view || line < 0 {
+func (s *TextSelection) Extend(view CodeView, line int) {
+	if !s.Active || s.View != view || line < 0 {
 		return
 	}
-	selection.Head = line
+	s.Head = line
 }
 
-func (selection TextSelection) Range() (from, to int, ok bool) {
-	if !selection.Active {
+func (s TextSelection) Range() (from, to int, ok bool) {
+	if !s.Active {
 		return 0, 0, false
 	}
-	from, to = selection.Anchor, selection.Head
+	from, to = s.Anchor, s.Head
 	if from > to {
 		from, to = to, from
 	}
 	return from, to, true
 }
 
-func (selection TextSelection) Contains(view CodeView, line int) bool {
-	if selection.View != view {
+func (s TextSelection) Contains(view CodeView, line int) bool {
+	if s.View != view {
 		return false
 	}
-	from, to, ok := selection.Range()
+	from, to, ok := s.Range()
 	return ok && from <= line && line <= to
 }
 
@@ -91,6 +91,28 @@ func sourceTextRows(code *disasm.Code) []sourceTextRow {
 	return rows
 }
 
+// sourceRowCount mirrors the rows produced by sourceTextRows without
+// building them; it runs on every pointer event.
+func sourceRowCount(code *disasm.Code) int {
+	if code == nil {
+		return 0
+	}
+	count := 0
+	for sourceIndex, source := range code.Source {
+		if sourceIndex > 0 {
+			count++
+		}
+		count++
+		for blockIndex, block := range source.Blocks {
+			if blockIndex > 0 {
+				count++
+			}
+			count += len(block.Lines)
+		}
+	}
+	return count
+}
+
 func sourceRowAtY(code *disasm.Code, scroll float32, lineHeight int, y float32) int {
 	if code == nil || lineHeight <= 0 {
 		return -1
@@ -100,23 +122,23 @@ func sourceRowAtY(code *disasm.Code, scroll float32, lineHeight int, y float32) 
 		return -1
 	}
 	row := int(relative / float32(lineHeight))
-	if row < 0 || row >= len(sourceTextRows(code)) {
+	if row < 0 || row >= sourceRowCount(code) {
 		return -1
 	}
 	return row
 }
 
-func (selection TextSelection) Text(code *disasm.Code) string {
+func (s TextSelection) Text(code *disasm.Code) string {
 	if code == nil {
 		return ""
 	}
-	from, to, ok := selection.Range()
+	from, to, ok := s.Range()
 	if !ok {
 		return ""
 	}
 
 	var lines []string
-	switch selection.View {
+	switch s.View {
 	case CodeViewGoAsm, CodeViewNativeAsm:
 		if from < 0 {
 			from = 0
@@ -126,7 +148,7 @@ func (selection TextSelection) Text(code *disasm.Code) string {
 		}
 		for i := from; i <= to; i++ {
 			text := code.Insts[i].Text
-			if selection.View == CodeViewNativeAsm {
+			if s.View == CodeViewNativeAsm {
 				text = strings.ToUpper(code.Insts[i].NativeText)
 			}
 			lines = append(lines, text)
