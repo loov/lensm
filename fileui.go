@@ -1092,7 +1092,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 					if code == nil || !code.Loaded() {
 						return layout.Dimensions{}
 					}
-					txt := material.Body1(ui.Theme, "file: "+code.Code.File+"  •  Hover instructions for help  •  Drag lines to select")
+					txt := material.Body1(ui.Theme, "file: "+code.Code.File)
 					txt.Font.Style = font.Italic
 					txt.Color = colors.MutedText
 
