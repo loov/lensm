@@ -117,20 +117,20 @@ func (ui *CodeUI) ResetScroll() {
 type CodeUIStyle struct {
 	*CodeUI
 
-	TryOpen          func(gtx layout.Context, funcname string)
-	CommentFor       func(disasm.Inst) string
-	NativeCommentFor func(disasm.Inst) string
-	SourceCommentFor func(file string, line int) string
-	CommentKey       *string
-	CommentKeyFor    func(disasm.Inst) string
-	SetComment       func(disasm.Inst, string)
-	SetNativeComment func(disasm.Inst, string)
-	SetSourceComment func(file string, line int, text string)
-	CopyText         func(gtx layout.Context, text string)
-	CommentEditor    *widget.Editor
-	Theme            *material.Theme
-	Colors           UIColors
-	Syntax           syntax.Palette
+	TryOpen  func(gtx layout.Context, funcname string)
+	CopyText func(gtx layout.Context, text string)
+
+	// Comments backs inline comment display and editing. Reads go through
+	// the store directly; SetComment records an edit (buffered write plus
+	// flush scheduling), and CommentKey/CommentEditor drive the single
+	// shared inline editor.
+	Comments      *comments.Store
+	SetComment    func(comments.Coord, string)
+	CommentKey    *string
+	CommentEditor *widget.Editor
+	Theme         *material.Theme
+	Colors        UIColors
+	Syntax        syntax.Palette
 
 	ShowNative bool
 	ShowHelp   bool
@@ -566,12 +566,9 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			Color:      ui.Syntax.Plain,
 		}.Layout(ui.Theme, gtx)
 		if commentWidth > 0 && ix.Text != "" {
-			comment := ""
-			if ui.CommentFor != nil {
-				comment = ui.CommentFor(ix)
-			}
+			comment := ui.Comments.Get(ui.asmCoord(comments.ViewGoAsm, ix))
 			if ui.SelectedAsm == i && ui.SelectedView == comments.ViewGoAsm {
-				ui.layoutInlineCommentEditor(gtx, ix, i*lineHeight+int(ui.asm.scroll), commentLeft, commentWidth, lineHeight)
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(comments.ViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), commentLeft, commentWidth, lineHeight)
 			} else if comment != "" {
 				SourceLine{
 					TopLeft:    image.Pt(commentLeft, i*lineHeight+int(ui.asm.scroll)),
@@ -584,10 +581,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 			}
 		}
 		if ui.ShowNative {
-			nativeComment := ""
-			if ui.NativeCommentFor != nil {
-				nativeComment = ui.NativeCommentFor(ix)
-			}
+			nativeComment := ui.Comments.Get(ui.asmCoord(comments.ViewNativeAsm, ix))
 			width := nativeTextWidth
 			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == comments.ViewNativeAsm)) && nativeCommentWidth > 0 {
 				width = nativeInstructionWidth
@@ -602,7 +596,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 				Color:      ui.Syntax.Plain,
 			}.Layout(ui.Theme, gtx)
 			if ui.SelectedAsm == i && ui.SelectedView == comments.ViewNativeAsm && nativeCommentWidth > 0 {
-				ui.layoutInlineNativeCommentEditor(gtx, ix, i*lineHeight+int(ui.asm.scroll), nativeCommentLeft, nativeCommentWidth, lineHeight)
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(comments.ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), nativeCommentLeft, nativeCommentWidth, lineHeight)
 			} else if nativeComment != "" && nativeCommentWidth > 0 {
 				SourceLine{
 					TopLeft:    image.Pt(nativeCommentLeft, i*lineHeight+int(ui.asm.scroll)),
@@ -700,10 +694,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 						gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
 					}
 				}
-				sourceComment := ""
-				if ui.SourceCommentFor != nil {
-					sourceComment = ui.SourceCommentFor(src.File, lineNo)
-				}
+				sourceComment := ui.Comments.Get(ui.sourceCoord(src.File, lineNo))
 				width := sourceTextWidth
 				selectedSource := ui.SelectedView == comments.ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
 				if (sourceComment != "" || selectedSource) && sourceCommentWidth > 0 {
@@ -718,7 +709,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 					Color:      ui.Syntax.Plain,
 				}.Layout(ui.Theme, gtx)
 				if selectedSource && sourceCommentWidth > 0 {
-					ui.layoutInlineSourceCommentEditor(gtx, src.File, lineNo, top, sourceCommentLeft, sourceCommentWidth, lineHeight)
+					ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", top, sourceCommentLeft, sourceCommentWidth, lineHeight)
 				} else if sourceComment != "" && sourceCommentWidth > 0 {
 					SourceLine{
 						TopLeft:    image.Pt(sourceCommentLeft, top),
@@ -943,34 +934,45 @@ func (ui CodeUIStyle) measureAsmTextWidth(gtx layout.Context, f font.Font, text 
 	return dims.Size.X
 }
 
-func (ui CodeUIStyle) layoutInlineCommentEditor(gtx layout.Context, inst disasm.Inst, top, left, width, lineHeight int) {
-	ui.layoutInlineAsmCommentEditor(gtx, inst, comments.ViewGoAsm, ui.CommentFor, ui.CommentKeyFor, ui.SetComment, top, left, width, lineHeight)
-}
-
-func (ui CodeUIStyle) layoutInlineNativeCommentEditor(gtx layout.Context, inst disasm.Inst, top, left, width, lineHeight int) {
-	keyFor := func(inst disasm.Inst) string {
-		if ui.Code == nil {
-			return ""
-		}
-		// The view is prefixed by layoutInlineAsmCommentEditor.
-		return ui.Code.Name + ":" + comments.FormatPC(inst.PC)
+func (ui CodeUIStyle) asmCoord(view comments.View, inst disasm.Inst) comments.Coord {
+	name := ""
+	if ui.Code != nil {
+		name = ui.Code.Name
 	}
-	ui.layoutInlineAsmCommentEditor(gtx, inst, comments.ViewNativeAsm, ui.NativeCommentFor, keyFor, ui.SetNativeComment, top, left, width, lineHeight)
+	return comments.Coord{Function: name, View: view, PC: inst.PC}
 }
 
-func (ui CodeUIStyle) layoutInlineAsmCommentEditor(gtx layout.Context, inst disasm.Inst, view comments.View, commentFor func(disasm.Inst) string, keyFor func(disasm.Inst) string, setComment func(disasm.Inst, string), top, left, width, lineHeight int) {
-	if ui.CommentEditor == nil || ui.CommentKey == nil || keyFor == nil || setComment == nil {
-		if commentFor == nil {
-			return
-		}
-		comment := commentFor(inst)
+func (ui CodeUIStyle) sourceCoord(file string, line int) comments.Coord {
+	name := ""
+	if ui.Code != nil {
+		name = ui.Code.Name
+	}
+	return comments.Coord{Function: name, View: comments.ViewSource, File: file, Line: line}
+}
+
+// commentEditKey identifies which comment the shared inline editor is
+// bound to, so moving to a different line reloads the editor text.
+func commentEditKey(coord comments.Coord) string {
+	if coord.View == comments.ViewSource {
+		return string(coord.View) + ":" + coord.Function + ":" + coord.File + ":" + strconv.Itoa(coord.Line)
+	}
+	return string(coord.View) + ":" + coord.Function + ":" + comments.FormatPC(coord.PC)
+}
+
+// layoutInlineCommentEditor draws the comment for coord, either as an
+// editable field (when the line is selected and editing is wired up) or
+// read-only. prefix is the leading marker: ";" for assembly, "//" for
+// source.
+func (ui CodeUIStyle) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coord, prefix string, top, left, width, lineHeight int) {
+	if ui.CommentEditor == nil || ui.CommentKey == nil || ui.SetComment == nil {
+		comment := ui.Comments.Get(coord)
 		if comment == "" {
 			return
 		}
 		SourceLine{
 			TopLeft:    image.Pt(left, top),
 			Width:      width,
-			Text:       "; " + comment,
+			Text:       prefix + " " + comment,
 			TextHeight: ui.TextHeight,
 			Italic:     true,
 			Color:      ui.Colors.MutedText,
@@ -978,17 +980,10 @@ func (ui CodeUIStyle) layoutInlineAsmCommentEditor(gtx layout.Context, inst disa
 		return
 	}
 
-	key := keyFor(inst)
-	if view != "" {
-		key = string(view) + ":" + key
-	}
+	key := commentEditKey(coord)
 	if key != *ui.CommentKey {
 		*ui.CommentKey = key
-		comment := ""
-		if commentFor != nil {
-			comment = commentFor(inst)
-		}
-		ui.CommentEditor.SetText(comment)
+		ui.CommentEditor.SetText(ui.Comments.Get(coord))
 	}
 
 	changed := false
@@ -1003,68 +998,14 @@ func (ui CodeUIStyle) layoutInlineAsmCommentEditor(gtx layout.Context, inst disa
 		}
 	}
 	if changed {
-		setComment(inst, ui.CommentEditor.Text())
+		ui.SetComment(coord, ui.CommentEditor.Text())
 	}
 
 	prefixWidth := lineHeight
 	SourceLine{
 		TopLeft:    image.Pt(left, top),
 		Width:      prefixWidth,
-		Text:       ";",
-		TextHeight: ui.TextHeight,
-		Color:      ui.Colors.MutedText,
-	}.Layout(ui.Theme, gtx)
-
-	editorLeft := left + prefixWidth
-	editorWidth := width - prefixWidth
-	if editorWidth < 0 {
-		editorWidth = 0
-	}
-	stack := op.Offset(image.Pt(editorLeft, top)).Push(gtx.Ops)
-	gtx.Constraints = layout.Exact(image.Pt(editorWidth, lineHeight))
-	editor := material.Editor(ui.Theme, ui.CommentEditor, "comment")
-	editor.TextSize = ui.TextHeight
-	editor.Font.Typeface = "override-monospace,Go,monospace"
-	editor.Color = ui.Colors.Text
-	editor.Layout(gtx)
-	stack.Pop()
-}
-
-func (ui CodeUIStyle) layoutInlineSourceCommentEditor(gtx layout.Context, file string, line int, top, left, width, lineHeight int) {
-	if ui.CommentEditor == nil || ui.CommentKey == nil || ui.SetSourceComment == nil {
-		return
-	}
-
-	key := string(comments.ViewSource) + ":" + ui.Code.Name + ":" + file + ":" + strconv.Itoa(line)
-	if key != *ui.CommentKey {
-		*ui.CommentKey = key
-		comment := ""
-		if ui.SourceCommentFor != nil {
-			comment = ui.SourceCommentFor(file, line)
-		}
-		ui.CommentEditor.SetText(comment)
-	}
-
-	changed := false
-	for {
-		ev, ok := ui.CommentEditor.Update(gtx)
-		if !ok {
-			break
-		}
-		switch ev.(type) {
-		case widget.ChangeEvent, widget.SubmitEvent:
-			changed = true
-		}
-	}
-	if changed {
-		ui.SetSourceComment(file, line, ui.CommentEditor.Text())
-	}
-
-	prefixWidth := lineHeight
-	SourceLine{
-		TopLeft:    image.Pt(left, top),
-		Width:      prefixWidth,
-		Text:       "//",
+		Text:       prefix,
 		TextHeight: ui.TextHeight,
 		Color:      ui.Colors.MutedText,
 	}.Layout(ui.Theme, gtx)

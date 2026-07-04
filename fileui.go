@@ -696,18 +696,14 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 							return CodeUIStyle{
 								CodeUI: code,
 
-								TryOpen:          ui.tryOpen,
-								CommentFor:       ui.commentFor,
-								NativeCommentFor: ui.nativeCommentFor,
-								SourceCommentFor: ui.sourceCommentFor,
-								CommentKey:       &ui.commentKey,
-								CommentKeyFor:    ui.commentKeyFor,
-								SetComment:       ui.setCommentForInst,
-								SetNativeComment: ui.setNativeCommentForInst,
-								SetSourceComment: ui.setSourceCommentForLine,
+								TryOpen: ui.tryOpen,
 								CopyText: func(gtx layout.Context, text string) {
 									ui.writeClipboardText(gtx, text, "Copied selection")
 								},
+
+								Comments:      ui.Comments,
+								SetComment:    ui.setBufferedComment,
+								CommentKey:    &ui.commentKey,
 								CommentEditor: &ui.Comment,
 
 								Theme:      ui.Theme,
