@@ -26,6 +26,7 @@ import (
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/f32color"
+	"loov.dev/lensm/internal/syntax"
 )
 
 type CodeUI struct {
@@ -64,39 +65,39 @@ type CodeUI struct {
 // re-highlighting per frame allocates a go/scanner per source line.
 type highlightCache struct {
 	code   *disasm.Code
-	syntax SyntaxPalette
+	syntax syntax.Palette
 
-	asm        [][]SourceSpan
+	asm        [][]syntax.Span
 	nativeText []string
-	native     [][]SourceSpan
+	native     [][]syntax.Span
 	// source is indexed by source file, block, and line within the block.
-	source [][][][]SourceSpan
+	source [][][][]syntax.Span
 }
 
-func (hl *highlightCache) update(code *disasm.Code, syntax SyntaxPalette) {
-	if hl.code == code && hl.syntax == syntax {
+func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
+	if hl.code == code && hl.syntax == palette {
 		return
 	}
 	hl.code = code
-	hl.syntax = syntax
+	hl.syntax = palette
 
-	hl.asm = make([][]SourceSpan, len(code.Insts))
+	hl.asm = make([][]syntax.Span, len(code.Insts))
 	hl.nativeText = make([]string, len(code.Insts))
-	hl.native = make([][]SourceSpan, len(code.Insts))
+	hl.native = make([][]syntax.Span, len(code.Insts))
 	for i := range code.Insts {
 		ix := &code.Insts[i]
-		hl.asm[i] = HighlightAsmLine(ix.Text, ix.Call, syntax)
+		hl.asm[i] = syntax.HighlightAsm(ix.Text, ix.Call, palette)
 		hl.nativeText[i] = strings.ToUpper(ix.NativeText)
-		hl.native[i] = HighlightAsmLine(hl.nativeText[i], "", syntax)
+		hl.native[i] = syntax.HighlightAsm(hl.nativeText[i], "", palette)
 	}
 
-	hl.source = make([][][][]SourceSpan, len(code.Source))
+	hl.source = make([][][][]syntax.Span, len(code.Source))
 	for i, src := range code.Source {
-		blocks := make([][][]SourceSpan, len(src.Blocks))
+		blocks := make([][][]syntax.Span, len(src.Blocks))
 		for j, block := range src.Blocks {
-			lines := make([][]SourceSpan, len(block.Lines))
+			lines := make([][]syntax.Span, len(block.Lines))
 			for k, line := range block.Lines {
-				lines[k] = HighlightSourceLine(block.From+k, line, syntax)
+				lines[k] = syntax.HighlightSource(block.From+k, line, palette)
 			}
 			blocks[j] = lines
 		}
@@ -129,7 +130,7 @@ type CodeUIStyle struct {
 	CommentEditor    *widget.Editor
 	Theme            *material.Theme
 	Colors           UIColors
-	Syntax           SyntaxPalette
+	Syntax           syntax.Palette
 
 	ShowNative bool
 	ShowHelp   bool
@@ -145,7 +146,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		ui.Colors = ApplyTheme(ui.Theme, false)
 	}
 	if ui.Syntax.Plain == (color.NRGBA{}) {
-		ui.Syntax = SyntaxPaletteFor(SyntaxStyleGoLand, ui.Colors)
+		ui.Syntax = syntax.PaletteFor(syntax.StyleGoLand, ui.Colors.syntaxColors())
 	}
 	hl := &ui.CodeUI.hl
 	hl.update(ui.Code, ui.Syntax)

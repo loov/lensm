@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"loov.dev/lensm/internal/atomicfile"
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/syntax"
 	"os"
 	"path/filepath"
 	"slices"
@@ -24,7 +25,7 @@ type AppSettings struct {
 
 func DefaultAppSettings() AppSettings {
 	return AppSettings{
-		SyntaxStyle:   SyntaxStyleGoLand,
+		SyntaxStyle:   syntax.StyleGoLand,
 		ShowNativeAsm: true,
 		ShowAsmHelp:   true,
 		TextSize:      12,
@@ -55,7 +56,7 @@ func LoadAppSettings() (AppSettings, error) {
 		}
 		return DefaultAppSettings(), fmt.Errorf("decode %s: %w", path, err)
 	}
-	settings.SyntaxStyle = NormalizeSyntaxStyle(settings.SyntaxStyle)
+	settings.SyntaxStyle = syntax.NormalizeStyle(settings.SyntaxStyle)
 	if settings.TextSize <= 0 {
 		settings.TextSize = DefaultAppSettings().TextSize
 	}
@@ -68,7 +69,7 @@ func LoadAppSettings() (AppSettings, error) {
 }
 
 func SaveAppSettings(settings AppSettings) error {
-	settings.SyntaxStyle = NormalizeSyntaxStyle(settings.SyntaxStyle)
+	settings.SyntaxStyle = syntax.NormalizeStyle(settings.SyntaxStyle)
 	if settings.TextSize <= 0 {
 		settings.TextSize = DefaultAppSettings().TextSize
 	}

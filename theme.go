@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"gioui.org/widget/material"
+	"loov.dev/lensm/internal/syntax"
 )
 
 type UIColors struct {
@@ -16,6 +17,10 @@ type UIColors struct {
 	Error               color.NRGBA
 	Selection           color.NRGBA
 	RelationStroke      color.NRGBA
+}
+
+func (c UIColors) syntaxColors() syntax.Colors {
+	return syntax.Colors{Text: c.Text, MutedText: c.MutedText, Background: c.Background}
 }
 
 func ApplyTheme(th *material.Theme, dark bool) UIColors {

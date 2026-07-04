@@ -16,6 +16,7 @@ import (
 	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/syntax"
 )
 
 func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
@@ -58,7 +59,7 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 		CodeUI:     state,
 		Theme:      theme,
 		Colors:     colors,
-		Syntax:     SyntaxPaletteFor(SyntaxStyleGoLand, colors),
+		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, colors.syntaxColors()),
 		ShowNative: true,
 		TextHeight: theme.TextSize,
 		CopyText: func(_ layout.Context, text string) {

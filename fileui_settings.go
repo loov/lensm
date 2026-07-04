@@ -10,6 +10,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
+	"loov.dev/lensm/internal/syntax"
 	"strconv"
 	"strings"
 )
@@ -166,7 +167,7 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 		changedVisual = true
 	}
 	for ui.SyntaxStyle.Update(gtx) {
-		ui.SyntaxStyle.Value = NormalizeSyntaxStyle(ui.SyntaxStyle.Value)
+		ui.SyntaxStyle.Value = syntax.NormalizeStyle(ui.SyntaxStyle.Value)
 		changedVisual = true
 	}
 	if ui.updatePositiveIntEditor(gtx, &ui.TextSizeEditor, func(value int) {
@@ -218,7 +219,7 @@ func (ui *FileUI) saveVisualSettings() {
 	settings.Dark = ui.Dark.Value
 	settings.ShowNativeAsm = ui.ShowNativeAsm.Value
 	settings.ShowAsmHelp = ui.ShowAsmHelp.Value
-	settings.SyntaxStyle = NormalizeSyntaxStyle(ui.SyntaxStyle.Value)
+	settings.SyntaxStyle = syntax.NormalizeStyle(ui.SyntaxStyle.Value)
 	if value, err := strconv.Atoi(strings.TrimSpace(ui.TextSizeEditor.Text())); err == nil && value > 0 {
 		settings.TextSize = value
 	}

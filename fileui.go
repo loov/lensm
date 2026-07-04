@@ -27,6 +27,7 @@ import (
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/goobj"
 	"loov.dev/lensm/internal/mcp"
+	"loov.dev/lensm/internal/syntax"
 	"loov.dev/lensm/internal/wasmobj"
 )
 
@@ -550,20 +551,20 @@ func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors UIColors) layo
 				return layout.Inset{Right: 3}.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSyntaxRadio(gtx, colors, SyntaxStyleGoLand)
+				return ui.layoutSyntaxRadio(gtx, colors, syntax.StyleGoLand)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSyntaxRadio(gtx, colors, SyntaxStyleDarcula)
+				return ui.layoutSyntaxRadio(gtx, colors, syntax.StyleDarcula)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSyntaxRadio(gtx, colors, SyntaxStyleMono)
+				return ui.layoutSyntaxRadio(gtx, colors, syntax.StyleMono)
 			}),
 		)
 	})
 }
 
 func (ui *FileUI) layoutSyntaxRadio(gtx layout.Context, colors UIColors, style string) layout.Dimensions {
-	radio := material.RadioButton(ui.Theme, &ui.SyntaxStyle, style, SyntaxStyleLabel(style))
+	radio := material.RadioButton(ui.Theme, &ui.SyntaxStyle, style, syntax.StyleLabel(style))
 	radio.Color = colors.MutedText
 	radio.IconColor = ui.Theme.ContrastBg
 	radio.TextSize = ui.Theme.TextSize * 0.78
@@ -711,7 +712,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 
 								Theme:      ui.Theme,
 								Colors:     colors,
-								Syntax:     SyntaxPaletteFor(ui.Settings.SyntaxStyle, colors),
+								Syntax:     syntax.PaletteFor(ui.Settings.SyntaxStyle, colors.syntaxColors()),
 								ShowNative: ui.ShowNativeAsm.Value,
 								ShowHelp:   ui.ShowAsmHelp.Value,
 								TextHeight: ui.Theme.TextSize,

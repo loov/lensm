@@ -1,4 +1,4 @@
-package main
+package syntax
 
 import (
 	"image/color"
@@ -7,17 +7,17 @@ import (
 )
 
 func TestNormalizeSyntaxStyle(t *testing.T) {
-	if got := NormalizeSyntaxStyle("jetbrains-dark"); got != SyntaxStyleDarcula {
+	if got := NormalizeStyle("jetbrains-dark"); got != StyleDarcula {
 		t.Fatalf("expected darcula alias, got %q", got)
 	}
-	if got := NormalizeSyntaxStyle("unknown"); got != SyntaxStyleGoLand {
+	if got := NormalizeStyle("unknown"); got != StyleGoLand {
 		t.Fatalf("expected unknown style to fall back to goland, got %q", got)
 	}
 }
 
 func TestHighlightGoLine(t *testing.T) {
 	palette := testSyntaxPalette()
-	spans := HighlightGoLine(`if len(s) > 0 { return "x" // ok }`, palette)
+	spans := HighlightGo(`if len(s) > 0 { return "x" // ok }`, palette)
 
 	assertSpanColor(t, spans, "if", palette.Keyword)
 	assertSpanColor(t, spans, "len", palette.Builtin)
@@ -28,7 +28,7 @@ func TestHighlightGoLine(t *testing.T) {
 
 func TestHighlightAsmLine(t *testing.T) {
 	palette := testSyntaxPalette()
-	spans := HighlightAsmLine("CALL runtime.morestack_noctxt(SB); tail", "runtime.morestack_noctxt", palette)
+	spans := HighlightAsm("CALL runtime.morestack_noctxt(SB); tail", "runtime.morestack_noctxt", palette)
 
 	assertSpanStyle(t, spans, "CALL", palette.Mnemonic, true, false)
 	assertSpanColor(t, spans, "runtime.morestack_noctxt", palette.CallTarget)
@@ -38,15 +38,15 @@ func TestHighlightAsmLine(t *testing.T) {
 
 func TestHighlightNativeAsmLine(t *testing.T) {
 	palette := testSyntaxPalette()
-	spans := HighlightAsmLine("MOVQ $0X10, %RAX", "", palette)
+	spans := HighlightAsm("MOVQ $0X10, %RAX", "", palette)
 
 	assertSpanStyle(t, spans, "MOVQ", palette.Mnemonic, true, false)
 	assertSpanColor(t, spans, "$0X10", palette.Number)
 	assertSpanColor(t, spans, "%RAX", palette.Register)
 }
 
-func testSyntaxPalette() SyntaxPalette {
-	return SyntaxPalette{
+func testSyntaxPalette() Palette {
+	return Palette{
 		Plain:      testColor(1),
 		Keyword:    testColor(2),
 		Builtin:    testColor(3),
@@ -66,7 +66,7 @@ func testColor(v uint8) color.NRGBA {
 	return color.NRGBA{R: v, G: v, B: v, A: 0xff}
 }
 
-func assertSpanColor(t *testing.T, spans []SourceSpan, text string, col color.NRGBA) {
+func assertSpanColor(t *testing.T, spans []Span, text string, col color.NRGBA) {
 	t.Helper()
 	span, ok := findSpan(spans, text)
 	if !ok {
@@ -77,7 +77,7 @@ func assertSpanColor(t *testing.T, spans []SourceSpan, text string, col color.NR
 	}
 }
 
-func assertSpanStyle(t *testing.T, spans []SourceSpan, text string, col color.NRGBA, bold, italic bool) {
+func assertSpanStyle(t *testing.T, spans []Span, text string, col color.NRGBA, bold, italic bool) {
 	t.Helper()
 	span, ok := findSpan(spans, text)
 	if !ok {
@@ -89,16 +89,16 @@ func assertSpanStyle(t *testing.T, spans []SourceSpan, text string, col color.NR
 	}
 }
 
-func findSpan(spans []SourceSpan, text string) (SourceSpan, bool) {
+func findSpan(spans []Span, text string) (Span, bool) {
 	for _, span := range spans {
 		if span.Text == text {
 			return span, true
 		}
 	}
-	return SourceSpan{}, false
+	return Span{}, false
 }
 
-func joinedSpanText(spans []SourceSpan) string {
+func joinedSpanText(spans []Span) string {
 	var b strings.Builder
 	for _, span := range spans {
 		b.WriteString(span.Text)

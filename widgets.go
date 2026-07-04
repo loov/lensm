@@ -13,6 +13,7 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"loov.dev/lensm/internal/syntax"
 )
 
 // SourceLine is a single-line of text.
@@ -20,18 +21,11 @@ type SourceLine struct {
 	TopLeft    image.Point
 	Width      int
 	Text       string
-	Spans      []SourceSpan
+	Spans      []syntax.Span
 	TextHeight unit.Sp
 	Italic     bool
 	Bold       bool
 	Color      color.NRGBA
-}
-
-type SourceSpan struct {
-	Text   string
-	Color  color.NRGBA
-	Italic bool
-	Bold   bool
 }
 
 // codeLineHeightScale leaves room for ascenders and descenders when a
@@ -62,7 +56,7 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 
 	spans := line.Spans
 	if len(spans) == 0 {
-		spans = []SourceSpan{{
+		spans = []syntax.Span{{
 			Text:   line.Text,
 			Color:  line.Color,
 			Italic: line.Italic,
@@ -80,7 +74,7 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 	}
 }
 
-func layoutSourceSpan(th *material.Theme, gtx layout.Context, line SourceLine, span SourceSpan, left int) layout.Dimensions {
+func layoutSourceSpan(th *material.Theme, gtx layout.Context, line SourceLine, span syntax.Span, left int) layout.Dimensions {
 	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Normal}
 	if line.Italic || span.Italic {
 		f.Style = font.Italic

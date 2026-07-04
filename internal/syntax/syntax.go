@@ -1,4 +1,4 @@
-package main
+package syntax
 
 import (
 	"go/scanner"
@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	SyntaxStyleGoLand  = "goland-light"
-	SyntaxStyleDarcula = "darcula"
-	SyntaxStyleMono    = "mono"
+	StyleGoLand  = "goland-light"
+	StyleDarcula = "darcula"
+	StyleMono    = "mono"
 )
 
-type SyntaxPalette struct {
+type Palette struct {
 	Plain      color.NRGBA
 	Keyword    color.NRGBA
 	Builtin    color.NRGBA
@@ -31,35 +31,42 @@ type SyntaxPalette struct {
 	CallTarget color.NRGBA
 }
 
-func NormalizeSyntaxStyle(style string) string {
+func NormalizeStyle(style string) string {
 	switch strings.ToLower(strings.TrimSpace(style)) {
 	case "", "goland", "goland-light", "jetbrains":
-		return SyntaxStyleGoLand
+		return StyleGoLand
 	case "darcula", "goland-dark", "jetbrains-dark":
-		return SyntaxStyleDarcula
+		return StyleDarcula
 	case "mono", "monochrome", "plain":
-		return SyntaxStyleMono
+		return StyleMono
 	default:
-		return SyntaxStyleGoLand
+		return StyleGoLand
 	}
 }
 
-func SyntaxStyleLabel(style string) string {
-	switch NormalizeSyntaxStyle(style) {
-	case SyntaxStyleDarcula:
+func StyleLabel(style string) string {
+	switch NormalizeStyle(style) {
+	case StyleDarcula:
 		return "Darcula"
-	case SyntaxStyleMono:
+	case StyleMono:
 		return "Mono"
 	default:
 		return "GoLand"
 	}
 }
 
-func SyntaxPaletteFor(style string, colors UIColors) SyntaxPalette {
-	switch NormalizeSyntaxStyle(style) {
-	case SyntaxStyleDarcula:
+// Colors are the theme colors the palettes derive from.
+type Colors struct {
+	Text       color.NRGBA
+	MutedText  color.NRGBA
+	Background color.NRGBA
+}
+
+func PaletteFor(style string, colors Colors) Palette {
+	switch NormalizeStyle(style) {
+	case StyleDarcula:
 		if !syntaxBackgroundDark(colors.Background) {
-			return SyntaxPalette{
+			return Palette{
 				Plain:      color.NRGBA{R: 0x2b, G: 0x2d, B: 0x30, A: 0xff},
 				Keyword:    color.NRGBA{R: 0xa8, G: 0x55, B: 0x22, A: 0xff},
 				Builtin:    color.NRGBA{R: 0x3a, G: 0x72, B: 0x80, A: 0xff},
@@ -74,7 +81,7 @@ func SyntaxPaletteFor(style string, colors UIColors) SyntaxPalette {
 				CallTarget: color.NRGBA{R: 0x00, G: 0x00, B: 0xee, A: 0xff},
 			}
 		}
-		return SyntaxPalette{
+		return Palette{
 			Plain:      color.NRGBA{R: 0xa9, G: 0xb7, B: 0xc6, A: 0xff},
 			Keyword:    color.NRGBA{R: 0xcc, G: 0x78, B: 0x32, A: 0xff},
 			Builtin:    color.NRGBA{R: 0x88, G: 0xc0, B: 0xd0, A: 0xff},
@@ -88,8 +95,8 @@ func SyntaxPaletteFor(style string, colors UIColors) SyntaxPalette {
 			LineNumber: colors.MutedText,
 			CallTarget: color.NRGBA{R: 0x62, G: 0x9c, B: 0xf6, A: 0xff},
 		}
-	case SyntaxStyleMono:
-		return SyntaxPalette{
+	case StyleMono:
+		return Palette{
 			Plain:      colors.Text,
 			Keyword:    colors.Text,
 			Builtin:    colors.Text,
@@ -105,7 +112,7 @@ func SyntaxPaletteFor(style string, colors UIColors) SyntaxPalette {
 		}
 	default:
 		if syntaxBackgroundDark(colors.Background) {
-			return SyntaxPalette{
+			return Palette{
 				Plain:      color.NRGBA{R: 0xba, G: 0xbe, B: 0xc7, A: 0xff},
 				Keyword:    color.NRGBA{R: 0xcf, G: 0x8e, B: 0x6d, A: 0xff},
 				Builtin:    color.NRGBA{R: 0xbc, G: 0x94, B: 0xf9, A: 0xff},
@@ -120,7 +127,7 @@ func SyntaxPaletteFor(style string, colors UIColors) SyntaxPalette {
 				CallTarget: color.NRGBA{R: 0x56, G: 0xa8, B: 0xf5, A: 0xff},
 			}
 		}
-		return SyntaxPalette{
+		return Palette{
 			Plain:      color.NRGBA{R: 0x08, G: 0x08, B: 0x08, A: 0xff},
 			Keyword:    color.NRGBA{R: 0x00, G: 0x00, B: 0x80, A: 0xff},
 			Builtin:    color.NRGBA{R: 0x87, G: 0x10, B: 0x94, A: 0xff},
@@ -141,20 +148,20 @@ func syntaxBackgroundDark(bg color.NRGBA) bool {
 	return int(bg.R)*299+int(bg.G)*587+int(bg.B)*114 < 128000
 }
 
-func HighlightSourceLine(lineNo int, line string, palette SyntaxPalette) []SourceSpan {
-	spans := []SourceSpan{{
+func HighlightSource(lineNo int, line string, palette Palette) []Span {
+	spans := []Span{{
 		Text:  lineNumberPrefix(lineNo),
 		Color: palette.LineNumber,
 	}}
-	return append(spans, HighlightGoLine(line, palette)...)
+	return append(spans, HighlightGo(line, palette)...)
 }
 
-func HighlightGoLine(line string, palette SyntaxPalette) []SourceSpan {
+func HighlightGo(line string, palette Palette) []Span {
 	if line == "" {
 		return nil
 	}
 
-	var spans []SourceSpan
+	var spans []Span
 	fset := token.NewFileSet()
 	file := fset.AddFile("", -1, len(line))
 	var scan scanner.Scanner
@@ -204,7 +211,7 @@ func HighlightGoLine(line string, palette SyntaxPalette) []SourceSpan {
 	return spans
 }
 
-func HighlightAsmLine(line string, callTarget string, palette SyntaxPalette) []SourceSpan {
+func HighlightAsm(line string, callTarget string, palette Palette) []Span {
 	return highlightAsmLine(line, callTarget, palette)
 }
 
@@ -218,7 +225,7 @@ func lineNumberPrefix(lineNo int) string {
 	return b.String()
 }
 
-func goTokenStyle(tok token.Token, text string, palette SyntaxPalette) (color.NRGBA, bool) {
+func goTokenStyle(tok token.Token, text string, palette Palette) (color.NRGBA, bool) {
 	switch {
 	case tok.IsKeyword():
 		return palette.Keyword, false
@@ -237,7 +244,7 @@ func goTokenStyle(tok token.Token, text string, palette SyntaxPalette) (color.NR
 	}
 }
 
-func highlightAsmLine(line string, callTarget string, palette SyntaxPalette) []SourceSpan {
+func highlightAsmLine(line string, callTarget string, palette Palette) []Span {
 	if line == "" {
 		return nil
 	}
@@ -263,8 +270,8 @@ func splitAsmComment(line string) (string, string) {
 	return line[:commentAt], line[commentAt:]
 }
 
-func highlightAsmCode(code string, callTarget string, palette SyntaxPalette) []SourceSpan {
-	var spans []SourceSpan
+func highlightAsmCode(code string, callTarget string, palette Palette) []Span {
+	var spans []Span
 	seenMnemonic := false
 	for i := 0; i < len(code); {
 		r, size := runeAt(code, i)
@@ -308,7 +315,7 @@ func highlightAsmCode(code string, callTarget string, palette SyntaxPalette) []S
 	return spans
 }
 
-func asmWordColor(word string, seenMnemonic bool, callTarget string, palette SyntaxPalette) color.NRGBA {
+func asmWordColor(word string, seenMnemonic bool, callTarget string, palette Palette) color.NRGBA {
 	trimmed := strings.TrimSpace(word)
 	trimmed = strings.Trim(trimmed, "[]{}")
 	upper := strings.ToUpper(strings.TrimPrefix(trimmed, "%"))
@@ -385,7 +392,7 @@ func isAsmPunctuation(r rune) bool {
 	}
 }
 
-func appendSyntaxSpan(spans *[]SourceSpan, text string, col color.NRGBA, bold, italic bool) {
+func appendSyntaxSpan(spans *[]Span, text string, col color.NRGBA, bold, italic bool) {
 	if text == "" {
 		return
 	}
@@ -397,7 +404,7 @@ func appendSyntaxSpan(spans *[]SourceSpan, text string, col color.NRGBA, bold, i
 			return
 		}
 	}
-	*spans = append(*spans, SourceSpan{
+	*spans = append(*spans, Span{
 		Text:   text,
 		Color:  col,
 		Bold:   bold,
@@ -436,4 +443,11 @@ var asmRegisterNames = map[string]bool{
 	"EDX": true, "EFLAGS": true, "EIP": true, "ESI": true, "ESP": true,
 	"RAX": true, "RBP": true, "RBX": true, "RCX": true, "RDI": true,
 	"RDX": true, "RIP": true, "RSB": true, "RSI": true, "RSP": true,
+}
+
+type Span struct {
+	Text   string
+	Color  color.NRGBA
+	Italic bool
+	Bold   bool
 }
