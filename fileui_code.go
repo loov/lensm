@@ -24,6 +24,7 @@ import (
 
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/f32color"
+	"loov.dev/lensm/internal/asmhelp"
 )
 
 type CodeUI struct {
@@ -835,12 +836,12 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	if ui.ShowHelp && !ui.selecting && !commentEditing && InRange(highlightAsmIndex, len(ui.Code.Insts)) {
 		inst := ui.Code.Insts[highlightAsmIndex]
 		nativeHovered := ui.ShowNative && native.Contains(mousePosition.X)
-		var help AssemblyHelp
+		var help asmhelp.Help
 		var ok bool
 		if nativeHovered {
-			help, ok = NativeAssemblyInstructionHelp(inst.NativeText)
+			help, ok = asmhelp.ForNative(inst.NativeText)
 		} else {
-			help, ok = AssemblyInstructionHelp(ui.Code.Arch, inst.Text)
+			help, ok = asmhelp.ForInstruction(ui.Code.Arch, inst.Text)
 		}
 		if ok {
 			ui.layoutAssemblyHelp(gtx, help, mousePosition)
@@ -852,7 +853,7 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 	}
 }
 
-func (ui CodeUIStyle) layoutAssemblyHelp(gtx layout.Context, help AssemblyHelp, position f32.Point) {
+func (ui CodeUIStyle) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, position f32.Point) {
 	maxWidth := gtx.Metric.Dp(460)
 	if maxWidth > gtx.Constraints.Max.X-16 {
 		maxWidth = max(0, gtx.Constraints.Max.X-16)

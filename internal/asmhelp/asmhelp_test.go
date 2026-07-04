@@ -1,4 +1,4 @@
-package main
+package asmhelp
 
 import (
 	"strings"
@@ -34,7 +34,7 @@ func TestAssemblyInstructionExplanations(t *testing.T) {
 		{"arm64", "MSUB R2, R3, R1, R0", "R0 := R3 - R1 * R2"},
 	}
 	for _, test := range tests {
-		help, ok := AssemblyInstructionHelp(test.arch, test.instruction)
+		help, ok := ForInstruction(test.arch, test.instruction)
 		if !ok {
 			t.Fatalf("no help for %q", test.instruction)
 		}
@@ -45,7 +45,7 @@ func TestAssemblyInstructionExplanations(t *testing.T) {
 }
 
 func TestAssemblyInstructionReference(t *testing.T) {
-	help, ok := AssemblyInstructionHelp("amd64", "JNE 12(PC)")
+	help, ok := ForInstruction("amd64", "JNE 12(PC)")
 	if !ok || help.Description == "" {
 		t.Fatalf("JNE help = %#v, %v", help, ok)
 	}
@@ -55,7 +55,7 @@ func TestAssemblyInstructionReference(t *testing.T) {
 }
 
 func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
-	help, ok := AssemblyInstructionHelp("amd64", "VPERM2F128 $49, Y1, Y2, Y3")
+	help, ok := ForInstruction("amd64", "VPERM2F128 $49, Y1, Y2, Y3")
 	if !ok {
 		t.Fatal("no fallback help for Go assembly instruction")
 	}
@@ -66,22 +66,22 @@ func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
 
 func TestUndecodableInstructionHasNoFallback(t *testing.T) {
 	// Undecodable bytes render as "?" in the Go column.
-	if help, ok := AssemblyInstructionHelp("amd64", "?"); ok {
+	if help, ok := ForInstruction("amd64", "?"); ok {
 		t.Fatalf("unexpected fallback for undecodable instruction: %#v", help)
 	}
-	if help, ok := AssemblyInstructionHelp("amd64", "// pseudo"); ok {
+	if help, ok := ForInstruction("amd64", "// pseudo"); ok {
 		t.Fatalf("unexpected fallback for non-mnemonic token: %#v", help)
 	}
 }
 
 func TestUnknownNativeAssemblyInstructionHasNoGoFallback(t *testing.T) {
-	if help, ok := NativeAssemblyInstructionHelp("unknownop %rax"); ok {
+	if help, ok := ForNative("unknownop %rax"); ok {
 		t.Fatalf("unexpected native fallback: %#v", help)
 	}
 }
 
 func TestNativeAssemblyInstructionHelpUsesNativeRewrite(t *testing.T) {
-	help, ok := NativeAssemblyInstructionHelp("addq $1, %rax")
+	help, ok := ForNative("addq $1, %rax")
 	if !ok {
 		t.Fatal("no native help for ADDQ")
 	}
@@ -91,7 +91,7 @@ func TestNativeAssemblyInstructionHelpUsesNativeRewrite(t *testing.T) {
 }
 
 func TestNativeARMAssemblyInstructionExplanation(t *testing.T) {
-	help, ok := NativeAssemblyInstructionHelp("add x0, x1, #8")
+	help, ok := ForNative("add x0, x1, #8")
 	if !ok {
 		t.Fatal("no native help for ARM ADD")
 	}
@@ -101,7 +101,7 @@ func TestNativeARMAssemblyInstructionExplanation(t *testing.T) {
 }
 
 func TestNativeARMStoreInstructionExplanation(t *testing.T) {
-	help, ok := NativeAssemblyInstructionHelp("str x0, [sp, #16]")
+	help, ok := ForNative("str x0, [sp, #16]")
 	if !ok {
 		t.Fatal("no native help for ARM STR")
 	}
@@ -117,7 +117,7 @@ func TestNativeARMIndexedMemoryExplanations(t *testing.T) {
 		"stp x29, x30, [sp, #-16]!": "sp := sp - 16; memory[sp] := pair(x29, x30)",
 	}
 	for instruction, want := range tests {
-		help, ok := NativeAssemblyInstructionHelp(instruction)
+		help, ok := ForNative(instruction)
 		if !ok || help.Explanation != want {
 			t.Errorf("%q explanation = %q, want %q", instruction, help.Explanation, want)
 		}
@@ -126,7 +126,7 @@ func TestNativeARMIndexedMemoryExplanations(t *testing.T) {
 
 func TestNativeDirectJumpHasHelp(t *testing.T) {
 	// x86 GNU syntax spells direct jumps jmpq.
-	help, ok := NativeAssemblyInstructionHelp("jmpq .+0x100")
+	help, ok := ForNative("jmpq .+0x100")
 	if !ok {
 		t.Fatal("no native help for jmpq")
 	}
@@ -136,14 +136,14 @@ func TestNativeDirectJumpHasHelp(t *testing.T) {
 }
 
 func TestNativeARMTwoOperandNeg(t *testing.T) {
-	help, ok := NativeAssemblyInstructionHelp("neg x0, x1")
+	help, ok := ForNative("neg x0, x1")
 	if !ok {
 		t.Fatal("no native help for neg")
 	}
 	if help.Explanation != "x0 := -x1" {
 		t.Fatalf("neg explanation = %q", help.Explanation)
 	}
-	help, ok = NativeAssemblyInstructionHelp("mvn x0, x1")
+	help, ok = ForNative("mvn x0, x1")
 	if !ok {
 		t.Fatal("no native help for mvn")
 	}
@@ -153,7 +153,7 @@ func TestNativeARMTwoOperandNeg(t *testing.T) {
 }
 
 func TestNativeARMUnsignedConditionalBranchIsNotCall(t *testing.T) {
-	help, ok := NativeAssemblyInstructionHelp("b.ls .+0x1bc")
+	help, ok := ForNative("b.ls .+0x1bc")
 	if !ok {
 		t.Fatal("no native help for B.LS")
 	}
@@ -185,12 +185,12 @@ func TestAssemblyHelpRuleTableHasNoMnemonicCollisions(t *testing.T) {
 			for suffix := range nativeSizeSuffixes(prefix) {
 				mnemonic := prefix + suffix
 				if exactOwner, isExactMnemonic := exact[mnemonic]; isExactMnemonic {
-					if help, ok := AssemblyInstructionHelp("", mnemonic); !ok || help.Description != exactOwner.description {
+					if help, ok := ForInstruction("", mnemonic); !ok || help.Description != exactOwner.description {
 						t.Errorf("exact %s was captured as a suffix of %s", mnemonic, prefix)
 					}
 					continue
 				}
-				help, ok := AssemblyInstructionHelp("", mnemonic)
+				help, ok := ForInstruction("", mnemonic)
 				if !ok || help.Description != rule.Description {
 					t.Errorf("%s resolved to %#v; want rule for %s", mnemonic, help, prefix)
 				}
@@ -216,7 +216,7 @@ func TestAllNativeARMConditionBranchesResolveAsBranches(t *testing.T) {
 	}
 	for condition, want := range conditions {
 		instruction := "b." + condition + " .+4"
-		help, ok := NativeAssemblyInstructionHelp(instruction)
+		help, ok := ForNative(instruction)
 		if !ok {
 			t.Errorf("no help for %s", instruction)
 			continue
@@ -235,7 +235,7 @@ func TestAssemblyInstructionReferenceCoverage(t *testing.T) {
 		"movzbl (%rax), %eax", "cmovne %rax, %rbx", "sete %al",
 		"cqto", "syscall", "mfence", "adrp x0, 0x1000", "stp x0, x1, [sp]",
 	} {
-		if help, ok := NativeAssemblyInstructionHelp(instruction); !ok || help.Description == "" || help.Explanation == "" {
+		if help, ok := ForNative(instruction); !ok || help.Description == "" || help.Explanation == "" {
 			t.Errorf("no native help for %q", instruction)
 		}
 	}
@@ -257,7 +257,7 @@ func TestNativeInstructionFamiliesHaveConcreteExplanations(t *testing.T) {
 		"nop", "syscall", "dmb ish", "yield", "xchgq %rax, %rbx",
 	}
 	for _, instruction := range instructions {
-		help, ok := NativeAssemblyInstructionHelp(instruction)
+		help, ok := ForNative(instruction)
 		if !ok || help.Explanation == "" {
 			t.Errorf("native %q help has no concrete explanation: %#v", instruction, help)
 		}

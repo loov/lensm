@@ -1,11 +1,11 @@
-package main
+package asmhelp
 
 import (
 	"regexp"
 	"strings"
 )
 
-type AssemblyHelp struct {
+type Help struct {
 	Mnemonic    string
 	Description string
 	Explanation string
@@ -89,14 +89,14 @@ var asmInstructionRules = []asmInstructionRule{
 // NativeAssemblyInstructionHelp returns reference text and a syntax-correct
 // effect for the native (GNU) spelling of an instruction. GNU x86/AT&T uses
 // source-first operands while ARM-family GNU syntax uses destination-first.
-func NativeAssemblyInstructionHelp(text string) (AssemblyHelp, bool) {
+func ForNative(text string) (Help, bool) {
 	mnemonic, operands := splitAssemblyInstruction(text)
 	lookup := canonicalNativeMnemonic(mnemonic)
 	// Arch is irrelevant here: only the description is kept, the
 	// explanation is replaced with a native-syntax rewrite below.
 	help, ok := knownAssemblyInstructionHelp("", lookup, nil)
 	if !ok {
-		return AssemblyHelp{}, false
+		return Help{}, false
 	}
 	help.Mnemonic = mnemonic
 	help.Explanation = explainNativeInstruction(lookup, operands)
@@ -281,7 +281,7 @@ func explainNativeInstruction(mnemonic string, operands []string) string {
 	// source-first Plan 9 rewrites (hence the empty arch: the "amd64" CMP
 	// rewrite is natural-order, which would be wrong for AT&T).
 	if strings.Contains(strings.Join(operands, " "), "%") || strings.HasPrefix(strings.TrimSpace(operands[0]), "$") {
-		if help, ok := AssemblyInstructionHelp("", mnemonic+" "+strings.Join(operands, ", ")); ok {
+		if help, ok := ForInstruction("", mnemonic+" "+strings.Join(operands, ", ")); ok {
 			if help.Explanation != "" {
 				return help.Explanation
 			}
@@ -471,18 +471,18 @@ func explainNativeDestinationFirst(destination string, sources []string, operato
 	return destination + " := " + value(sources[0]) + " " + operator + " " + value(sources[1])
 }
 
-func AssemblyInstructionHelp(arch, text string) (AssemblyHelp, bool) {
+func ForInstruction(arch, text string) (Help, bool) {
 	mnemonic, operands := splitAssemblyInstruction(text)
 	if mnemonic == "" {
-		return AssemblyHelp{}, false
+		return Help{}, false
 	}
 	if help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands); ok {
 		return help, true
 	}
 	if !plausibleMnemonic(mnemonic) {
-		return AssemblyHelp{}, false
+		return Help{}, false
 	}
-	return AssemblyHelp{
+	return Help{
 		Mnemonic:    mnemonic,
 		Description: "Execute the " + mnemonic + " instruction.",
 	}, true
@@ -505,7 +505,7 @@ func plausibleMnemonic(mnemonic string) bool {
 	return true
 }
 
-func knownAssemblyInstructionHelp(arch, mnemonic string, operands []string) (AssemblyHelp, bool) {
+func knownAssemblyInstructionHelp(arch, mnemonic string, operands []string) (Help, bool) {
 	// Resolve exact mnemonics first. Otherwise BLS can be mistaken for BL with
 	// an S size suffix, and similar prefix collisions produce wrong semantics.
 	for _, rule := range asmInstructionRules {
@@ -522,11 +522,11 @@ func knownAssemblyInstructionHelp(arch, mnemonic string, operands []string) (Ass
 			}
 		}
 	}
-	return AssemblyHelp{}, false
+	return Help{}, false
 }
 
-func assemblyHelpFromRule(arch, mnemonic string, operands []string, rule asmInstructionRule) AssemblyHelp {
-	help := AssemblyHelp{Mnemonic: mnemonic, Description: rule.Description}
+func assemblyHelpFromRule(arch, mnemonic string, operands []string, rule asmInstructionRule) Help {
+	help := Help{Mnemonic: mnemonic, Description: rule.Description}
 	switch {
 	case rule.ExplainArch != nil:
 		help.Explanation = rule.ExplainArch(arch, operands)
