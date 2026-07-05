@@ -101,7 +101,7 @@ var asmInstructionRules = []asmInstructionRule{
 // NativeAssemblyInstructionHelp returns reference text and a syntax-correct
 // effect for the native (GNU) spelling of an instruction. GNU x86/AT&T uses
 // source-first operands while ARM-family GNU syntax uses destination-first.
-func ForNative(arch, text string) (Help, bool) {
+func ForNative(arch, canonical, text string) (Help, bool) {
 	mnemonic, operands := splitAssemblyInstruction(text)
 	lookup := canonicalNativeMnemonic(mnemonic)
 	// Arch is irrelevant here: only the description is kept, the
@@ -115,7 +115,7 @@ func ForNative(arch, text string) (Help, bool) {
 	if help.Explanation == "" {
 		help.Explanation = explainNativeEffect(lookup, operands)
 	}
-	if ref, ok := referenceEntry(arch, mnemonic); ok && isX86(arch) {
+	if ref, ok := referenceEntry(arch, canonical, mnemonic); ok && isX86(arch) {
 		help.Ports = referencePorts(ref)
 	}
 	return help, true
@@ -296,7 +296,7 @@ func explainNativeInstruction(mnemonic string, operands []string) string {
 	// source-first Plan 9 rewrites (hence the empty arch: the "amd64" CMP
 	// rewrite is natural-order, which would be wrong for AT&T).
 	if strings.Contains(strings.Join(operands, " "), "%") || strings.HasPrefix(strings.TrimSpace(operands[0]), "$") {
-		if help, ok := ForInstruction("", mnemonic+" "+strings.Join(operands, ", ")); ok {
+		if help, ok := ForInstruction("", "", mnemonic+" "+strings.Join(operands, ", ")); ok {
 			if help.Explanation != "" {
 				return help.Explanation
 			}
@@ -486,7 +486,10 @@ func explainNativeDestinationFirst(destination string, sources []string, operato
 	return destination + " := " + value(sources[0]) + " " + operator + " " + value(sources[1])
 }
 
-func ForInstruction(arch, text string) (Help, bool) {
+// ForInstruction returns help for a Go-assembly instruction. canonical is the
+// decoder's mnemonic (e.g. "LD1" for the Go spelling "VLD1"); pass "" when it is
+// unavailable and the mnemonic is recovered from text instead.
+func ForInstruction(arch, canonical, text string) (Help, bool) {
 	display, operands := splitAssemblyInstruction(text)
 	if display == "" {
 		return Help{}, false
@@ -497,7 +500,7 @@ func ForInstruction(arch, text string) (Help, bool) {
 	if i := strings.IndexByte(mnemonic, '.'); i > 0 {
 		mnemonic = mnemonic[:i]
 	}
-	ref, hasRef := referenceEntry(arch, mnemonic)
+	ref, hasRef := referenceEntry(arch, canonical, mnemonic)
 
 	help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands)
 	switch {
@@ -549,14 +552,20 @@ func referencePorts(ref asmref.Entry) []string {
 // Description is only a generic placeholder.
 const noReferenceNote = "No reference information available for this instruction."
 
-// referenceEntry looks up the generated reference for a mnemonic, tolerating
-// the Go assembler's spellings: the table is keyed by base mnemonic (ADD, LD1,
-// CRC32) while the disassembly shows ADDQ, CRC32Q (x86 size suffixes) or
-// VLD1.P, VMOV (arm64 SIMD V-prefix and .P post-index marker).
-func referenceEntry(arch, mnemonic string) (asmref.Entry, bool) {
-	for _, candidate := range mnemonicCandidates(arch, mnemonic) {
-		if e, ok := asmref.Lookup(candidate); ok {
-			return e, true
+// referenceEntry looks up the generated reference for an instruction. It tries
+// the canonical decoder mnemonic first (authoritative), then falls back to
+// spellings recovered from the displayed text: the table is keyed by base
+// mnemonic (ADD, LD1, CRC32) while the disassembly shows ADDQ, CRC32Q (x86 size
+// suffixes) or VLD1.P, VMOV (arm64 SIMD V-prefix and .P post-index marker).
+func referenceEntry(arch, canonical, textMnemonic string) (asmref.Entry, bool) {
+	for _, m := range []string{canonical, textMnemonic} {
+		if m == "" {
+			continue
+		}
+		for _, candidate := range mnemonicCandidates(arch, m) {
+			if e, ok := asmref.Lookup(candidate); ok {
+				return e, true
+			}
 		}
 	}
 	return asmref.Entry{}, false

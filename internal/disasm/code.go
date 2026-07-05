@@ -28,6 +28,9 @@ type Inst struct {
 	Text string
 	// NativeText is the native assembler syntax for this instruction.
 	NativeText string
+	// Mnemonic is the canonical decoder mnemonic (e.g. "LD1" where Text spells
+	// it "VLD1"), used for reference lookups. Empty for undecodable bytes.
+	Mnemonic string
 	// File is the location where this instruction was compiled from.
 	File string
 	// Line is the line in the file where this instruction was compiled from.

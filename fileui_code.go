@@ -952,9 +952,9 @@ func (ui CodeUIStyle) layoutHelp(gtx layout.Context, c codeColumns, hover codeHo
 	var help asmhelp.Help
 	var ok bool
 	if nativeHovered {
-		help, ok = asmhelp.ForNative(ui.Code.Arch, inst.NativeText)
+		help, ok = asmhelp.ForNative(ui.Code.Arch, inst.Mnemonic, inst.NativeText)
 	} else {
-		help, ok = asmhelp.ForInstruction(ui.Code.Arch, inst.Text)
+		help, ok = asmhelp.ForInstruction(ui.Code.Arch, inst.Mnemonic, inst.Text)
 	}
 	if ok {
 		ui.layoutAssemblyHelp(gtx, help, hover.position)

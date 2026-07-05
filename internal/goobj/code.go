@@ -30,7 +30,7 @@ func Disassemble(dis *godisasm.Disasm, sym *Func, opts disasm.Options) (*disasm.
 	}
 	var instructions []disasm.Inst
 	dis.DecodeSyntax(sym.sym.Addr, sym.sym.Addr+uint64(sym.sym.Size), sym.sym.Relocs,
-		func(pc, size uint64, file string, line int, text, nativeText string) {
+		func(pc, size uint64, file string, line int, text, nativeText, mnemonic string) {
 			// TODO: find a better way to calculate the jump target
 			var refPC uint64
 			var call string
@@ -56,6 +56,7 @@ func Disassemble(dis *godisasm.Disasm, sym *Func, opts disasm.Options) (*disasm.
 				PC:         pc,
 				Text:       text,
 				NativeText: nativeText,
+				Mnemonic:   mnemonic,
 				File:       file,
 				Line:       line,
 				Call:       call,

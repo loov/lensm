@@ -55,7 +55,7 @@ func main() {
 	var unresolved, notPlausible []string
 	resolved := 0
 	for m := range count {
-		help, ok := asmhelp.ForInstruction(arch, sample[m])
+		help, ok := asmhelp.ForInstruction(arch, "", sample[m])
 		switch {
 		case ok && help.Note == "":
 			resolved++
