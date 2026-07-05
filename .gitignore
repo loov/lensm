@@ -4,6 +4,8 @@
 *.dll
 *.so
 *.dylib
+data/arm64/
+data/x86/
 
 # Test binary, built with `go test -c`
 *.test
