@@ -21,10 +21,15 @@ it at real source dumps:
 
 ```
 go run ./internal/asmref/gen \
-  -arm  /path/to/ISA_A64_xml \
-  -x86  /path/to/uops.info/instructions.xml \
-  -out  internal/asmref/table.json
+  -arm     /path/to/ISA_A64_xml \
+  -x86     /path/to/uops.info/instructions.xml \
+  -x86arch ADL-P \
+  -out     internal/asmref/table.json
 ```
+
+`-x86arch` selects which microarchitecture the execution-port usage comes from
+(default `ADL-P`, the most-covered modern Intel core). Port usage varies per
+microarchitecture, so exactly one is pinned to keep the table bounded.
 
 The generator also prints (to stderr) any mnemonics that `golang.org/x/arch`'s
 decoders know but the table is missing — a coverage hint, not an error.
@@ -41,7 +46,9 @@ decoders know but the table is missing — a coverage hint, not an error.
   attribute (e.g. `ADD (R32, M32)`) becomes the syntax. Per-operand descriptions
   are not emitted — they are derivable from the token already in the syntax and
   would otherwise duplicate ~69 generic strings tens of thousands of times.
-  `<architecture>`/`<measurement>` micro-op tables are skipped.
+  Execution-port usage (uops.info notation, e.g. `1*p0156`) is read from
+  `<measurement>` for the single `-x86arch` microarchitecture; every other
+  `<architecture>`/`<measurement>` micro-op table is skipped.
 
 These dumps are large and not redistributed here; download them into a local
 directory and pass the paths above. Record the exact release version you used

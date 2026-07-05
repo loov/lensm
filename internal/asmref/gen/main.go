@@ -19,6 +19,7 @@ import (
 func main() {
 	armDir := flag.String("arm", "gen/testdata/arm", "directory of ARM AArch64 ISA XML files")
 	x86File := flag.String("x86", "gen/testdata/x86/instructions.xml", "uops.info instructions.xml path")
+	x86Arch := flag.String("x86arch", "ADL-P", "uops.info microarchitecture to source port usage from")
 	out := flag.String("out", "table.json", "output JSON path")
 	flag.Parse()
 
@@ -29,7 +30,7 @@ func main() {
 		}
 	}
 	if *x86File != "" {
-		if err := ParseX86File(b, *x86File); err != nil {
+		if err := ParseX86File(b, *x86File, *x86Arch); err != nil {
 			log.Fatalf("x86: %v", err)
 		}
 	}

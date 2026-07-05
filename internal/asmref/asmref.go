@@ -22,6 +22,9 @@ type Entry struct {
 	Description string            `json:"description,omitempty"`
 	Syntax      []string          `json:"syntax,omitempty"`
 	Operands    map[string]string `json:"operands,omitempty"`
+	// Ports lists the distinct execution-port usages (uops.info notation, e.g.
+	// "1*p0156") observed for the x86 mnemonic on one reference microarchitecture.
+	Ports []string `json:"ports,omitempty"`
 }
 
 //go:generate go run ./gen

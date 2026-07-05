@@ -53,7 +53,7 @@ func ParseARMDir(b *Builder, dir string) error {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 		for mnemonic, c := range parsed.Mnemonics {
-			b.Add(mnemonic, parsed.Title, parsed.Description, c.Syntax, c.Operands)
+			b.Add(mnemonic, parsed.Title, parsed.Description, c.Syntax, nil, c.Operands)
 		}
 		return nil
 	})

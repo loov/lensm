@@ -16,18 +16,25 @@
     "syntax": [
       "ADD <Wd>, <Wn>, #<imm>",
       "ADD (R32, R32)",
-      "ADD (R8, I8)"
+      "ADD (M32, R32)"
     ],
     "operands": {
       "<Wd>": "Is the 32-bit name of the general-purpose destination register",
       "<Wn>": "Is the 32-bit name of the source register",
       "<imm>": "Is an unsigned immediate, in the range 0 to 4095"
-    }
+    },
+    "ports": [
+      "1*p0156",
+      "1*p0156+1*p23+1*p49+1*p78"
+    ]
   },
   "CRC32": {
     "brief": "Accumulate CRC32 Value",
     "syntax": [
       "CRC32 (R32, R8)"
+    ],
+    "ports": [
+      "1*p1"
     ]
   },
   "LDR": {

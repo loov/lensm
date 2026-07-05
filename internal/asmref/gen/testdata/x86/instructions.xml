@@ -5,17 +5,20 @@
       <operand idx="1" name="REG0" r="1" type="reg" w="1" width="32" xtype="int">EAX,ECX,EDX,EBX,ESP,EBP,ESI,EDI</operand>
       <operand idx="2" name="REG1" r="1" type="reg" width="32" xtype="int">EAX,ECX,EDX,EBX,ESP,EBP,ESI,EDI</operand>
       <operand flag_CF="w" flag_OF="w" idx="3" name="REG2" suppressed="1" type="flags" w="1"/>
-      <architecture name="SKL">
-        <measurement>
+      <architecture name="ADL-P">
+        <measurement ports="1*p0156">
           <latency cycles="1"/>
         </measurement>
       </architecture>
+      <architecture name="SKL">
+        <measurement ports="1*SHOULDNOTAPPEAR"/>
+      </architecture>
     </instruction>
-    <instruction asm="ADD" category="BINARY" extension="BASE" iclass="ADD" iform="ADD_GPR8_IMM8" isa-set="I86" opcode="80" string="ADD (R8, I8)" summary="Add">
-      <operand idx="1" name="REG0" r="1" type="reg" w="1" width="8" xtype="int">AL,CL,DL,BL</operand>
-      <operand idx="2" name="IMM0" r="1" type="imm" width="8"/>
-      <architecture name="ICL">
-        <measurement><latency cycles="1"/></measurement>
+    <instruction asm="ADD" category="BINARY" extension="BASE" iclass="ADD" iform="ADD_MEMv_GPRv" isa-set="I86" opcode="01" string="ADD (M32, R32)" summary="Add">
+      <operand idx="1" memory-prefix="dword ptr" name="MEM0" r="1" type="mem" w="1" width="32"/>
+      <operand idx="2" name="REG0" r="1" type="reg" width="32" xtype="int">EAX,ECX,EDX,EBX</operand>
+      <architecture name="ADL-P">
+        <measurement ports="1*p0156+1*p23+1*p49+1*p78"/>
       </architecture>
     </instruction>
   </extension>
@@ -23,8 +26,8 @@
     <instruction asm="CRC32" category="STTNI" extension="SSE4" iclass="CRC32" iform="CRC32_GPR32_GPR8" isa-set="SSE4" opcode="0F38F0" string="CRC32 (R32, R8)" summary="Accumulate CRC32 Value">
       <operand idx="1" name="REG0" r="1" type="reg" w="1" width="32" xtype="int">EAX,ECX,EDX,EBX</operand>
       <operand idx="2" name="REG1" r="1" type="reg" width="8" xtype="int">AL,CL,DL,BL</operand>
-      <architecture name="SKL">
-        <measurement><latency cycles="3"/></measurement>
+      <architecture name="ADL-P">
+        <measurement ports="1*p1"/>
       </architecture>
     </instruction>
   </extension>

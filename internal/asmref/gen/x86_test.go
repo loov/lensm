@@ -7,7 +7,7 @@ import (
 
 func TestParseX86File(t *testing.T) {
 	b := NewBuilder()
-	if err := ParseX86File(b, "testdata/x86/instructions.xml"); err != nil {
+	if err := ParseX86File(b, "testdata/x86/instructions.xml", "ADL-P"); err != nil {
 		t.Fatal(err)
 	}
 	table := b.Table()
@@ -21,12 +21,20 @@ func TestParseX86File(t *testing.T) {
 		t.Errorf("ADD brief = %q", add.Brief)
 	}
 	// Both variants merge; the string attribute is the syntax form.
-	wantSyntax := []string{"ADD (R32, R32)", "ADD (R8, I8)"}
+	wantSyntax := []string{"ADD (R32, R32)", "ADD (M32, R32)"}
 	if strings.Join(add.Syntax, "|") != strings.Join(wantSyntax, "|") {
 		t.Errorf("ADD syntax = %#v", add.Syntax)
 	}
-	// Operands are intentionally not emitted for x86 (derivable, unused, and
-	// duplicated); the perf subtrees must not leak in either.
+	// Distinct port usages from the target microarch merge across variants.
+	wantPorts := []string{"1*p0156", "1*p0156+1*p23+1*p49+1*p78"}
+	if strings.Join(add.Ports, "|") != strings.Join(wantPorts, "|") {
+		t.Errorf("ADD ports = %#v", add.Ports)
+	}
+	// Ports from a non-target microarch must not leak in.
+	if strings.Contains(strings.Join(add.Ports, "|"), "SHOULDNOTAPPEAR") {
+		t.Errorf("non-target microarch ports leaked: %#v", add.Ports)
+	}
+	// Operands are intentionally not emitted for x86.
 	if len(add.Operands) != 0 {
 		t.Errorf("ADD should have no operands, got %#v", add.Operands)
 	}
@@ -37,5 +45,8 @@ func TestParseX86File(t *testing.T) {
 	}
 	if crc.Brief != "Accumulate CRC32 Value" {
 		t.Errorf("CRC32 brief = %q", crc.Brief)
+	}
+	if strings.Join(crc.Ports, "|") != "1*p1" {
+		t.Errorf("CRC32 ports = %#v", crc.Ports)
 	}
 }
