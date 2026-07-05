@@ -1,4 +1,4 @@
-// Command gen flattens CPU ISA XML into internal/asmref/table.json.
+// Command gen flattens CPU ISA XML into internal/asmref/table.json.gz.
 //
 // It is run via `go generate ./internal/asmref`. By default it reads the small
 // checked-in fixtures so a bare run stays reproducible; point -arm and -x86 at
@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -19,8 +20,7 @@ import (
 func main() {
 	armDir := flag.String("arm", "gen/testdata/arm", "directory of ARM AArch64 ISA XML files")
 	x86File := flag.String("x86", "gen/testdata/x86/instructions.xml", "uops.info instructions.xml path")
-	x86Arch := flag.String("x86arch", "ADL-P", "uops.info microarchitecture to source port usage from")
-	out := flag.String("out", "table.json", "output JSON path")
+	out := flag.String("out", "table.json.gz", "output path (gzip-compressed JSON)")
 	flag.Parse()
 
 	b := NewBuilder()
@@ -30,7 +30,7 @@ func main() {
 		}
 	}
 	if *x86File != "" {
-		if err := ParseX86File(b, *x86File, *x86Arch); err != nil {
+		if err := ParseX86File(b, *x86File); err != nil {
 			log.Fatalf("x86: %v", err)
 		}
 	}
@@ -50,15 +50,20 @@ func main() {
 			len(missing), strings.Join(sample, ", "))
 	}
 
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false) // keep "<Wd>" and "&" readable in the committed file
-	if err := enc.Encode(table); err != nil {
+	data, err := json.Marshal(table)
+	if err != nil {
 		log.Fatalf("marshal: %v", err)
+	}
+	var buf bytes.Buffer
+	zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if _, err := zw.Write(data); err != nil {
+		log.Fatalf("gzip: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		log.Fatalf("gzip: %v", err)
 	}
 	if err := os.WriteFile(*out, buf.Bytes(), 0o644); err != nil {
 		log.Fatalf("write %s: %v", *out, err)
 	}
-	fmt.Fprintf(os.Stderr, "asmref: wrote %d mnemonics to %s\n", len(table), *out)
+	fmt.Fprintf(os.Stderr, "asmref: wrote %d mnemonics to %s (%d KB gzipped)\n", len(table), *out, buf.Len()/1024)
 }

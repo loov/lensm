@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+
+	"loov.dev/lensm/internal/asmref"
 )
 
 // ParseX86File parses a uops.info instructions.xml and feeds every instruction
@@ -14,17 +17,16 @@ import (
 //
 // uops.info is a benchmark dataset, not an ISA manual: there are no <syntax> or
 // <description> elements. The usable "API" lives in attributes — summary (a
-// human title, the brief) and string (the operand-form, e.g. "ADD (R32, M32)",
-// used as the syntax). The <operand> children are not emitted (their derived
-// descriptions just restate the token already visible in the syntax).
+// human title, the brief) and string (the operand-form). The <operand> children
+// are not emitted (their derived descriptions just restate the token already in
+// the form).
 //
-// Execution-port usage is read from the <measurement ports="..."> nodes, but
-// only for the single reference microarchitecture x86arch: port usage differs
-// per microarchitecture (~100 of them) and per operand form, so pinning one
-// keeps the table bounded. Every other <architecture> subtree is skipped. The
-// file is ~140MB with over a million perf nodes, so this is a streaming token
-// walk.
-func ParseX86File(b *Builder, path, x86arch string) error {
+// Performance data is captured per operand form across every measured
+// microarchitecture: for each <architecture> the first <measurement> yields
+// uops, ports, throughput and worst-case latency. <IACA> estimate nodes are
+// skipped in favour of the real measurements. The file is ~140MB, so this is a
+// streaming token walk.
+func ParseX86File(b *Builder, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -32,8 +34,13 @@ func ParseX86File(b *Builder, path, x86arch string) error {
 	defer f.Close()
 
 	dec := xml.NewDecoder(bufio.NewReaderSize(f, 1<<20))
-	var cur *x86Inst
-	inTargetArch := false
+	var (
+		cur      *x86Inst
+		curArch  string
+		took     bool // a measurement was already taken for curArch
+		building bool // inside the measurement we are keeping
+		m        asmref.ArchPerf
+	)
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -46,29 +53,37 @@ func ParseX86File(b *Builder, path, x86arch string) error {
 		case xml.StartElement:
 			switch t.Name.Local {
 			case "instruction":
-				cur = &x86Inst{
-					asm:     attr(t, "asm"),
-					summary: attr(t, "summary"),
-					form:    attr(t, "string"),
-				}
+				cur = &x86Inst{asm: attr(t, "asm"), summary: attr(t, "summary"), form: attr(t, "string")}
 			case "architecture":
-				if attr(t, "name") == x86arch {
-					inTargetArch = true
-				} else if err := dec.Skip(); err != nil {
-					// Skip perf data for every other microarchitecture.
-					return err
-				}
+				curArch, took = attr(t, "name"), false
+			case "IACA":
+				_ = dec.Skip() // estimate, not a measurement
 			case "measurement":
-				if cur != nil && inTargetArch {
-					if p := strings.TrimSpace(attr(t, "ports")); p != "" {
-						cur.ports = append(cur.ports, p)
+				if cur == nil || curArch == "" || took {
+					_ = dec.Skip()
+					break
+				}
+				building = true
+				m = asmref.ArchPerf{
+					Arch:  curArch,
+					Uops:  atoi(attr(t, "uops")),
+					Ports: strings.TrimSpace(attr(t, "ports")),
+					TP:    measuredThroughput(t),
+				}
+			case "latency":
+				if building {
+					if c := atoi(attr(t, "cycles")); c > m.Latency {
+						m.Latency = c
 					}
 				}
 			}
 		case xml.EndElement:
 			switch t.Name.Local {
-			case "architecture":
-				inTargetArch = false
+			case "measurement":
+				if building {
+					cur.perf = append(cur.perf, m)
+					building, took = false, true
+				}
 			case "instruction":
 				if cur != nil {
 					addX86(b, cur)
@@ -84,7 +99,7 @@ type x86Inst struct {
 	asm     string
 	summary string
 	form    string
-	ports   []string
+	perf    []asmref.ArchPerf
 }
 
 func addX86(b *Builder, inst *x86Inst) {
@@ -92,10 +107,33 @@ func addX86(b *Builder, inst *x86Inst) {
 	if mnemonic == "" {
 		return
 	}
+	form := strings.TrimSpace(inst.form)
 	var syntax []string
-	if form := strings.TrimSpace(inst.form); form != "" {
+	var variants []asmref.Variant
+	if form != "" {
 		syntax = []string{form}
+		if len(inst.perf) > 0 {
+			variants = []asmref.Variant{{Form: form, Perf: inst.perf}}
+		}
 	}
 	// summary is the only human text; it serves as the brief.
-	b.Add(mnemonic, inst.summary, "", syntax, inst.ports, nil)
+	b.Add(mnemonic, inst.summary, "", syntax, variants, nil)
+}
+
+// measuredThroughput prefers the loop-measured throughput, falling back to the
+// unrolled measurement.
+func measuredThroughput(t xml.StartElement) float64 {
+	for _, key := range []string{"TP_loop", "TP_unrolled", "TP"} {
+		if v := attr(t, key); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				return f
+			}
+		}
+	}
+	return 0
+}
+
+func atoi(s string) int {
+	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	return n
 }

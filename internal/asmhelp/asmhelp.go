@@ -110,7 +110,7 @@ func ForNative(arch, text string) (Help, bool) {
 		help.Explanation = explainNativeEffect(lookup, operands)
 	}
 	if ref, ok := referenceEntry(mnemonic); ok && isX86(arch) {
-		help.Ports = ref.Ports
+		help.Ports = referencePorts(ref)
 	}
 	return help, true
 }
@@ -503,13 +503,30 @@ func ForInstruction(arch, text string) (Help, bool) {
 	// Ports are x86-only in the reference; the table merges ARM and x86 under
 	// one mnemonic key, so gate by arch to avoid showing x86 ports for arm64.
 	if hasRef && isX86(arch) {
-		help.Ports = ref.Ports
+		help.Ports = referencePorts(ref)
 	}
 	return help, true
 }
 
 func isX86(arch string) bool {
 	return arch == "386" || arch == "amd64"
+}
+
+// referenceArch is the microarchitecture whose port usage is summarised in the
+// tooltip. The table stores every measured microarchitecture; the hover shows
+// one recent, well-covered core.
+const referenceArch = "ADL-P"
+
+// referencePorts returns the distinct port usages measured for the reference
+// microarchitecture across the mnemonic's operand forms.
+func referencePorts(ref asmref.Entry) []string {
+	var out []string
+	for _, p := range ref.PerfFor(referenceArch) {
+		if p.Ports != "" && !slices.Contains(out, p.Ports) {
+			out = append(out, p.Ports)
+		}
+	}
+	return out
 }
 
 // referenceEntry looks up the generated reference for a mnemonic, tolerating

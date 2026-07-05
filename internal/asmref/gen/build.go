@@ -23,7 +23,7 @@ func NewBuilder() *Builder {
 // fields, dedup-append for syntax (document order preserved), and union for
 // operands (first meaning for a name wins). This keeps regeneration
 // deterministic given the same input.
-func (b *Builder) Add(mnemonic, brief, description string, syntax, ports []string, operands map[string]string) {
+func (b *Builder) Add(mnemonic, brief, description string, syntax []string, variants []asmref.Variant, operands map[string]string) {
 	key := strings.ToUpper(strings.TrimSpace(mnemonic))
 	if key == "" {
 		return
@@ -45,10 +45,11 @@ func (b *Builder) Add(mnemonic, brief, description string, syntax, ports []strin
 			e.Syntax = append(e.Syntax, s)
 		}
 	}
-	for _, p := range ports {
-		p = normalizeSpace(p)
-		if p != "" && !slices.Contains(e.Ports, p) {
-			e.Ports = append(e.Ports, p)
+	for _, v := range variants {
+		if i := slices.IndexFunc(e.Variants, func(x asmref.Variant) bool { return x.Form == v.Form }); i >= 0 {
+			e.Variants[i].Perf = append(e.Variants[i].Perf, v.Perf...)
+		} else {
+			e.Variants = append(e.Variants, v)
 		}
 	}
 	for name, meaning := range operands {

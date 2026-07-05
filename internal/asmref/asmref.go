@@ -1,16 +1,19 @@
 // Package asmref holds a generated, flattened instruction reference used for
 // hover tooltips. The table is produced by ./gen from CPU ISA XML (ARM's
 // official AArch64 release and the uops.info XED-derived dump) and embedded as
-// JSON — see README.md for how to regenerate.
+// gzip-compressed JSON — see README.md for how to regenerate.
 //
 // asmref is deliberately just reference text (brief, description, syntax,
-// operand meanings). The bespoke Go-pseudocode effects live in
-// internal/asmhelp; nothing here overwrites them.
+// operand meanings) plus x86 performance data. The bespoke Go-pseudocode
+// effects live in internal/asmhelp; nothing here overwrites them.
 package asmref
 
 import (
+	"bytes"
+	"compress/gzip"
 	_ "embed"
 	"encoding/json"
+	"io"
 	"strings"
 	"sync"
 )
@@ -22,15 +25,44 @@ type Entry struct {
 	Description string            `json:"description,omitempty"`
 	Syntax      []string          `json:"syntax,omitempty"`
 	Operands    map[string]string `json:"operands,omitempty"`
-	// Ports lists the distinct execution-port usages (uops.info notation, e.g.
-	// "1*p0156") observed for the x86 mnemonic on one reference microarchitecture.
-	Ports []string `json:"ports,omitempty"`
+	// Variants holds x86 per-operand-form performance data across all measured
+	// microarchitectures. Empty for ARM.
+	Variants []Variant `json:"variants,omitempty"`
+}
+
+// Variant is one x86 operand form (e.g. "ADD (R32, R32)") and its measured
+// performance on each microarchitecture.
+type Variant struct {
+	Form string     `json:"form"`
+	Perf []ArchPerf `json:"perf,omitempty"`
+}
+
+// ArchPerf is the uops.info measurement for one microarchitecture.
+type ArchPerf struct {
+	Arch    string  `json:"arch"`
+	Uops    int     `json:"uops,omitempty"`
+	Ports   string  `json:"ports,omitempty"` // uops.info notation, e.g. "1*p0156"
+	Latency int     `json:"lat,omitempty"`   // worst-case cycles across operand pairs
+	TP      float64 `json:"tp,omitempty"`    // throughput (cycles per instruction)
+}
+
+// PerfFor returns the per-variant measurements for one microarchitecture.
+func (e Entry) PerfFor(arch string) []ArchPerf {
+	var out []ArchPerf
+	for _, v := range e.Variants {
+		for _, p := range v.Perf {
+			if p.Arch == arch {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }
 
 //go:generate go run ./gen
 
-//go:embed table.json
-var tableJSON []byte
+//go:embed table.json.gz
+var tableGz []byte
 
 var (
 	tableOnce sync.Once
@@ -40,7 +72,11 @@ var (
 func load() {
 	// A malformed embed should surface as "no data" rather than panic in the
 	// UI hover path; the generator is what guarantees validity.
-	_ = json.Unmarshal(tableJSON, &table)
+	if r, err := gzip.NewReader(bytes.NewReader(tableGz)); err == nil {
+		if data, err := io.ReadAll(r); err == nil {
+			_ = json.Unmarshal(data, &table)
+		}
+	}
 	if table == nil {
 		table = map[string]Entry{}
 	}

@@ -2,23 +2,29 @@
 <root date="2026-01-01">
   <extension name="BASE">
     <instruction asm="ADD" category="BINARY" extension="BASE" iclass="ADD" iform="ADD_GPRv_GPRv" isa-set="I86" opcode="01" string="ADD (R32, R32)" summary="Add">
-      <operand idx="1" name="REG0" r="1" type="reg" w="1" width="32" xtype="int">EAX,ECX,EDX,EBX,ESP,EBP,ESI,EDI</operand>
-      <operand idx="2" name="REG1" r="1" type="reg" width="32" xtype="int">EAX,ECX,EDX,EBX,ESP,EBP,ESI,EDI</operand>
+      <operand idx="1" name="REG0" r="1" type="reg" w="1" width="32" xtype="int">EAX,ECX,EDX,EBX</operand>
+      <operand idx="2" name="REG1" r="1" type="reg" width="32" xtype="int">EAX,ECX,EDX,EBX</operand>
       <operand flag_CF="w" flag_OF="w" idx="3" name="REG2" suppressed="1" type="flags" w="1"/>
       <architecture name="ADL-P">
-        <measurement ports="1*p0156">
-          <latency cycles="1"/>
+        <IACA version="3.0" TP="0.30" uops="1" ports="1*IGNORED"/>
+        <measurement TP_unrolled="0.25" TP_loop="0.25" uops="1" ports="1*p0156">
+          <latency start_op="1" target_op="1" cycles="1"/>
+          <latency start_op="2" target_op="1" cycles="1"/>
         </measurement>
       </architecture>
-      <architecture name="SKL">
-        <measurement ports="1*SHOULDNOTAPPEAR"/>
+      <architecture name="ZEN5">
+        <measurement TP_loop="0.20" uops="1" ports="1*FPADD">
+          <latency start_op="1" target_op="1" cycles="1"/>
+        </measurement>
       </architecture>
     </instruction>
     <instruction asm="ADD" category="BINARY" extension="BASE" iclass="ADD" iform="ADD_MEMv_GPRv" isa-set="I86" opcode="01" string="ADD (M32, R32)" summary="Add">
       <operand idx="1" memory-prefix="dword ptr" name="MEM0" r="1" type="mem" w="1" width="32"/>
       <operand idx="2" name="REG0" r="1" type="reg" width="32" xtype="int">EAX,ECX,EDX,EBX</operand>
       <architecture name="ADL-P">
-        <measurement ports="1*p0156+1*p23+1*p49+1*p78"/>
+        <measurement TP_loop="1.00" uops="2" ports="1*p0156+1*p23+1*p49+1*p78">
+          <latency start_op="1" target_op="1" cycles="6"/>
+        </measurement>
       </architecture>
     </instruction>
   </extension>
@@ -27,7 +33,9 @@
       <operand idx="1" name="REG0" r="1" type="reg" w="1" width="32" xtype="int">EAX,ECX,EDX,EBX</operand>
       <operand idx="2" name="REG1" r="1" type="reg" width="8" xtype="int">AL,CL,DL,BL</operand>
       <architecture name="ADL-P">
-        <measurement ports="1*p1"/>
+        <measurement TP_loop="1.00" uops="1" ports="1*p1">
+          <latency start_op="1" target_op="1" cycles="3"/>
+        </measurement>
       </architecture>
     </instruction>
   </extension>

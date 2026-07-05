@@ -1,13 +1,17 @@
 # asmref
 
-A generated, flattened instruction reference for hover tooltips. `table.json` is
-embedded at build time and looked up by mnemonic via `asmref.Lookup`.
+A generated, flattened instruction reference for hover tooltips. `table.json.gz`
+(gzip-compressed JSON) is embedded at build time and looked up by mnemonic via
+`asmref.Lookup`.
 
-The table holds only the factual "API" — brief title, description, syntax forms
-and per-operand meanings. Bit encodings, latency/port data and execution
-pseudocode are intentionally dropped. The Go-pseudocode effects shown in
-tooltips come from `internal/asmhelp`, not from here; `asmref` only fills in
-reference text for mnemonics `asmhelp` doesn't already cover.
+The table holds the factual "API" — brief title, description, syntax forms and
+per-operand meanings — plus x86 per-microarchitecture performance data (uops,
+ports, latency, throughput). Bit encodings and execution pseudocode are dropped.
+The Go-pseudocode effects shown in tooltips come from `internal/asmhelp`, not
+from here; `asmref` only fills in reference text `asmhelp` doesn't already cover.
+
+The full table (all mnemonics, all measured microarchitectures) is ~15MB of JSON
+that gzips to ~0.6MB, hence the compressed embed.
 
 ## Regenerating
 
@@ -16,20 +20,15 @@ go generate ./internal/asmref
 ```
 
 With no arguments the generator reads the small checked-in fixtures under
-`gen/testdata`, so a bare run stays reproducible. To build the full table, point
-it at real source dumps:
+`gen/testdata`, so a bare run stays reproducible. To build the full table,
+download the sources (`data/download.sh`) and point it at them:
 
 ```
 go run ./internal/asmref/gen \
-  -arm     /path/to/ISA_A64_xml \
-  -x86     /path/to/uops.info/instructions.xml \
-  -x86arch ADL-P \
-  -out     internal/asmref/table.json
+  -arm  data/arm64/ISA_A64_xml_A_profile-2025-12 \
+  -x86  data/x86/instructions.xml \
+  -out  internal/asmref/table.json.gz
 ```
-
-`-x86arch` selects which microarchitecture the execution-port usage comes from
-(default `ADL-P`, the most-covered modern Intel core). Port usage varies per
-microarchitecture, so exactly one is pinned to keep the table bounded.
 
 The generator also prints (to stderr) any mnemonics that `golang.org/x/arch`'s
 decoders know but the table is missing — a coverage hint, not an error.
@@ -43,13 +42,13 @@ decoders know but the table is missing — a coverage hint, not an error.
 - **x86 / AMD64** — `instructions.xml` from https://uops.info (XED-derived,
   ~140MB). It is a benchmark dataset, not a manual: there are no description or
   syntax elements, so the `summary` attribute becomes the brief and the `string`
-  attribute (e.g. `ADD (R32, M32)`) becomes the syntax. Per-operand descriptions
-  are not emitted — they are derivable from the token already in the syntax and
-  would otherwise duplicate ~69 generic strings tens of thousands of times.
-  Execution-port usage (uops.info notation, e.g. `1*p0156`) is read from
-  `<measurement>` for the single `-x86arch` microarchitecture; every other
-  `<architecture>`/`<measurement>` micro-op table is skipped.
+  attribute (e.g. `ADD (R32, M32)`) becomes a syntax form. Per-operand
+  descriptions are not emitted — they restate the token already in the form.
+  For every operand form and every measured microarchitecture, the first
+  `<measurement>` yields uops, ports (uops.info notation, e.g. `1*p0156`),
+  throughput and worst-case latency; `<IACA>` estimate nodes are skipped in
+  favour of the real measurements.
 
-These dumps are large and not redistributed here; download them into a local
-directory and pass the paths above. Record the exact release version you used
-when you regenerate so the output is reproducible.
+`data/download.sh` fetches both dumps (URLs/version pinned to match
+`golang.org/x/arch/arm64/instgen/xmlspec`). They are large and gitignored;
+record the release version you used so regeneration stays reproducible.
