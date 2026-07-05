@@ -55,11 +55,13 @@ func TestAssemblyInstructionReference(t *testing.T) {
 }
 
 func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
-	help, ok := ForInstruction("amd64", "VPERM2F128 $49, Y1, Y2, Y3")
+	// A plausible mnemonic that is in neither the curated rules nor the
+	// generated reference falls back to the generic line.
+	help, ok := ForInstruction("amd64", "ZZUNKNOWNOP $49, Y1, Y2, Y3")
 	if !ok {
 		t.Fatal("no fallback help for Go assembly instruction")
 	}
-	if help.Mnemonic != "VPERM2F128" || help.Description != "Execute the VPERM2F128 instruction." {
+	if help.Mnemonic != "ZZUNKNOWNOP" || help.Description != "Execute the ZZUNKNOWNOP instruction." {
 		t.Fatalf("fallback help = %#v", help)
 	}
 }
@@ -68,17 +70,19 @@ func TestGeneratedReferenceReplacesGenericFallback(t *testing.T) {
 	// ABS and CRC32 are absent from the curated rules, so they used to get the
 	// generic "Execute the X instruction." line. The generated asmref table now
 	// supplies real reference text, while the bespoke Explanation stays empty
-	// (no rule fabricates semantics for them).
-	for _, tc := range []struct{ arch, instruction, want string }{
-		{"arm64", "ABS V0.8B, V1.8B", "ABS (vector)"},
-		{"amd64", "CRC32 AX, BL", "Accumulate CRC32 Value"},
+	// (no rule fabricates semantics for them). Asserted structurally so the test
+	// holds against whatever prose the current ISA release ships.
+	for _, tc := range []struct{ arch, instruction string }{
+		{"arm64", "ABS V0.8B, V1.8B"},
+		{"amd64", "CRC32 AX, BL"},
 	} {
+		mnemonic, _ := splitAssemblyInstruction(tc.instruction)
 		help, ok := ForInstruction(tc.arch, tc.instruction)
 		if !ok {
 			t.Fatalf("no help for %q", tc.instruction)
 		}
-		if help.Description != tc.want {
-			t.Errorf("description for %q = %q, want %q", tc.instruction, help.Description, tc.want)
+		if help.Description == "" || help.Description == "Execute the "+mnemonic+" instruction." {
+			t.Errorf("%q got generic/empty description %q", tc.instruction, help.Description)
 		}
 		if help.Explanation != "" {
 			t.Errorf("unexpected explanation for %q: %q", tc.instruction, help.Explanation)
@@ -93,8 +97,8 @@ func TestReferenceLookupToleratesPlan9Suffixes(t *testing.T) {
 	if !ok {
 		t.Fatal("no help for CRC32Q")
 	}
-	if help.Description != "Accumulate CRC32 Value" {
-		t.Errorf("CRC32Q description = %q", help.Description)
+	if !strings.Contains(strings.ToUpper(help.Description), "CRC32") {
+		t.Errorf("CRC32Q description = %q, want it to mention CRC32", help.Description)
 	}
 	if len(help.Ports) == 0 {
 		t.Errorf("CRC32Q should carry ports from the reference")

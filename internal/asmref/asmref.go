@@ -59,7 +59,10 @@ func (e Entry) PerfFor(arch string) []ArchPerf {
 	return out
 }
 
-//go:generate go run ./gen
+// Regenerating needs the real ISA dumps under data/ (run data/download.sh
+// first). The ARM directory name tracks the pinned release; bump both here and
+// in data/download.sh when updating.
+//go:generate go run ./gen -arm ../../data/arm64/ISA_A64_xml_A_profile-2025-12 -x86 ../../data/x86/instructions.xml -out table.json.gz
 
 //go:embed table.json.gz
 var tableGz []byte
