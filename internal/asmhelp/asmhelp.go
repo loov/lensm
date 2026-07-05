@@ -12,6 +12,9 @@ type Help struct {
 	Mnemonic    string
 	Description string
 	Explanation string
+	// Ports lists execution-port usage (uops.info notation) for x86 mnemonics,
+	// sourced from the generated reference. Empty for other architectures.
+	Ports []string
 }
 
 type asmInstructionRule struct {
@@ -92,7 +95,7 @@ var asmInstructionRules = []asmInstructionRule{
 // NativeAssemblyInstructionHelp returns reference text and a syntax-correct
 // effect for the native (GNU) spelling of an instruction. GNU x86/AT&T uses
 // source-first operands while ARM-family GNU syntax uses destination-first.
-func ForNative(text string) (Help, bool) {
+func ForNative(arch, text string) (Help, bool) {
 	mnemonic, operands := splitAssemblyInstruction(text)
 	lookup := canonicalNativeMnemonic(mnemonic)
 	// Arch is irrelevant here: only the description is kept, the
@@ -105,6 +108,9 @@ func ForNative(text string) (Help, bool) {
 	help.Explanation = explainNativeInstruction(lookup, operands)
 	if help.Explanation == "" {
 		help.Explanation = explainNativeEffect(lookup, operands)
+	}
+	if ref, ok := referenceEntry(mnemonic); ok && isX86(arch) {
+		help.Ports = ref.Ports
 	}
 	return help, true
 }
@@ -479,32 +485,63 @@ func ForInstruction(arch, text string) (Help, bool) {
 	if mnemonic == "" {
 		return Help{}, false
 	}
-	if help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands); ok {
-		return help, true
-	}
-	// The curated rules above own the bespoke Explanation semantics. For
-	// mnemonics they don't cover, fall back to the generated reference so the
-	// tooltip shows real ARM/x86 text instead of the generic line below.
-	if description := referenceDescription(mnemonic); description != "" {
-		return Help{Mnemonic: mnemonic, Description: description}, true
-	}
-	if !plausibleMnemonic(mnemonic) {
+	ref, hasRef := referenceEntry(mnemonic)
+
+	help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands)
+	switch {
+	case ok:
+		// Curated rules own the bespoke Explanation semantics; keep them.
+	case hasRef:
+		// For mnemonics the rules don't cover, fall back to the generated
+		// reference so the tooltip shows real ARM/x86 text.
+		help, ok = Help{Mnemonic: mnemonic, Description: referenceBrief(ref)}, true
+	case plausibleMnemonic(mnemonic):
+		help = Help{Mnemonic: mnemonic, Description: "Execute the " + mnemonic + " instruction."}
+	default:
 		return Help{}, false
 	}
-	return Help{
-		Mnemonic:    mnemonic,
-		Description: "Execute the " + mnemonic + " instruction.",
-	}, true
+	// Ports are x86-only in the reference; the table merges ARM and x86 under
+	// one mnemonic key, so gate by arch to avoid showing x86 ports for arm64.
+	if hasRef && isX86(arch) {
+		help.Ports = ref.Ports
+	}
+	return help, true
 }
 
-// referenceDescription returns a short human description for a mnemonic from
-// the generated asmref table, preferring the brief title over the full first
-// paragraph. Empty when the mnemonic is not in the table.
-func referenceDescription(mnemonic string) string {
-	ref, ok := asmref.Lookup(mnemonic)
-	if !ok {
-		return ""
+func isX86(arch string) bool {
+	return arch == "386" || arch == "amd64"
+}
+
+// referenceEntry looks up the generated reference for a mnemonic, tolerating
+// Plan 9 (Go assembler) size suffixes: the table is keyed by base mnemonic
+// (ADD, CRC32) while the disassembly shows ADDQ, MOVD, CRC32Q, etc.
+func referenceEntry(mnemonic string) (asmref.Entry, bool) {
+	if e, ok := asmref.Lookup(mnemonic); ok {
+		return e, true
 	}
+	if base := trimGoAsmSuffix(mnemonic); base != mnemonic {
+		if e, ok := asmref.Lookup(base); ok {
+			return e, true
+		}
+	}
+	return asmref.Entry{}, false
+}
+
+// trimGoAsmSuffix removes a single trailing Go-assembler operand-size suffix.
+// Longer suffixes (BU/HU/WU) are tried before single letters. Only used after
+// an exact lookup misses, so stripping a genuine trailing letter is harmless.
+func trimGoAsmSuffix(mnemonic string) string {
+	for _, suffix := range []string{"BU", "HU", "WU", "B", "W", "L", "Q", "D", "H", "S"} {
+		if len(mnemonic) > len(suffix) && strings.HasSuffix(mnemonic, suffix) {
+			return mnemonic[:len(mnemonic)-len(suffix)]
+		}
+	}
+	return mnemonic
+}
+
+// referenceBrief returns a short human description for an entry, preferring the
+// brief title over the full first paragraph.
+func referenceBrief(ref asmref.Entry) string {
 	if ref.Brief != "" {
 		return ref.Brief
 	}

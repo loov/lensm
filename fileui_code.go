@@ -952,7 +952,7 @@ func (ui CodeUIStyle) layoutHelp(gtx layout.Context, c codeColumns, hover codeHo
 	var help asmhelp.Help
 	var ok bool
 	if nativeHovered {
-		help, ok = asmhelp.ForNative(inst.NativeText)
+		help, ok = asmhelp.ForNative(ui.Code.Arch, inst.NativeText)
 	} else {
 		help, ok = asmhelp.ForInstruction(ui.Code.Arch, inst.Text)
 	}
@@ -990,6 +990,15 @@ func (ui CodeUIStyle) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, 
 				label.Font.Typeface = "override-monospace,Go,monospace"
 				label.Color = ui.Syntax.Plain
 				label.TextSize = ui.TextHeight * 9 / 10
+				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)
+			}))
+		}
+		if len(help.Ports) > 0 {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				label := material.Body1(ui.Theme, "ports: "+strings.Join(help.Ports, ", "))
+				label.Font.Typeface = "override-monospace,Go,monospace"
+				label.Color = ui.Syntax.Comment
+				label.TextSize = ui.TextHeight * 8 / 10
 				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)
 			}))
 		}
