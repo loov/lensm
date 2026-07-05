@@ -19,8 +19,8 @@ type armCollected struct {
 
 // armFile is the reference extracted from one AArch64 instruction XML file.
 type armFile struct {
-	Title       string
-	Description string
+	Brief       string // short title, from <desc><brief>
+	Description string // first authored paragraph
 	Mnemonics   map[string]*armCollected
 }
 
@@ -53,7 +53,7 @@ func ParseARMDir(b *Builder, dir string) error {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 		for mnemonic, c := range parsed.Mnemonics {
-			b.Add(mnemonic, parsed.Title, parsed.Description, c.Syntax, nil, c.Operands)
+			b.Add(mnemonic, parsed.Brief, parsed.Description, c.Syntax, nil, c.Operands)
 		}
 		return nil
 	})
@@ -69,11 +69,19 @@ func parseARMFile(r io.Reader) (armFile, error) {
 	out := armFile{Mnemonics: map[string]*armCollected{}}
 
 	var (
-		curMnemonic string
-		haveDesc    bool
-		inPara      bool // capturing the first <para> of <desc><authored>
-		descBuf     strings.Builder
-		inAuthored  bool
+		curMnemonic   string
+		aliasMnemonic string // set for alias files (e.g. UBFIZ aliasing UBFM)
+		title         string // instructionsection title attr, a fallback brief
+
+		inBrief     bool // inside <desc><brief>
+		inBriefPara bool // capturing the first <para> of <brief>
+		haveBrief   bool
+		briefBuf    strings.Builder
+
+		inAuthored bool // inside <desc><authored>
+		inDescPara bool // capturing the first <para> of <authored>
+		haveDesc   bool
+		descBuf    strings.Builder
 
 		inAsm    bool // inside an <asmtemplate>
 		synBuf   strings.Builder
@@ -82,11 +90,21 @@ func parseARMFile(r io.Reader) (armFile, error) {
 		aTextBuf strings.Builder
 	)
 
+	// An alias file documents the alias (UBFIZ), not its underlying base
+	// (UBFM) — the mnemonic docvar holds the base, so the alias_mnemonic wins.
+	mnemonic := func() string {
+		if aliasMnemonic != "" {
+			return aliasMnemonic
+		}
+		return curMnemonic
+	}
+
 	collected := func() *armCollected {
-		c := out.Mnemonics[curMnemonic]
+		key := mnemonic()
+		c := out.Mnemonics[key]
 		if c == nil {
 			c = &armCollected{Operands: map[string]string{}}
-			out.Mnemonics[curMnemonic] = c
+			out.Mnemonics[key] = c
 		}
 		return c
 	}
@@ -103,20 +121,28 @@ func parseARMFile(r io.Reader) (armFile, error) {
 		case xml.StartElement:
 			switch t.Name.Local {
 			case "instructionsection":
-				out.Title = attr(t, "title")
+				title = attr(t, "title")
 			case "ps_section", "regdiagram":
 				if err := dec.Skip(); err != nil {
 					return armFile{}, err
 				}
 			case "docvar":
-				if attr(t, "key") == "mnemonic" {
+				switch attr(t, "key") {
+				case "mnemonic":
 					curMnemonic = attr(t, "value")
+				case "alias_mnemonic":
+					aliasMnemonic = attr(t, "value")
 				}
+			case "brief":
+				inBrief = true
 			case "authored":
 				inAuthored = true
 			case "para":
-				if inAuthored && !haveDesc {
-					inPara = true
+				if inBrief && !haveBrief {
+					inBriefPara = true
+					briefBuf.Reset()
+				} else if inAuthored && !haveDesc {
+					inDescPara = true
 					descBuf.Reset()
 				}
 			case "asmtemplate":
@@ -130,7 +156,10 @@ func parseARMFile(r io.Reader) (armFile, error) {
 				}
 			}
 		case xml.CharData:
-			if inPara {
+			if inBriefPara {
+				briefBuf.Write(t)
+			}
+			if inDescPara {
 				descBuf.Write(t)
 			}
 			if inAsm {
@@ -141,25 +170,31 @@ func parseARMFile(r io.Reader) (armFile, error) {
 			}
 		case xml.EndElement:
 			switch t.Name.Local {
+			case "brief":
+				inBrief = false
 			case "authored":
 				inAuthored = false
 			case "para":
-				if inPara {
+				if inBriefPara {
+					out.Brief = briefBuf.String()
+					haveBrief = true
+					inBriefPara = false
+				} else if inDescPara {
 					out.Description = descBuf.String()
 					haveDesc = true
-					inPara = false
+					inDescPara = false
 				}
 			case "a":
 				if inA {
 					name := strings.TrimSpace(aTextBuf.String())
-					if name != "" && aHover != "" && curMnemonic != "" {
+					if name != "" && aHover != "" && mnemonic() != "" {
 						collected().Operands[name] = aHover
 					}
 					inA = false
 				}
 			case "asmtemplate":
 				inAsm = false
-				if curMnemonic != "" {
+				if mnemonic() != "" {
 					if syn := normalizeSpace(synBuf.String()); syn != "" {
 						c := collected()
 						if !slices.Contains(c.Syntax, syn) {
@@ -169,6 +204,14 @@ func parseARMFile(r io.Reader) (armFile, error) {
 				}
 			}
 		}
+	}
+	// Fall back to the title attr (minus its " -- A64" profile suffix) when a
+	// file has no <brief> paragraph.
+	if out.Brief == "" {
+		if i := strings.Index(title, " -- "); i >= 0 {
+			title = title[:i]
+		}
+		out.Brief = title
 	}
 	return out, nil
 }

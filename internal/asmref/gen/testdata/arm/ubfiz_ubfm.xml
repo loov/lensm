@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alias file: documents UBFIZ, which aliases the base UBFM. The mnemonic
+     docvar holds the base (UBFM); the alias_mnemonic docvar holds UBFIZ. -->
+<instructionsection id="UBFIZ_UBFM" title="UBFIZ -- A64" type="alias">
+  <docvars>
+    <docvar key="alias_mnemonic" value="UBFIZ"/>
+    <docvar key="mnemonic" value="UBFM"/>
+  </docvars>
+  <desc>
+    <brief><para>Unsigned Bitfield Insert in Zero</para></brief>
+    <authored>
+      <para>Unsigned Bitfield Insert in Zero copies a bitfield of a given width to the least significant bits, with the destination bits to the left and right set to zero.</para>
+    </authored>
+  </desc>
+  <classes>
+    <iclass name="UBFIZ" id="iclass_ubfiz">
+      <docvars>
+        <docvar key="alias_mnemonic" value="UBFIZ"/>
+        <docvar key="mnemonic" value="UBFM"/>
+      </docvars>
+      <regdiagram form="32-bit"><box hibit="31"><c>0</c></box></regdiagram>
+      <encoding name="UBFIZ_UBFM_32M_bitfield" oneofinclass="1">
+        <docvars><docvar key="mnemonic" value="UBFM"/></docvars>
+        <asmtemplate><text>UBFIZ  </text><a link="wd" hover="Is the 32-bit name of the destination register">&lt;Wd&gt;</a><text>, </text><a link="wn" hover="Is the 32-bit name of the source register">&lt;Wn&gt;</a><text>, #</text><a link="lsb" hover="Is the bit number of the LSB of the destination bitfield">&lt;lsb&gt;</a><text>, #</text><a link="width" hover="Is the width of the bitfield">&lt;width&gt;</a></asmtemplate>
+      </encoding>
+    </iclass>
+  </classes>
+</instructionsection>

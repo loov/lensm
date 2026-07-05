@@ -21,7 +21,8 @@ func TestParseARMDir(t *testing.T) {
 	if !ok {
 		t.Fatal("ADD missing")
 	}
-	if add.Brief != "ADD (immediate)" {
+	// Brief comes from <desc><brief>, not the noisy "-- A64" title attr.
+	if add.Brief != "Add (immediate)" {
 		t.Errorf("ADD brief = %q", add.Brief)
 	}
 	// Description is the first <authored> paragraph only; the second must be dropped.
@@ -45,5 +46,21 @@ func TestParseARMDir(t *testing.T) {
 	ldr := table["LDR"]
 	if len(ldr.Syntax) != 2 {
 		t.Errorf("LDR should have 2 syntaxes, got %#v", ldr.Syntax)
+	}
+
+	// Alias files must be keyed by the alias mnemonic (UBFIZ), not the base
+	// (UBFM) from the mnemonic docvar.
+	ubfiz, ok := table["UBFIZ"]
+	if !ok {
+		t.Fatal("UBFIZ alias missing")
+	}
+	if ubfiz.Brief != "Unsigned Bitfield Insert in Zero" {
+		t.Errorf("UBFIZ brief = %q", ubfiz.Brief)
+	}
+	if len(ubfiz.Syntax) != 1 || !strings.HasPrefix(ubfiz.Syntax[0], "UBFIZ ") {
+		t.Errorf("UBFIZ syntax = %#v", ubfiz.Syntax)
+	}
+	if _, leaked := table["UBFM"]; leaked {
+		t.Error("alias content leaked into base UBFM key")
 	}
 }
