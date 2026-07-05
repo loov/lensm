@@ -56,13 +56,34 @@ func TestAssemblyInstructionReference(t *testing.T) {
 
 func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
 	// A plausible mnemonic that is in neither the curated rules nor the
-	// generated reference falls back to the generic line.
+	// generated reference falls back to the generic line, flagged with a note.
 	help, ok := ForInstruction("amd64", "ZZUNKNOWNOP $49, Y1, Y2, Y3")
 	if !ok {
 		t.Fatal("no fallback help for Go assembly instruction")
 	}
 	if help.Mnemonic != "ZZUNKNOWNOP" || help.Description != "Execute the ZZUNKNOWNOP instruction." {
 		t.Fatalf("fallback help = %#v", help)
+	}
+	if help.Note == "" {
+		t.Error("generic fallback should carry a missing-reference note")
+	}
+}
+
+func TestReferenceResolvesArm64GoSpellings(t *testing.T) {
+	// The Go arm64 assembler spells SIMD ops with a V prefix and a .P
+	// post-index marker; the reference is keyed by the ARM base name (LD1, MOV).
+	for _, instruction := range []string{
+		"VLD1 (R0), [V0.B16]",
+		"VLD1.P 16(R0), [V0.B16]",
+		"VMOV V1.B16, V2.B16",
+	} {
+		help, ok := ForInstruction("arm64", instruction)
+		if !ok {
+			t.Fatalf("no help for %q", instruction)
+		}
+		if help.Description == "" || help.Note != "" {
+			t.Errorf("%q should resolve to real reference text, got %#v", instruction, help)
+		}
 	}
 }
 

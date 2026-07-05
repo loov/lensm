@@ -15,6 +15,9 @@ type Help struct {
 	// Ports lists execution-port usage (uops.info notation) for x86 mnemonics,
 	// sourced from the generated reference. Empty for other architectures.
 	Ports []string
+	// Note flags that the tooltip has no real reference data for this mnemonic;
+	// the Description is a generic placeholder. Empty when reference data exists.
+	Note string
 }
 
 type asmInstructionRule struct {
@@ -109,7 +112,7 @@ func ForNative(arch, text string) (Help, bool) {
 	if help.Explanation == "" {
 		help.Explanation = explainNativeEffect(lookup, operands)
 	}
-	if ref, ok := referenceEntry(mnemonic); ok && isX86(arch) {
+	if ref, ok := referenceEntry(arch, mnemonic); ok && isX86(arch) {
 		help.Ports = referencePorts(ref)
 	}
 	return help, true
@@ -485,7 +488,7 @@ func ForInstruction(arch, text string) (Help, bool) {
 	if mnemonic == "" {
 		return Help{}, false
 	}
-	ref, hasRef := referenceEntry(mnemonic)
+	ref, hasRef := referenceEntry(arch, mnemonic)
 
 	help, ok := knownAssemblyInstructionHelp(arch, mnemonic, operands)
 	switch {
@@ -496,7 +499,11 @@ func ForInstruction(arch, text string) (Help, bool) {
 		// reference so the tooltip shows real ARM/x86 text.
 		help, ok = Help{Mnemonic: mnemonic, Description: referenceBrief(ref)}, true
 	case plausibleMnemonic(mnemonic):
-		help = Help{Mnemonic: mnemonic, Description: "Execute the " + mnemonic + " instruction."}
+		help = Help{
+			Mnemonic:    mnemonic,
+			Description: "Execute the " + mnemonic + " instruction.",
+			Note:        noReferenceNote,
+		}
 	default:
 		return Help{}, false
 	}
@@ -529,19 +536,41 @@ func referencePorts(ref asmref.Entry) []string {
 	return out
 }
 
+// noReferenceNote is shown on tooltips that have no real reference data — the
+// Description is only a generic placeholder.
+const noReferenceNote = "No reference information available for this instruction."
+
 // referenceEntry looks up the generated reference for a mnemonic, tolerating
-// Plan 9 (Go assembler) size suffixes: the table is keyed by base mnemonic
-// (ADD, CRC32) while the disassembly shows ADDQ, MOVD, CRC32Q, etc.
-func referenceEntry(mnemonic string) (asmref.Entry, bool) {
-	if e, ok := asmref.Lookup(mnemonic); ok {
-		return e, true
-	}
-	if base := trimGoAsmSuffix(mnemonic); base != mnemonic {
-		if e, ok := asmref.Lookup(base); ok {
+// the Go assembler's spellings: the table is keyed by base mnemonic (ADD, LD1,
+// CRC32) while the disassembly shows ADDQ, CRC32Q (x86 size suffixes) or
+// VLD1.P, VMOV (arm64 SIMD V-prefix and .P post-index marker).
+func referenceEntry(arch, mnemonic string) (asmref.Entry, bool) {
+	for _, candidate := range mnemonicCandidates(arch, mnemonic) {
+		if e, ok := asmref.Lookup(candidate); ok {
 			return e, true
 		}
 	}
 	return asmref.Entry{}, false
+}
+
+// mnemonicCandidates returns the base mnemonics to try, most specific first.
+func mnemonicCandidates(arch, mnemonic string) []string {
+	candidates := []string{mnemonic}
+	base := mnemonic
+	// Go assembler dot-suffixes mark writeback/post-index (VLD1.P -> VLD1).
+	if i := strings.IndexByte(base, '.'); i > 0 {
+		base = base[:i]
+		candidates = append(candidates, base)
+	}
+	if isX86(arch) {
+		if s := trimGoAsmSuffix(base); s != base {
+			candidates = append(candidates, s)
+		}
+	} else if strings.HasPrefix(base, "V") && len(base) > 1 {
+		// Go spells arm64 SIMD ops with a leading V (VLD1 -> LD1, VMOV -> MOV).
+		candidates = append(candidates, base[1:])
+	}
+	return candidates
 }
 
 // trimGoAsmSuffix removes a single trailing Go-assembler operand-size suffix.

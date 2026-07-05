@@ -1002,6 +1002,15 @@ func (ui CodeUIStyle) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, 
 				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)
 			}))
 		}
+		if help.Note != "" {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				label := material.Body1(ui.Theme, help.Note)
+				label.Font.Style = font.Italic
+				label.Color = ui.Syntax.Comment
+				label.TextSize = ui.TextHeight * 8 / 10
+				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)
+			}))
+		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
 	call := macro.Stop()
