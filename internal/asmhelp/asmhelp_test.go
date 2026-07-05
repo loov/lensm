@@ -69,6 +69,33 @@ func TestUnknownGoAssemblyInstructionHasFallbackReference(t *testing.T) {
 	}
 }
 
+// TestGoAssemblerSpellingsResolve covers the mnemonic spellings the Go
+// assembler emits that differ from the ARM/x86 reference names, found by
+// disassembling the lensm binary. Each must resolve to real help (no
+// missing-reference note).
+func TestGoAssemblerSpellingsResolve(t *testing.T) {
+	cases := []struct{ arch, mnemonic string }{
+		// arm64 width/type suffixes, V-prefix, .P index, F-pair, "2" variant.
+		{"arm64", "LDPW"}, {"arm64", "STPW"}, {"arm64", "CBZW"}, {"arm64", "TSTW"},
+		{"arm64", "REV16W"}, {"arm64", "MOVKW"}, {"arm64", "LDARW"},
+		{"arm64", "FCMPS"}, {"arm64", "FDIVD"}, {"arm64", "FMOVQ"},
+		{"arm64", "SCVTFWD"}, {"arm64", "FCVTZSDW"}, {"arm64", "UCVTFD"},
+		{"arm64", "FLDPQ"}, {"arm64", "FSTPS"}, {"arm64", "FLDPQ.P"},
+		{"arm64", "VLD1.P"}, {"arm64", "VMOV"}, {"arm64", "VPMULL2"},
+		{"arm64", "MOVBU.P"}, {"arm64", "BCC"}, {"arm64", "NOOP"},
+		// amd64 condition families, prefixes, SSE tag, obscure ops.
+		{"amd64", "CMOVNE"}, {"amd64", "CMOVAE"}, {"amd64", "SETA"}, {"amd64", "SETNE"},
+		{"amd64", "LOCK"}, {"amd64", "MOVSD_XMM"}, {"amd64", "ICEBP"},
+		{"amd64", "FS"}, {"amd64", "LRET"},
+	}
+	for _, tc := range cases {
+		help, ok := ForInstruction(tc.arch, tc.mnemonic)
+		if !ok || help.Note != "" || help.Description == "" {
+			t.Errorf("%s %s did not resolve: ok=%v %#v", tc.arch, tc.mnemonic, ok, help)
+		}
+	}
+}
+
 func TestReferenceResolvesArm64GoSpellings(t *testing.T) {
 	// The Go arm64 assembler spells SIMD ops with a V prefix and a .P
 	// post-index marker; the reference is keyed by the ARM base name (LD1, MOV).

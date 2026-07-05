@@ -76,20 +76,23 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"PUSH"}, Description: "Push a value onto the stack."},
 	{Prefixes: []string{"POP"}, Description: "Pop the top stack value."},
 	{Prefixes: []string{"CALL", "BL", "BLR", "JAL", "JALR"}, Description: "Call a function and save a return address."},
+	{Prefixes: []string{"LOCK"}, Description: "Make the following read-modify-write instruction atomic."},
+	{Prefixes: []string{"FS", "GS"}, Description: "Segment override prefix for the following memory access."},
 	{Prefixes: []string{"SYSCALL", "SVC"}, Description: "Enter the operating system or supervisor."},
 	{Prefixes: []string{"INT"}, Description: "Raise a software interrupt."},
-	{Prefixes: []string{"RET"}, Description: "Return to the caller."},
+	{Prefixes: []string{"ICEBP"}, Description: "Raise a debug exception (undocumented INT1)."},
+	{Prefixes: []string{"RET", "LRET"}, Description: "Return to the caller."},
 	{Prefixes: []string{"JMP", "B", "BR"}, Description: "Jump to another instruction."},
 	{Prefixes: []string{"JE", "JZ", "BEQ"}, Description: "Jump when values are equal (zero flag set)."},
 	{Prefixes: []string{"JNE", "JNZ", "BNE"}, Description: "Jump when values are not equal."},
 	{Prefixes: []string{"JG", "JGE", "JL", "JLE", "BGT", "BGE", "BLT", "BLE"}, Description: "Conditional jump after a signed comparison."},
-	{Prefixes: []string{"JA", "JAE", "JB", "JBE", "BHI", "BHS", "BLO", "BLS"}, Description: "Conditional jump after an unsigned comparison."},
+	{Prefixes: []string{"JA", "JAE", "JB", "JBE", "BHI", "BHS", "BLO", "BLS", "BCS", "BCC"}, Description: "Conditional jump after an unsigned comparison."},
 	{Prefixes: []string{"BMI", "BPL", "BVS", "BVC"}, Description: "Conditional jump testing the sign or overflow flag."},
 	{Prefixes: []string{"CBZ"}, Description: "Jump when a register is zero."},
 	{Prefixes: []string{"CBNZ"}, Description: "Jump when a register is not zero."},
 	{Prefixes: []string{"TBZ"}, Description: "Jump when a selected bit is zero."},
 	{Prefixes: []string{"TBNZ"}, Description: "Jump when a selected bit is not zero."},
-	{Prefixes: []string{"NOP"}, Description: "Do nothing for one instruction slot."},
+	{Prefixes: []string{"NOP", "NOOP"}, Description: "Do nothing for one instruction slot."},
 	{Prefixes: []string{"HLT", "WFI"}, Description: "Stop or wait for an external event."},
 	{Prefixes: []string{"PAUSE", "YIELD"}, Description: "Hint that the processor is in a spin-wait loop."},
 	{Prefixes: []string{"MFENCE", "LFENCE", "SFENCE", "DMB", "DSB", "ISB"}, Description: "Order memory or instruction accesses across this barrier."},
@@ -484,9 +487,15 @@ func explainNativeDestinationFirst(destination string, sources []string, operato
 }
 
 func ForInstruction(arch, text string) (Help, bool) {
-	mnemonic, operands := splitAssemblyInstruction(text)
-	if mnemonic == "" {
+	display, operands := splitAssemblyInstruction(text)
+	if display == "" {
 		return Help{}, false
+	}
+	// Strip the Go assembler's .P/.W index marker before matching, so post- and
+	// pre-index forms (MOVBU.P, FLDPQ.P) resolve like their base mnemonic.
+	mnemonic := display
+	if i := strings.IndexByte(mnemonic, '.'); i > 0 {
+		mnemonic = mnemonic[:i]
 	}
 	ref, hasRef := referenceEntry(arch, mnemonic)
 
@@ -497,10 +506,9 @@ func ForInstruction(arch, text string) (Help, bool) {
 	case hasRef:
 		// For mnemonics the rules don't cover, fall back to the generated
 		// reference so the tooltip shows real ARM/x86 text.
-		help, ok = Help{Mnemonic: mnemonic, Description: referenceBrief(ref)}, true
+		help, ok = Help{Description: referenceBrief(ref)}, true
 	case plausibleMnemonic(mnemonic):
 		help = Help{
-			Mnemonic:    mnemonic,
 			Description: "Execute the " + mnemonic + " instruction.",
 			Note:        noReferenceNote,
 		}
@@ -512,6 +520,7 @@ func ForInstruction(arch, text string) (Help, bool) {
 	if hasRef && isX86(arch) {
 		help.Ports = referencePorts(ref)
 	}
+	help.Mnemonic = display
 	return help, true
 }
 
@@ -563,14 +572,55 @@ func mnemonicCandidates(arch, mnemonic string) []string {
 		candidates = append(candidates, base)
 	}
 	if isX86(arch) {
+		// Go disambiguates some SSE ops with a _XMM tag (MOVSD_XMM -> MOVSD).
+		if i := strings.IndexByte(base, '_'); i > 0 {
+			base = base[:i]
+			candidates = append(candidates, base)
+		}
 		if s := trimGoAsmSuffix(base); s != base {
 			candidates = append(candidates, s)
 		}
-	} else if strings.HasPrefix(base, "V") && len(base) > 1 {
-		// Go spells arm64 SIMD ops with a leading V (VLD1 -> LD1, VMOV -> MOV).
-		candidates = append(candidates, base[1:])
+		return candidates
 	}
-	return candidates
+	// arm64: expand the Go spelling into candidate ARM base mnemonics. Only
+	// table hits are used, so over-eager candidates that match nothing are
+	// harmless; rule-covered mnemonics (e.g. branches) never reach here.
+	forms := []string{base}
+	// Go spells SIMD ops with a leading V (VLD1 -> LD1, VMOV -> MOV).
+	if strings.HasPrefix(base, "V") && len(base) > 1 {
+		forms = append(forms, base[1:])
+	}
+	for _, f := range append([]string(nil), forms...) {
+		// Trailing type/width suffixes: W (32-bit), B/H/S/D/Q (element size),
+		// and two-letter combos on converts (FCVTZSDW -> FCVTZS).
+		for n := 1; n <= 2; n++ {
+			if len(f) > n && isArmSizeSuffix(f[len(f)-n:]) {
+				forms = append(forms, f[:len(f)-n])
+			}
+		}
+		// "2" upper-half variants (PMULL2, UMLAL2) are documented under the base.
+		if strings.HasSuffix(f, "2") && len(f) > 1 {
+			forms = append(forms, f[:len(f)-1])
+		}
+		// SIMD&FP register-pair load/store: FLDP/FSTP -> LDP/STP.
+		if strings.HasPrefix(f, "FLDP") {
+			forms = append(forms, "LDP")
+		} else if strings.HasPrefix(f, "FSTP") {
+			forms = append(forms, "STP")
+		}
+	}
+	return append(candidates, forms...)
+}
+
+func isArmSizeSuffix(s string) bool {
+	for _, r := range s {
+		switch r {
+		case 'B', 'H', 'W', 'S', 'D', 'Q':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // trimGoAsmSuffix removes a single trailing Go-assembler operand-size suffix.
@@ -648,7 +698,22 @@ func mnemonicMatches(mnemonic, prefix string) bool {
 		return false
 	}
 	suffix := strings.TrimPrefix(mnemonic, prefix)
+	// CMOV/SET take an x86 condition-code suffix (CMOVNE, SETA) rather than a
+	// size suffix.
+	if conditionFamilies[prefix] {
+		return x86ConditionCodes[suffix]
+	}
 	return nativeSizeSuffixes(prefix)[suffix]
+}
+
+// conditionFamilies are mnemonics whose suffix is a condition code, not a size.
+var conditionFamilies = map[string]bool{"CMOV": true, "SET": true}
+
+var x86ConditionCodes = map[string]bool{
+	"E": true, "NE": true, "Z": true, "NZ": true, "A": true, "AE": true,
+	"B": true, "BE": true, "G": true, "GE": true, "L": true, "LE": true,
+	"O": true, "NO": true, "S": true, "NS": true, "P": true, "PE": true,
+	"NP": true, "PO": true, "C": true, "NC": true,
 }
 
 // Suffix sets are package-level: nativeSizeSuffixes runs in the per-frame
