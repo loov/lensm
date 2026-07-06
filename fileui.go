@@ -26,11 +26,9 @@ import (
 	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/goobj"
 	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/mcp"
 	"loov.dev/lensm/internal/syntax"
-	"loov.dev/lensm/internal/wasmobj"
 )
 
 var workInProgressWASM bool
@@ -75,7 +73,7 @@ type FileUI struct {
 	Comments *comments.Store
 	MCP      *mcp.AppServer
 
-	loadRequests       chan fileLoadRequest
+	loader             *loader
 	invalidate         chan struct{}
 	settingsEvents     chan event.Event
 	settingsAcks       chan struct{}
@@ -98,17 +96,6 @@ type pickerResult struct {
 	path string
 	ok   bool
 	err  error
-}
-
-type fileLoadRequest struct {
-	generation uint64
-	path       string
-}
-
-type fileLoadResult struct {
-	generation uint64
-	file       disasm.File
-	err        error
 }
 
 func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
@@ -147,9 +134,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 		}
 	}()
 
-	loadResults := make(chan fileLoadResult, 1)
-	loadRequests := make(chan fileLoadRequest, 1)
-	ui.loadRequests = loadRequests
+	loader := newLoader(loadDisasmFile, ui.Config.Watch)
+	ui.loader = loader
+	defer loader.Close()
 	invalidate := make(chan struct{}, 1)
 	ui.invalidate = invalidate
 	settingsEvents := make(chan event.Event)
@@ -165,81 +152,13 @@ func (ui *FileUI) Run(w *app.Window) error {
 	var settingsOps op.Ops
 	defer ui.flushPending()
 	defer func() {
-		ui.loadRequests = nil
+		ui.loader = nil
 		ui.invalidate = nil
 		ui.settingsEvents = nil
 		ui.settingsAcks = nil
 		ui.pickerResults = nil
 		ui.exited = nil
 		ui.flushTimer = nil
-	}()
-
-	loadFinished := func(result fileLoadResult) {
-		select {
-		case old := <-loadResults:
-			if old.file != nil {
-				_ = old.file.Close()
-			}
-		default:
-		}
-		loadResults <- result
-	}
-
-	go func() {
-		var lastModTime time.Time
-		var pendingModTime time.Time
-		var pendingSince time.Time
-		var path string
-		var generation uint64
-		tick := time.NewTicker(150 * time.Millisecond)
-		defer tick.Stop()
-
-		load := func(force bool, now time.Time) {
-			if path == "" {
-				return
-			}
-
-			stat, err := os.Stat(path)
-			if err != nil {
-				loadFinished(fileLoadResult{generation: generation, err: err})
-				return
-			}
-			if !force && stat.ModTime().Equal(lastModTime) {
-				return
-			}
-			if !force {
-				if !stat.ModTime().Equal(pendingModTime) {
-					pendingModTime = stat.ModTime()
-					pendingSince = now
-					return
-				}
-				if now.Sub(pendingSince) < 300*time.Millisecond {
-					return
-				}
-			}
-			lastModTime = stat.ModTime()
-			pendingModTime = time.Time{}
-
-			file, err := loadDisasmFile(path)
-			loadFinished(fileLoadResult{generation: generation, file: file, err: err})
-		}
-
-		for {
-			select {
-			case req := <-loadRequests:
-				path = strings.TrimSpace(req.path)
-				generation = req.generation
-				lastModTime = time.Time{}
-				pendingModTime = time.Time{}
-				load(true, time.Now())
-			case now := <-tick.C:
-				if ui.Config.Watch {
-					load(false, now)
-				}
-			case <-exited:
-				return
-			}
-		}
 	}()
 
 	if ui.Config.Path != "" {
@@ -262,7 +181,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 
 	for {
 		select {
-		case result := <-loadResults:
+		case result := <-loader.Results():
 			if result.generation != ui.loadGeneration {
 				if result.file != nil {
 					_ = result.file.Close()
@@ -728,19 +647,11 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 }
 
 func (ui *FileUI) requestLoad(path string) {
-	if ui.loadRequests == nil {
+	if ui.loader == nil {
 		return
 	}
 	ui.loadGeneration++
-	req := fileLoadRequest{
-		generation: ui.loadGeneration,
-		path:       path,
-	}
-	select {
-	case <-ui.loadRequests:
-	default:
-	}
-	ui.loadRequests <- req
+	ui.loader.Request(ui.loadGeneration, path)
 }
 
 func (ui *FileUI) afterFileLoaded() {
@@ -807,13 +718,6 @@ func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
 
 	ui.openTab(fn, true)
 	gtx.Execute(op.InvalidateCmd{})
-}
-
-func loadDisasmFile(path string) (disasm.File, error) {
-	if workInProgressWASM {
-		return wasmobj.Load(path)
-	}
-	return goobj.Load(path)
 }
 
 func (ui *FileUI) startMCP() {
