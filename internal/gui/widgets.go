@@ -1,4 +1,4 @@
-package main
+package gui
 
 import (
 	"image"
@@ -33,7 +33,7 @@ type SourceLine struct {
 // CodeUIStyle.LineHeight.
 const codeLineHeightScale = 4.0 / 3.0
 
-func codeLineHeightPx(gtx layout.Context, textHeight unit.Sp) int {
+func CodeLineHeightPx(gtx layout.Context, textHeight unit.Sp) int {
 	height := gtx.Metric.Sp(textHeight * codeLineHeightScale)
 	if height < 1 {
 		return 1
@@ -44,13 +44,13 @@ func codeLineHeightPx(gtx layout.Context, textHeight unit.Sp) int {
 // Layout draws the text.
 func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 	gtx.Constraints.Min.X = 0
-	gtx.Constraints.Max.X = maxLineWidth
+	gtx.Constraints.Max.X = MaxLineWidth
 	gtx.Constraints.Min.Y = 0
-	gtx.Constraints.Max.Y = maxLineWidth
+	gtx.Constraints.Max.Y = MaxLineWidth
 
 	defer op.Offset(line.TopLeft).Push(gtx.Ops).Pop()
 	if line.Width > 0 {
-		maxSize := image.Pt(line.Width, codeLineHeightPx(gtx, line.TextHeight))
+		maxSize := image.Pt(line.Width, CodeLineHeightPx(gtx, line.TextHeight))
 		defer clip.Rect{Max: maxSize}.Push(gtx.Ops).Pop()
 	}
 
@@ -168,4 +168,4 @@ func easeInOutCubic(t float32) float32 {
 	return (t-1)*(2*t-2)*(2*t-2) + 1
 }
 
-const maxLineWidth = 10 * 1024
+const MaxLineWidth = 10 * 1024

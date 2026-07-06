@@ -1,4 +1,4 @@
-package main
+package gui
 
 type Bounds struct{ Min, Max float32 }
 

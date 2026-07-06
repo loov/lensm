@@ -1,4 +1,4 @@
-package main
+package gui
 
 import (
 	"image"
@@ -201,7 +201,7 @@ func StringListItem(th *material.Theme, state *SelectList, item func(int) string
 			label.MaxLines = 1
 			label.TextSize = th.TextSize * 8 / 10
 			label.Font.Weight = weight
-			gtx.Constraints.Max.X = maxLineWidth
+			gtx.Constraints.Max.X = MaxLineWidth
 			return label.Layout(gtx)
 		})
 	}

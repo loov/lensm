@@ -9,6 +9,7 @@ import (
 	"gioui.org/widget/material"
 	"image"
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/gui"
 )
 
 type CodeTab struct {
@@ -21,7 +22,7 @@ type CodeTab struct {
 }
 
 func (ui *FileUI) activeTab() *CodeTab {
-	if !InRange(ui.ActiveTab, len(ui.CodeTabs)) {
+	if !gui.InRange(ui.ActiveTab, len(ui.CodeTabs)) {
 		return nil
 	}
 	return ui.CodeTabs[ui.ActiveTab]
@@ -111,7 +112,7 @@ func (ui *FileUI) openTab(fn disasm.Func, next bool) *CodeTab {
 			return nil
 		}
 		index := len(ui.CodeTabs) - 1
-		if next && InRange(ui.ActiveTab, index) {
+		if next && gui.InRange(ui.ActiveTab, index) {
 			at := ui.ActiveTab + 1
 			if at < index {
 				copy(ui.CodeTabs[at+1:], ui.CodeTabs[at:index])
@@ -152,7 +153,7 @@ func (ui *FileUI) keepActiveTab() {
 }
 
 func (ui *FileUI) selectTab(index int) {
-	if !InRange(index, len(ui.CodeTabs)) {
+	if !gui.InRange(index, len(ui.CodeTabs)) {
 		return
 	}
 	ui.ActiveTab = index
@@ -164,7 +165,7 @@ func (ui *FileUI) selectTab(index int) {
 }
 
 func (ui *FileUI) closeTab(index int) {
-	if !InRange(index, len(ui.CodeTabs)) {
+	if !gui.InRange(index, len(ui.CodeTabs)) {
 		return
 	}
 	ui.CodeTabs = append(ui.CodeTabs[:index], ui.CodeTabs[index+1:]...)
@@ -189,7 +190,7 @@ func (ui *FileUI) closeTab(index int) {
 	ui.saveSessionState()
 }
 
-func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors UIColors) layout.Dimensions {
+func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
 	for i := 0; i < len(ui.CodeTabs); i++ {
 		tab := ui.CodeTabs[i]
 		for tab.Tab.Clicked(gtx) {
@@ -231,7 +232,7 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors UIColors) layout.Dim
 	})
 }
 
-func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors UIColors, tab *CodeTab, active bool) layout.Dimensions {
+func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *CodeTab, active bool) layout.Dimensions {
 	size := gtx.Constraints.Max
 	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 

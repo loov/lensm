@@ -12,6 +12,8 @@ import (
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
+
+	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/mcp"
 )
 
@@ -48,10 +50,10 @@ func main() {
 		os.Exit(2)
 	}
 
-	windows := &Windows{}
+	windows := &gui.Windows{}
 
 	theme := material.NewTheme()
-	theme.Shaper = text.NewShaper(text.WithCollection(LoadFonts(*font)))
+	theme.Shaper = text.NewShaper(text.WithCollection(gui.LoadFonts(*font)))
 	theme.TextSize = unit.Sp(*textSize)
 
 	ui := NewFileUI(windows, theme)

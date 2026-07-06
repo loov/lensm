@@ -26,6 +26,7 @@ import (
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/f32color"
+	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/syntax"
 )
 
@@ -36,7 +37,7 @@ type CodeUI struct {
 		scroll  float32
 		gesture gesture.Scroll
 		bar     widget.Scrollbar
-		anim    ScrollAnimation
+		anim    gui.ScrollAnimation
 	}
 	src struct {
 		scroll  float32
@@ -132,7 +133,7 @@ type CodeUIStyle struct {
 	CommentKey    *string
 	CommentEditor *widget.Editor
 	Theme         *material.Theme
-	Colors        UIColors
+	Colors        gui.UIColors
 	Syntax        syntax.Palette
 
 	ShowNative bool
@@ -146,10 +147,10 @@ func (ui CodeUIStyle) Layout(gtx layout.Context) layout.Dimensions {
 		return layout.Dimensions{Size: gtx.Constraints.Max}
 	}
 	if ui.Colors.Background == (color.NRGBA{}) {
-		ui.Colors = ApplyTheme(ui.Theme, false)
+		ui.Colors = gui.ApplyTheme(ui.Theme, false)
 	}
 	if ui.Syntax.Plain == (color.NRGBA{}) {
-		ui.Syntax = syntax.PaletteFor(syntax.StyleGoLand, ui.Colors.syntaxColors())
+		ui.Syntax = syntax.PaletteFor(syntax.StyleGoLand, ui.Colors.SyntaxColors())
 	}
 	ui.CodeUI.hl.update(ui.Code, ui.Syntax)
 
@@ -187,11 +188,11 @@ type codeColumns struct {
 	pad        int
 	jumpStep   int
 
-	jump   Bounds
-	asm    Bounds
-	native Bounds
-	gutter Bounds
-	source Bounds
+	jump   gui.Bounds
+	asm    gui.Bounds
+	native gui.Bounds
+	gutter gui.Bounds
+	source gui.Bounds
 
 	goTextLeft         int
 	goInstructionWidth int
@@ -223,7 +224,7 @@ type codeHover struct {
 func (ui CodeUIStyle) columns(gtx layout.Context) codeColumns {
 	// The layout has the following sections:
 	// pad | Jump | pad/2 | Go asm | pad | Native asm | pad | Gutter | pad | Source | pad
-	lineHeight := codeLineHeightPx(gtx, ui.TextHeight)
+	lineHeight := gui.CodeLineHeightPx(gtx, ui.TextHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
 	jumpWidth := jumpStep * ui.Code.MaxJump
@@ -234,21 +235,21 @@ func (ui CodeUIStyle) columns(gtx layout.Context) codeColumns {
 	}
 	blocksWidth := max(0, gtx.Constraints.Max.X-fixedWidth)
 
-	jump := BoundsWidth(pad, jumpWidth)
+	jump := gui.BoundsWidth(pad, jumpWidth)
 	asmWidth := blocksWidth * 40 / 100
 	if ui.ShowNative {
 		asmWidth = blocksWidth * 28 / 100
 	}
-	asm := BoundsWidth(int(jump.Max)+pad/2, asmWidth)
-	native := BoundsWidth(int(asm.Max), 0)
-	gutter := BoundsWidth(int(asm.Max)+pad, gutterWidth)
+	asm := gui.BoundsWidth(int(jump.Max)+pad/2, asmWidth)
+	native := gui.BoundsWidth(int(asm.Max), 0)
+	gutter := gui.BoundsWidth(int(asm.Max)+pad, gutterWidth)
 	sourceWidth := blocksWidth - int(asm.Width())
 	if ui.ShowNative {
-		native = BoundsWidth(int(asm.Max)+pad, blocksWidth*28/100)
-		gutter = BoundsWidth(int(native.Max)+pad, gutterWidth)
+		native = gui.BoundsWidth(int(asm.Max)+pad, blocksWidth*28/100)
+		gutter = gui.BoundsWidth(int(native.Max)+pad, gutterWidth)
 		sourceWidth -= int(native.Width())
 	}
-	source := BoundsWidth(int(gutter.Max)+pad, max(0, sourceWidth))
+	source := gui.BoundsWidth(int(gutter.Max)+pad, max(0, sourceWidth))
 
 	c := codeColumns{
 		lineHeight: lineHeight,
@@ -307,7 +308,7 @@ func (ui CodeUIStyle) handleInput(gtx layout.Context, c codeColumns) (mouseClick
 				return CodeViewNone, -1, false
 			}
 			line := int(relative) / lineHeight
-			return CodeViewGoAsm, line, InRange(line, len(ui.Code.Insts))
+			return CodeViewGoAsm, line, gui.InRange(line, len(ui.Code.Insts))
 		}
 		if ui.ShowNative && c.native.Contains(position.X) {
 			relative := position.Y - ui.asm.scroll
@@ -315,7 +316,7 @@ func (ui CodeUIStyle) handleInput(gtx layout.Context, c codeColumns) (mouseClick
 				return CodeViewNone, -1, false
 			}
 			line := int(relative) / lineHeight
-			return CodeViewNativeAsm, line, InRange(line, len(ui.Code.Insts))
+			return CodeViewNativeAsm, line, gui.InRange(line, len(ui.Code.Insts))
 		}
 		if c.source.Contains(position.X) {
 			line := sourceRowAtY(ui.Code, ui.src.scroll, lineHeight, position.Y)
@@ -486,7 +487,7 @@ func (ui CodeUIStyle) resolveHover(gtx layout.Context, c codeColumns, mouseClick
 		highlightAsmIndex = int(relative) / lineHeight
 	}
 
-	if InRange(highlightAsmIndex, len(ui.Code.Insts)) {
+	if gui.InRange(highlightAsmIndex, len(ui.Code.Insts)) {
 		activateClicked := mouseClicked && ui.SelectedAsm == highlightAsmIndex
 		ix := &ui.Code.Insts[highlightAsmIndex]
 		callTargetHovered := ui.TryOpen != nil &&
@@ -527,7 +528,7 @@ func (ui CodeUIStyle) resolveHover(gtx layout.Context, c codeColumns, mouseClick
 			}
 		}
 	}
-	if !InRange(ui.SelectedAsm, len(ui.Code.Insts)) {
+	if !gui.InRange(ui.SelectedAsm, len(ui.Code.Insts)) {
 		ui.SelectedAsm = -1
 	}
 
@@ -651,7 +652,7 @@ func (ui CodeUIStyle) layoutAssembly(gtx layout.Context, c codeColumns, hover co
 				Max: image.Pt(int(gutter.Min), (i+1)*lineHeight+int(ui.asm.scroll)),
 			}.Op())
 		}
-		SourceLine{
+		gui.SourceLine{
 			TopLeft:    image.Pt(c.goTextLeft, i*lineHeight+int(ui.asm.scroll)),
 			Width:      c.goInstructionWidth,
 			Text:       ix.Text,
@@ -666,7 +667,7 @@ func (ui CodeUIStyle) layoutAssembly(gtx layout.Context, c codeColumns, hover co
 			if ui.SelectedAsm == i && ui.SelectedView == CodeViewGoAsm {
 				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(CodeViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), c.commentLeft, c.commentWidth, lineHeight)
 			} else if comment != "" {
-				SourceLine{
+				gui.SourceLine{
 					TopLeft:    image.Pt(c.commentLeft, i*lineHeight+int(ui.asm.scroll)),
 					Width:      c.commentWidth,
 					Text:       "; " + comment,
@@ -682,7 +683,7 @@ func (ui CodeUIStyle) layoutAssembly(gtx layout.Context, c codeColumns, hover co
 			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == CodeViewNativeAsm)) && c.nativeCommentWidth > 0 {
 				width = c.nativeInstructionWidth
 			}
-			SourceLine{
+			gui.SourceLine{
 				TopLeft:    image.Pt(c.nativeTextLeft, i*lineHeight+int(ui.asm.scroll)),
 				Width:      width,
 				Text:       hl.nativeText[i],
@@ -694,7 +695,7 @@ func (ui CodeUIStyle) layoutAssembly(gtx layout.Context, c codeColumns, hover co
 			if ui.SelectedAsm == i && ui.SelectedView == CodeViewNativeAsm && c.nativeCommentWidth > 0 {
 				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(CodeViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), c.nativeCommentLeft, c.nativeCommentWidth, lineHeight)
 			} else if nativeComment != "" && c.nativeCommentWidth > 0 {
-				SourceLine{
+				gui.SourceLine{
 					TopLeft:    image.Pt(c.nativeCommentLeft, i*lineHeight+int(ui.asm.scroll)),
 					Width:      c.nativeCommentWidth,
 					Text:       "; " + nativeComment,
@@ -772,7 +773,7 @@ func (ui CodeUIStyle) layoutSource(gtx layout.Context, c codeColumns, hover code
 			sourceRow++
 		}
 		paintSourceSelection(sourceRow, top)
-		SourceLine{
+		gui.SourceLine{
 			TopLeft:    image.Pt(int(source.Min), top),
 			Text:       src.File,
 			TextHeight: ui.TextHeight,
@@ -806,7 +807,7 @@ func (ui CodeUIStyle) layoutSource(gtx layout.Context, c codeColumns, hover code
 				if (sourceComment != "" || selectedSource) && c.sourceCommentWidth > 0 {
 					width = c.sourceCodeWidth
 				}
-				SourceLine{
+				gui.SourceLine{
 					TopLeft:    image.Pt(int(source.Min), top),
 					Width:      width,
 					Spans:      hl.source[i][blockIndex][off],
@@ -817,7 +818,7 @@ func (ui CodeUIStyle) layoutSource(gtx layout.Context, c codeColumns, hover code
 				if selectedSource && c.sourceCommentWidth > 0 {
 					ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", top, c.sourceCommentLeft, c.sourceCommentWidth, lineHeight)
 				} else if sourceComment != "" && c.sourceCommentWidth > 0 {
-					SourceLine{
+					gui.SourceLine{
 						TopLeft:    image.Pt(c.sourceCommentLeft, top),
 						Width:      c.sourceCommentWidth,
 						Text:       "// " + sourceComment,
@@ -944,7 +945,7 @@ func (ui CodeUIStyle) layoutScrollbars(gtx layout.Context, c codeColumns, source
 // line, when help is enabled and the user is not selecting or editing.
 func (ui CodeUIStyle) layoutHelp(gtx layout.Context, c codeColumns, hover codeHover) {
 	commentEditing := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
-	if !ui.ShowHelp || ui.selecting || commentEditing || !InRange(hover.asmIndex, len(ui.Code.Insts)) {
+	if !ui.ShowHelp || ui.selecting || commentEditing || !gui.InRange(hover.asmIndex, len(ui.Code.Insts)) {
 		return
 	}
 	inst := ui.Code.Insts[hover.asmIndex]
@@ -1059,7 +1060,7 @@ func (ui CodeUIStyle) measureAsmTextWidth(gtx layout.Context, f font.Font, text 
 		return 0
 	}
 	gtx.Constraints.Min = image.Point{}
-	gtx.Constraints.Max = image.Pt(maxLineWidth, maxLineWidth)
+	gtx.Constraints.Max = image.Pt(gui.MaxLineWidth, gui.MaxLineWidth)
 
 	macro := op.Record(gtx.Ops)
 	dims := widget.Label{MaxLines: 1}.Layout(gtx, ui.Theme.Shaper, f, ui.TextHeight, text, op.CallOp{})
@@ -1103,7 +1104,7 @@ func (ui CodeUIStyle) layoutInlineCommentEditor(gtx layout.Context, coord commen
 		if comment == "" {
 			return
 		}
-		SourceLine{
+		gui.SourceLine{
 			TopLeft:    image.Pt(left, top),
 			Width:      width,
 			Text:       prefix + " " + comment,
@@ -1136,7 +1137,7 @@ func (ui CodeUIStyle) layoutInlineCommentEditor(gtx layout.Context, coord commen
 	}
 
 	prefixWidth := lineHeight
-	SourceLine{
+	gui.SourceLine{
 		TopLeft:    image.Pt(left, top),
 		Width:      prefixWidth,
 		Text:       prefix,

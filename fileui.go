@@ -26,6 +26,7 @@ import (
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/goobj"
+	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/mcp"
 	"loov.dev/lensm/internal/syntax"
 	"loov.dev/lensm/internal/wasmobj"
@@ -41,7 +42,7 @@ type FileUIConfig struct {
 }
 
 type FileUI struct {
-	Windows *Windows
+	Windows *gui.Windows
 	Theme   *material.Theme
 
 	Config   FileUIConfig
@@ -51,7 +52,7 @@ type FileUI struct {
 
 	// Currently loaded executable.
 	File  disasm.File
-	Funcs *FilterList[disasm.Func]
+	Funcs *gui.FilterList[disasm.Func]
 
 	// Active code view.
 	CodeTabs  []*CodeTab
@@ -109,7 +110,7 @@ type fileLoadResult struct {
 	err        error
 }
 
-func NewFileUI(windows *Windows, theme *material.Theme) *FileUI {
+func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui := &FileUI{}
 	ui.Windows = windows
 	ui.Theme = theme
@@ -120,7 +121,7 @@ func NewFileUI(windows *Windows, theme *material.Theme) *FileUI {
 	ui.Settings = settings
 	ui.SyntaxStyle.Value = settings.SyntaxStyle
 	ui.Dark.Value = settings.Dark
-	ui.Funcs = NewFilterList[disasm.Func](theme)
+	ui.Funcs = gui.NewFilterList[disasm.Func](theme)
 	ui.ActiveTab = -1
 	ui.Navigation.Reset()
 	ui.Tabs.List.Axis = layout.Horizontal
@@ -388,7 +389,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		ui.afterFileLoaded()
 		return
 	}
-	if !InRange(ui.ActiveTab, len(ui.CodeTabs)) {
+	if !gui.InRange(ui.ActiveTab, len(ui.CodeTabs)) {
 		ui.ActiveTab = 0
 		ui.selectFuncByName(ui.CodeTabs[ui.ActiveTab].Name)
 	}
@@ -433,7 +434,7 @@ func (ui *FileUI) selectFuncByName(name string) {
 }
 
 func (ui *FileUI) Layout(gtx layout.Context) {
-	colors := ApplyTheme(ui.Theme, ui.Dark.Value)
+	colors := gui.ApplyTheme(ui.Theme, ui.Dark.Value)
 	paint.FillShape(gtx.Ops, colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
 	event.Op(gtx.Ops, ui)
@@ -445,7 +446,7 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.layoutToolbar(gtx, colors)
 		}),
-		layout.Rigid(HorizontalLine{Height: 1, Color: colors.Splitter}.Layout),
+		layout.Rigid(gui.HorizontalLine{Height: 1, Color: colors.Splitter}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return ui.layoutContent(gtx, colors)
 		}),
@@ -495,7 +496,7 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	}
 }
 
-func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dimensions {
+func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
 	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
 	inset := layout.Inset{Top: 4, Right: 6, Bottom: 4, Left: 6}
@@ -544,7 +545,7 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors UIColors) layout.Dime
 	})
 }
 
-func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors UIColors) layout.Dimensions {
+func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
 	return layout.Inset{Left: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -566,7 +567,7 @@ func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors UIColors) layo
 	})
 }
 
-func (ui *FileUI) layoutSyntaxRadio(gtx layout.Context, colors UIColors, style string) layout.Dimensions {
+func (ui *FileUI) layoutSyntaxRadio(gtx layout.Context, colors gui.UIColors, style string) layout.Dimensions {
 	radio := material.RadioButton(ui.Theme, &ui.SyntaxStyle, style, syntax.StyleLabel(style))
 	radio.Color = colors.MutedText
 	radio.IconColor = ui.Theme.ContrastBg
@@ -629,7 +630,7 @@ func (ui *FileUI) chooseFile() {
 	}()
 }
 
-func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dimensions {
+func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
 	active := ui.activeCode()
 	if active == nil || !active.Loaded() || active.Name != ui.Funcs.Selected {
 		selected := ui.Funcs.SelectedItem
@@ -648,7 +649,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 			})
 			return ui.Funcs.Layout(ui.Theme, colors, gtx)
 		}),
-		layout.Rigid(VerticalLine{Width: 1, Color: colors.Splitter}.Layout),
+		layout.Rigid(gui.VerticalLine{Width: 1, Color: colors.Splitter}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -681,7 +682,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 					inset := layout.Inset{Top: 2, Left: 4, Right: 4, Bottom: 4}
 					return inset.Layout(gtx, txt.Layout)
 				}),
-				layout.Rigid(HorizontalLine{Height: 1, Color: colors.Splitter}.Layout),
+				layout.Rigid(gui.HorizontalLine{Height: 1, Color: colors.Splitter}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					if ui.LoadError != nil && ui.File == nil {
 						return layout.Dimensions{}
@@ -712,7 +713,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors UIColors) layout.Dime
 
 								Theme:      ui.Theme,
 								Colors:     colors,
-								Syntax:     syntax.PaletteFor(ui.Settings.SyntaxStyle, colors.syntaxColors()),
+								Syntax:     syntax.PaletteFor(ui.Settings.SyntaxStyle, colors.SyntaxColors()),
 								ShowNative: ui.ShowNativeAsm.Value,
 								ShowHelp:   ui.ShowAsmHelp.Value,
 								TextHeight: ui.Theme.TextSize,

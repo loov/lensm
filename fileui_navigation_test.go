@@ -6,6 +6,7 @@ import (
 	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/gui"
 )
 
 type navigationTestFunc string
@@ -30,7 +31,7 @@ func TestFileUINavigationBackAndForward(t *testing.T) {
 	ui := &FileUI{
 		Theme:     theme,
 		File:      navigationTestFile{funcs: functions},
-		Funcs:     NewFilterList[disasm.Func](theme),
+		Funcs:     gui.NewFilterList[disasm.Func](theme),
 		ActiveTab: -1,
 	}
 	ui.Navigation.Reset()
@@ -63,7 +64,7 @@ func TestFileUIPreviewTab(t *testing.T) {
 	ui := &FileUI{
 		Theme:     theme,
 		File:      navigationTestFile{funcs: functions},
-		Funcs:     NewFilterList[disasm.Func](theme),
+		Funcs:     gui.NewFilterList[disasm.Func](theme),
 		ActiveTab: -1,
 	}
 	ui.Navigation.Reset()

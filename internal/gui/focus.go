@@ -1,4 +1,4 @@
-package main
+package gui
 
 import (
 	"image/color"

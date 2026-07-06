@@ -1,4 +1,4 @@
-package main
+package gui
 
 import (
 	"image/color"
@@ -19,7 +19,7 @@ type UIColors struct {
 	RelationStroke      color.NRGBA
 }
 
-func (c UIColors) syntaxColors() syntax.Colors {
+func (c UIColors) SyntaxColors() syntax.Colors {
 	return syntax.Colors{Text: c.Text, MutedText: c.MutedText, Background: c.Background}
 }
 

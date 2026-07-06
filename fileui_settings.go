@@ -1,6 +1,10 @@
 package main
 
 import (
+	"image"
+	"strconv"
+	"strings"
+
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -9,10 +13,9 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
-	"image"
+
+	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/syntax"
-	"strconv"
-	"strings"
 )
 
 func (ui *FileUI) openSettingsWindow() {
@@ -47,7 +50,7 @@ func (ui *FileUI) openSettingsWindow() {
 }
 
 func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
-	colors := ApplyTheme(ui.Theme, ui.Dark.Value)
+	colors := gui.ApplyTheme(ui.Theme, ui.Dark.Value)
 	paint.FillShape(gtx.Ops, colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 	ui.handleSettingsActions(gtx)
 
@@ -125,7 +128,7 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 	})
 }
 
-func (ui *FileUI) layoutSettingsSection(gtx layout.Context, colors UIColors, title string, children []layout.FlexChild) layout.Dimensions {
+func (ui *FileUI) layoutSettingsSection(gtx layout.Context, colors gui.UIColors, title string, children []layout.FlexChild) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		append([]layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -138,7 +141,7 @@ func (ui *FileUI) layoutSettingsSection(gtx layout.Context, colors UIColors, tit
 	)
 }
 
-func (ui *FileUI) layoutLabeledEditor(gtx layout.Context, colors UIColors, labelText string, editor *widget.Editor) layout.Dimensions {
+func (ui *FileUI) layoutLabeledEditor(gtx layout.Context, colors gui.UIColors, labelText string, editor *widget.Editor) layout.Dimensions {
 	return layout.Inset{Top: 6}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -148,7 +151,7 @@ func (ui *FileUI) layoutLabeledEditor(gtx layout.Context, colors UIColors, label
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				gtx.Constraints = layout.Exact(image.Pt(gtx.Metric.Dp(80), gtx.Metric.Dp(34)))
-				return FocusBorder(ui.Theme, gtx.Focused(editor)).Layout(gtx,
+				return gui.FocusBorder(ui.Theme, gtx.Focused(editor)).Layout(gtx,
 					material.Editor(ui.Theme, editor, "").Layout)
 			}),
 		)

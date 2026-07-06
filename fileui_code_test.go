@@ -16,14 +16,15 @@ import (
 	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/syntax"
 )
 
 func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 	theme := material.NewTheme()
-	theme.Shaper = text.NewShaper(text.WithCollection(LoadFonts("")))
+	theme.Shaper = text.NewShaper(text.WithCollection(gui.LoadFonts("")))
 	theme.TextSize = unit.Sp(12)
-	colors := ApplyTheme(theme, false)
+	colors := gui.ApplyTheme(theme, false)
 	state := &CodeUI{Code: &disasm.Code{
 		Name:    "main.example",
 		File:    "main.go",
@@ -59,7 +60,7 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 		CodeUI:     state,
 		Theme:      theme,
 		Colors:     colors,
-		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, colors.syntaxColors()),
+		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, colors.SyntaxColors()),
 		ShowNative: true,
 		TextHeight: theme.TextSize,
 		CopyText: func(_ layout.Context, text string) {
