@@ -23,6 +23,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
+	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/goobj"
@@ -697,8 +698,8 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 						Alignment: layout.SE,
 					}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							return CodeUIStyle{
-								CodeUI: code,
+							return codeview.Style{
+								UI: code,
 
 								TryOpen:    ui.tryOpen,
 								OnInteract: ui.keepActiveTab,

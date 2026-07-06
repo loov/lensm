@@ -1,4 +1,4 @@
-package main
+package codeview
 
 import (
 	"image"
@@ -25,7 +25,7 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 	theme.Shaper = text.NewShaper(text.WithCollection(gui.LoadFonts("")))
 	theme.TextSize = unit.Sp(12)
 	colors := gui.ApplyTheme(theme, false)
-	state := &CodeUI{Code: &disasm.Code{
+	state := &UI{Code: &disasm.Code{
 		Name:    "main.example",
 		File:    "main.go",
 		MaxJump: 1,
@@ -56,8 +56,8 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 		}
 	}
 	copied := ""
-	style := CodeUIStyle{
-		CodeUI:     state,
+	style := Style{
+		UI:         state,
 		Theme:      theme,
 		Colors:     colors,
 		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, colors.SyntaxColors()),
@@ -81,7 +81,7 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 	gtx = newContext()
 	style.Layout(gtx)
 	router.Frame(gtx.Ops)
-	if from, to, ok := state.Selection.Range(); !ok || from != 0 || to != 1 || state.Selection.View != CodeViewGoAsm {
+	if from, to, ok := state.Selection.Range(); !ok || from != 0 || to != 1 || state.Selection.View != ViewGoAsm {
 		t.Fatalf("drag selection = %#v, range %d..%d", state.Selection, from, to)
 	}
 	if !gtx.Focused(state) {

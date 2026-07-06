@@ -1,4 +1,4 @@
-package main
+package codeview
 
 import (
 	"strings"
@@ -7,24 +7,24 @@ import (
 	"loov.dev/lensm/internal/disasm"
 )
 
-type CodeView uint8
+type View uint8
 
 const (
-	CodeViewNone CodeView = iota
-	CodeViewGoAsm
-	CodeViewNativeAsm
-	CodeViewSource
+	ViewNone View = iota
+	ViewGoAsm
+	ViewNativeAsm
+	ViewSource
 )
 
 // CommentView maps a pane to its comment-store view. ok is false for
 // CodeViewNone, which has no comments.
-func (v CodeView) CommentView() (view comments.View, ok bool) {
+func (v View) CommentView() (view comments.View, ok bool) {
 	switch v {
-	case CodeViewGoAsm:
+	case ViewGoAsm:
 		return comments.ViewGoAsm, true
-	case CodeViewNativeAsm:
+	case ViewNativeAsm:
 		return comments.ViewNativeAsm, true
-	case CodeViewSource:
+	case ViewSource:
 		return comments.ViewSource, true
 	default:
 		return "", false
@@ -32,7 +32,7 @@ func (v CodeView) CommentView() (view comments.View, ok bool) {
 }
 
 type TextSelection struct {
-	View   CodeView
+	View   View
 	Anchor int
 	Head   int
 	Active bool
@@ -42,8 +42,8 @@ func (s *TextSelection) Clear() {
 	*s = TextSelection{}
 }
 
-func (s *TextSelection) Begin(view CodeView, line int, extend bool) {
-	if view == CodeViewNone || line < 0 {
+func (s *TextSelection) Begin(view View, line int, extend bool) {
+	if view == ViewNone || line < 0 {
 		s.Clear()
 		return
 	}
@@ -55,7 +55,7 @@ func (s *TextSelection) Begin(view CodeView, line int, extend bool) {
 	s.Active = true
 }
 
-func (s *TextSelection) Extend(view CodeView, line int) {
+func (s *TextSelection) Extend(view View, line int) {
 	if !s.Active || s.View != view || line < 0 {
 		return
 	}
@@ -73,7 +73,7 @@ func (s TextSelection) Range() (from, to int, ok bool) {
 	return from, to, true
 }
 
-func (s TextSelection) Contains(view CodeView, line int) bool {
+func (s TextSelection) Contains(view View, line int) bool {
 	if s.View != view {
 		return false
 	}
@@ -155,7 +155,7 @@ func (s TextSelection) Text(code *disasm.Code) string {
 
 	var lines []string
 	switch s.View {
-	case CodeViewGoAsm, CodeViewNativeAsm:
+	case ViewGoAsm, ViewNativeAsm:
 		if from < 0 {
 			from = 0
 		}
@@ -164,12 +164,12 @@ func (s TextSelection) Text(code *disasm.Code) string {
 		}
 		for i := from; i <= to; i++ {
 			text := code.Insts[i].Text
-			if s.View == CodeViewNativeAsm {
+			if s.View == ViewNativeAsm {
 				text = strings.ToUpper(code.Insts[i].NativeText)
 			}
 			lines = append(lines, text)
 		}
-	case CodeViewSource:
+	case ViewSource:
 		rows := sourceTextRows(code)
 		if from < 0 {
 			from = 0

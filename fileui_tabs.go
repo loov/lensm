@@ -8,6 +8,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
+	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"
 )
@@ -15,7 +16,7 @@ import (
 type CodeTab struct {
 	Name    string
 	Func    disasm.Func
-	Code    CodeUI
+	Code    codeview.UI
 	Preview bool
 	Tab     widget.Clickable
 	Close   widget.Clickable
@@ -28,7 +29,7 @@ func (ui *FileUI) activeTab() *CodeTab {
 	return ui.CodeTabs[ui.ActiveTab]
 }
 
-func (ui *FileUI) activeCode() *CodeUI {
+func (ui *FileUI) activeCode() *codeview.UI {
 	tab := ui.activeTab()
 	if tab == nil {
 		return nil
@@ -39,10 +40,10 @@ func (ui *FileUI) activeCode() *CodeUI {
 func (ui *FileUI) loadTabCode(tab *CodeTab, fn disasm.Func) {
 	tab.Name = fn.Name()
 	tab.Func = fn
-	tab.Code = CodeUI{}
+	tab.Code = codeview.UI{}
 	tab.Code.Code, ui.LoadError = fn.Load(ui.loadOptions())
 	tab.Code.SelectedAsm = -1
-	tab.Code.SelectedView = CodeViewGoAsm
+	tab.Code.SelectedView = codeview.ViewGoAsm
 	tab.Code.ResetScroll()
 }
 
