@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"loov.dev/lensm/internal/atomicfile"
-	"loov.dev/lensm/internal/comments"
-	"loov.dev/lensm/internal/syntax"
 	"os"
 	"path/filepath"
 	"slices"
+
+	"loov.dev/lensm/internal/atomicfile"
+	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/syntax"
 )
 
 type AppSettings struct {

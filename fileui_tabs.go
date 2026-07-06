@@ -9,6 +9,7 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+
 	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"

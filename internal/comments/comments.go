@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"loov.dev/lensm/internal/atomicfile"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"loov.dev/lensm/internal/atomicfile"
 )
 
 const commentsFileVersion = 1

@@ -5,6 +5,7 @@ import (
 
 	"gioui.org/unit"
 	"gioui.org/widget/material"
+
 	"loov.dev/lensm/internal/syntax"
 )
 

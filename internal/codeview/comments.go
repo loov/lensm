@@ -1,15 +1,17 @@
 package codeview
 
 import (
+	"image"
+	"strconv"
+
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
-	"image"
+
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"
-	"strconv"
 )
 
 func (ui Style) asmCoord(view View, inst disasm.Inst) comments.Coord {

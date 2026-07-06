@@ -1,6 +1,11 @@
 package codeview
 
 import (
+	"image"
+	"math"
+	"strings"
+	"time"
+
 	"gioui.org/f32"
 	"gioui.org/font"
 	"gioui.org/io/event"
@@ -9,12 +14,9 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/widget"
-	"image"
+
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"
-	"math"
-	"strings"
-	"time"
 )
 
 // handleInput processes pointer and keyboard events for the frame,

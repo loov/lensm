@@ -1,6 +1,9 @@
 package codeview
 
 import (
+	"image"
+	"strings"
+
 	"gioui.org/f32"
 	"gioui.org/font"
 	"gioui.org/layout"
@@ -8,10 +11,9 @@ import (
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/widget/material"
-	"image"
+
 	"loov.dev/lensm/internal/asmhelp"
 	"loov.dev/lensm/internal/gui"
-	"strings"
 )
 
 // layoutHelp draws the instruction help tooltip for the hovered assembly

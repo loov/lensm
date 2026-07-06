@@ -3,6 +3,7 @@ package codeview
 import (
 	"gioui.org/f32"
 	"gioui.org/layout"
+
 	"loov.dev/lensm/internal/gui"
 )
 
