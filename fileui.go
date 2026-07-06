@@ -23,6 +23,7 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"gioui.org/x/component"
 	"gioui.org/x/explorer"
 
 	"loov.dev/lensm/internal/codeview"
@@ -59,6 +60,9 @@ type FileUI struct {
 	CodeTabs  []*CodeTab
 	ActiveTab int
 	Tabs      widget.List
+
+	// split divides the function list from the code view.
+	split component.Resize
 
 	// Other FileUI elements.
 	BrowseButton   widget.Clickable
@@ -118,6 +122,8 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.Tabs.List.Axis = layout.Horizontal
 	ui.ShowNativeAsm.Value = settings.ShowNativeAsm
 	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
+	ui.split.Axis = layout.Horizontal
+	ui.split.Ratio = settings.SidebarRatio
 	ui.Comment.SingleLine = true
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
@@ -574,18 +580,27 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 		}
 	}
 
-	return layout.Flex{
-		Axis: layout.Horizontal,
-	}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints = layout.Exact(image.Point{
-				X: gtx.Metric.Sp(10 * 20),
-				Y: gtx.Constraints.Max.Y,
-			})
+	// Keep both panes usable at any window size; the ratio from a drag
+	// or from settings is clamped, not trusted.
+	total := float32(gtx.Constraints.Max.X)
+	minSidebar := float32(gtx.Metric.Dp(120))
+	minContent := float32(gtx.Metric.Dp(240))
+	ui.split.Ratio = min(max(ui.split.Ratio, minSidebar/total), 1-minContent/total)
+
+	defer func() {
+		if ui.split.Ratio != ui.Settings.SidebarRatio {
+			settings := ui.Settings
+			settings.SidebarRatio = ui.split.Ratio
+			ui.saveSettings(settings)
+		}
+	}()
+
+	return ui.split.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints = layout.Exact(gtx.Constraints.Max)
 			return ui.Funcs.Layout(ui.Theme, gtx)
-		}),
-		layout.Rigid(gui.VerticalLine{Width: 1, Color: colors.Splitter}.Layout),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+		},
+		func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					if ui.LoadError != nil {
@@ -654,7 +669,15 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					)
 				}),
 			)
-		}),
+		},
+		func(gtx layout.Context) layout.Dimensions {
+			size := image.Pt(gtx.Metric.Dp(8), gtx.Constraints.Max.Y)
+			paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{
+				Min: image.Pt(size.X/2, 0),
+				Max: image.Pt(size.X/2+1, size.Y),
+			}.Op())
+			return layout.Dimensions{Size: size}
+		},
 	)
 }
 

@@ -19,6 +19,7 @@ type AppSettings struct {
 	ShowNativeAsm bool     `json:"show_native_asm"`
 	ShowAsmHelp   bool     `json:"show_asm_help"`
 	TextSize      int      `json:"text_size,omitempty"`
+	SidebarRatio  float32  `json:"sidebar_ratio,omitempty"`
 	LastPath      string   `json:"last_path,omitempty"`
 	OpenTabs      []string `json:"open_tabs,omitempty"`
 	ActiveTab     string   `json:"active_tab,omitempty"`
@@ -30,6 +31,7 @@ func DefaultAppSettings() AppSettings {
 		ShowNativeAsm: true,
 		ShowAsmHelp:   true,
 		TextSize:      12,
+		SidebarRatio:  0.15,
 	}
 }
 
@@ -60,6 +62,9 @@ func LoadAppSettings() (AppSettings, error) {
 	settings.SyntaxStyle = syntax.NormalizeStyle(settings.SyntaxStyle)
 	if settings.TextSize <= 0 {
 		settings.TextSize = DefaultAppSettings().TextSize
+	}
+	if settings.SidebarRatio <= 0 || settings.SidebarRatio >= 1 {
+		settings.SidebarRatio = DefaultAppSettings().SidebarRatio
 	}
 	settings.LastPath = comments.CleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
