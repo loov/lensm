@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"gioui.org/x/explorer"
 
 	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/comments"
@@ -73,6 +75,7 @@ type FileUI struct {
 	Comments *comments.Store
 	MCP      *mcp.AppServer
 
+	picker             *explorer.Explorer
 	loader             *loader
 	invalidate         chan struct{}
 	settingsEvents     chan event.Event
@@ -137,6 +140,8 @@ func (ui *FileUI) Run(w *app.Window) error {
 	loader := newLoader(loadDisasmFile, ui.Config.Watch)
 	ui.loader = loader
 	defer loader.Close()
+	picker := explorer.NewExplorer(w)
+	ui.picker = picker
 	invalidate := make(chan struct{}, 1)
 	ui.invalidate = invalidate
 	settingsEvents := make(chan event.Event)
@@ -152,6 +157,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 	var settingsOps op.Ops
 	defer ui.flushPending()
 	defer func() {
+		ui.picker = nil
 		ui.loader = nil
 		ui.invalidate = nil
 		ui.settingsEvents = nil
@@ -225,6 +231,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 			}
 			settingsAcks <- struct{}{}
 		case e := <-events:
+			picker.ListenEvents(e)
 			switch e := e.(type) {
 			case app.FrameEvent:
 				gtx := app.NewContext(&ops, e)
@@ -526,17 +533,33 @@ func (ui *FileUI) invalidateMain() {
 }
 
 func (ui *FileUI) chooseFile() {
-	if ui.pickerOpen || ui.pickerResults == nil {
+	if ui.pickerOpen || ui.picker == nil || ui.pickerResults == nil {
 		return
 	}
 	// The native picker blocks until dismissed; running it here would
 	// stall the frame in progress and freeze the window.
 	ui.pickerOpen = true
-	results, exited := ui.pickerResults, ui.exited
+	picker, results, exited := ui.picker, ui.pickerResults, ui.exited
 	go func() {
-		path, ok, err := chooseExecutableFile()
+		var res pickerResult
+		// No extension filter: Go executables usually have none.
+		file, err := picker.ChooseFile()
+		switch {
+		case err == nil:
+			// The disassembler needs a path, not a reader; on desktop
+			// platforms the explorer hands back an *os.File.
+			if f, ok := file.(*os.File); ok {
+				res = pickerResult{path: f.Name(), ok: true}
+			} else {
+				res.err = errors.New("file picker did not return a local file path")
+			}
+			_ = file.Close()
+		case errors.Is(err, explorer.ErrUserDecline):
+		default:
+			res.err = err
+		}
 		select {
-		case results <- pickerResult{path: path, ok: ok, err: err}:
+		case results <- res:
 		case <-exited:
 		}
 	}()
