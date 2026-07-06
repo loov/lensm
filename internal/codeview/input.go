@@ -25,7 +25,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 	event.Op(gtx.Ops, ui.UI)
 	selectionAt := func(position f32.Point) (View, int, bool) {
 		if c.asm.Contains(position.X) {
-			relative := position.Y - ui.asm.scroll
+			relative := position.Y - ui.asm.Offset
 			if relative < 0 {
 				return ViewNone, -1, false
 			}
@@ -33,7 +33,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			return ViewGoAsm, line, gui.InRange(line, len(ui.Code.Insts))
 		}
 		if ui.ShowNative && c.native.Contains(position.X) {
-			relative := position.Y - ui.asm.scroll
+			relative := position.Y - ui.asm.Offset
 			if relative < 0 {
 				return ViewNone, -1, false
 			}
@@ -41,7 +41,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			return ViewNativeAsm, line, gui.InRange(line, len(ui.Code.Insts))
 		}
 		if c.source.Contains(position.X) {
-			line := sourceRowAtY(ui.Code, ui.src.scroll, lineHeight, position.Y)
+			line := sourceRowAtY(ui.Code, ui.src.Offset, lineHeight, position.Y)
 			return ViewSource, line, line >= 0
 		}
 		return ViewNone, -1, false
@@ -54,10 +54,10 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 		switch view {
 		case ViewGoAsm, ViewNativeAsm:
 			count = len(ui.Code.Insts)
-			line = int(position.Y-ui.asm.scroll) / lineHeight
+			line = int(position.Y-ui.asm.Offset) / lineHeight
 		case ViewSource:
 			count = sourceRowCount(ui.Code)
-			line = int(position.Y-ui.src.scroll) / lineHeight
+			line = int(position.Y-ui.src.Offset) / lineHeight
 		default:
 			return -1, false
 		}
@@ -71,8 +71,8 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			Target: ui.UI,
 			Kinds:  pointer.Move | pointer.Leave | pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Scroll,
 			ScrollY: pointer.ScrollRange{
-				Min: int(ui.asm.scroll) - lineHeight,
-				Max: len(ui.Code.Insts)*lineHeight + lineHeight - int(ui.asm.scroll),
+				Min: int(ui.asm.Offset) - lineHeight,
+				Max: len(ui.Code.Insts)*lineHeight + lineHeight - int(ui.asm.Offset),
 			},
 		})
 		if !ok {
@@ -130,11 +130,11 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 				ui.mousePosition = ev.Position
 				switch {
 				case c.asm.Contains(ev.Position.X):
-					ui.asm.scroll -= ev.Scroll.Y
+					ui.asm.Offset -= ev.Scroll.Y
 				case ui.ShowNative && c.native.Contains(ev.Position.X):
-					ui.asm.scroll -= ev.Scroll.Y
+					ui.asm.Offset -= ev.Scroll.Y
 				case c.source.Contains(ev.Position.X):
-					ui.src.scroll -= ev.Scroll.Y
+					ui.src.Offset -= ev.Scroll.Y
 				}
 			}
 		}
@@ -205,7 +205,7 @@ func (ui Style) resolveHover(gtx layout.Context, c codeColumns, mouseClicked boo
 		pointer.CursorText.Add(gtx.Ops)
 	}
 	highlightAsmIndex := -1
-	if relative := mousePosition.Y - ui.asm.scroll; mouseInAsm && relative >= 0 {
+	if relative := mousePosition.Y - ui.asm.Offset; mouseInAsm && relative >= 0 {
 		highlightAsmIndex = int(relative) / lineHeight
 	}
 
@@ -246,7 +246,7 @@ func (ui Style) resolveHover(gtx layout.Context, c codeColumns, mouseClicked boo
 			if activateClicked {
 				// TODO: smooth scroll
 				// highlightAsmIndex -= ix.RefOffset
-				ui.asm.anim.Start(gtx, ui.asm.scroll, ui.asm.scroll-float32(ix.RefOffset*lineHeight), 150*time.Millisecond)
+				ui.asm.Anim.Start(gtx, ui.asm.Offset, ui.asm.Offset-float32(ix.RefOffset*lineHeight), 150*time.Millisecond)
 			}
 		}
 	}

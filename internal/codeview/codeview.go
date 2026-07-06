@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"gioui.org/f32"
-	"gioui.org/gesture"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
@@ -22,17 +21,8 @@ import (
 type UI struct {
 	*disasm.Code
 
-	asm struct {
-		scroll  float32
-		gesture gesture.Scroll
-		bar     widget.Scrollbar
-		anim    gui.ScrollAnimation
-	}
-	src struct {
-		scroll  float32
-		gesture gesture.Scroll
-		bar     widget.Scrollbar
-	}
+	asm gui.ScrollRegion
+	src gui.ScrollRegion
 
 	hl highlightCache
 
@@ -100,8 +90,8 @@ func (ui *UI) Loaded() bool {
 }
 
 func (ui *UI) ResetScroll() {
-	ui.asm.scroll = 100000
-	ui.src.scroll = 100000
+	ui.asm.Offset = 100000
+	ui.src.Offset = 100000
 }
 
 type Style struct {
@@ -147,8 +137,8 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 		Min: image.Pt(int(c.gutter.Min), 0),
 		Max: image.Pt(int(c.gutter.Max), gtx.Constraints.Max.Y),
 	}.Op())
-	if scroll, ok := ui.asm.anim.Update(gtx); ok {
-		ui.asm.scroll = scroll
+	if scroll, ok := ui.asm.Anim.Update(gtx); ok {
+		ui.asm.Offset = scroll
 	}
 
 	hover := ui.resolveHover(gtx, c, mouseClicked)

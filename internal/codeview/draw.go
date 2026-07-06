@@ -1,20 +1,18 @@
 package codeview
 
 import (
+	"image"
+	"math"
+
 	"gioui.org/f32"
-	"gioui.org/gesture"
 	"gioui.org/io/key"
-	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/widget/material"
-	"image"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/f32color"
 	"loov.dev/lensm/internal/gui"
-	"math"
 )
 
 // layoutRelations draws the curved bands linking source lines to the
@@ -27,7 +25,7 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 	mouseInAsm, mouseInSource := hover.inAsm, hover.inSource
 
 	var highlightRanges []disasm.LineRange
-	top := int(ui.src.scroll)
+	top := int(ui.src.Offset)
 	var highlightPaths []clip.PathSpec
 	relationStroke := ui.Theme.Colors.RelationStroke
 	relationFill := relationStroke
@@ -46,7 +44,7 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 					highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
 					if !highlight && mouseInAsm {
 						for _, r := range ranges {
-							if float32(r.From*lineHeight)+ui.asm.scroll <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.asm.scroll {
+							if float32(r.From*lineHeight)+ui.asm.Offset <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.asm.Offset {
 								highlight = true
 								break
 							}
@@ -66,14 +64,14 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 							const S = 0.1
 							p.CubeTo(
 								f32.Pt(gutter.Lerp(0.5-S), pin),
-								f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.asm.scroll),
-								f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.asm.scroll))
-							p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.asm.scroll))
-							p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.asm.scroll))
-							p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.asm.scroll))
+								f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.asm.Offset),
+								f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.asm.Offset))
+							p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.asm.Offset))
+							p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.asm.Offset))
+							p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.asm.Offset))
 							pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
 							p.CubeTo(
-								f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.asm.scroll),
+								f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.asm.Offset),
 								f32.Pt(gutter.Lerp(0.5-S), pin),
 								f32.Pt(gutter.Max, pin))
 						}
@@ -113,24 +111,24 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 	for i, ix := range ui.Code.Insts {
 		if ui.Selection.Contains(ViewGoAsm, i) {
 			paint.FillShape(gtx.Ops, ui.Theme.Colors.Selection, clip.Rect{
-				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.scroll)),
-				Max: image.Pt(int(asm.Max), (i+1)*lineHeight+int(ui.asm.scroll)),
+				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.Offset)),
+				Max: image.Pt(int(asm.Max), (i+1)*lineHeight+int(ui.asm.Offset)),
 			}.Op())
 		}
 		if ui.ShowNative && ui.Selection.Contains(ViewNativeAsm, i) {
 			paint.FillShape(gtx.Ops, ui.Theme.Colors.Selection, clip.Rect{
-				Min: image.Pt(int(native.Min), i*lineHeight+int(ui.asm.scroll)),
-				Max: image.Pt(int(native.Max), (i+1)*lineHeight+int(ui.asm.scroll)),
+				Min: image.Pt(int(native.Min), i*lineHeight+int(ui.asm.Offset)),
+				Max: image.Pt(int(native.Max), (i+1)*lineHeight+int(ui.asm.Offset)),
 			}.Op())
 		}
 		if ui.SelectedAsm == i {
 			paint.FillShape(gtx.Ops, ui.Theme.Colors.Selection, clip.Rect{
-				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.scroll)),
-				Max: image.Pt(int(gutter.Min), (i+1)*lineHeight+int(ui.asm.scroll)),
+				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.Offset)),
+				Max: image.Pt(int(gutter.Min), (i+1)*lineHeight+int(ui.asm.Offset)),
 			}.Op())
 		}
 		gui.SourceLine{
-			TopLeft:    image.Pt(c.goTextLeft, i*lineHeight+int(ui.asm.scroll)),
+			TopLeft:    image.Pt(c.goTextLeft, i*lineHeight+int(ui.asm.Offset)),
 			Width:      c.goInstructionWidth,
 			Text:       ix.Text,
 			Spans:      hl.asm[i],
@@ -142,10 +140,10 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		if c.commentWidth > 0 && ix.Text != "" {
 			comment := ui.Comments.Get(ui.asmCoord(ViewGoAsm, ix))
 			if ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), c.commentLeft, c.commentWidth, lineHeight)
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.commentLeft, c.commentWidth, lineHeight)
 			} else if comment != "" {
 				gui.SourceLine{
-					TopLeft:    image.Pt(c.commentLeft, i*lineHeight+int(ui.asm.scroll)),
+					TopLeft:    image.Pt(c.commentLeft, i*lineHeight+int(ui.asm.Offset)),
 					Width:      c.commentWidth,
 					Text:       "; " + comment,
 					TextHeight: ui.TextHeight,
@@ -161,7 +159,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				width = c.nativeInstructionWidth
 			}
 			gui.SourceLine{
-				TopLeft:    image.Pt(c.nativeTextLeft, i*lineHeight+int(ui.asm.scroll)),
+				TopLeft:    image.Pt(c.nativeTextLeft, i*lineHeight+int(ui.asm.Offset)),
 				Width:      width,
 				Text:       hl.nativeText[i],
 				Spans:      hl.native[i],
@@ -170,10 +168,10 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				Color:      ui.Syntax.Plain,
 			}.Layout(ui.Theme.Theme, gtx)
 			if ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm && c.nativeCommentWidth > 0 {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), c.nativeCommentLeft, c.nativeCommentWidth, lineHeight)
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.nativeCommentLeft, c.nativeCommentWidth, lineHeight)
 			} else if nativeComment != "" && c.nativeCommentWidth > 0 {
 				gui.SourceLine{
-					TopLeft:    image.Pt(c.nativeCommentLeft, i*lineHeight+int(ui.asm.scroll)),
+					TopLeft:    image.Pt(c.nativeCommentLeft, i*lineHeight+int(ui.asm.Offset)),
 					Width:      c.nativeCommentWidth,
 					Text:       "; " + nativeComment,
 					TextHeight: ui.TextHeight,
@@ -188,7 +186,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 			lineWidth := gtx.Metric.Dp(1)
 			align := float32(lineWidth%2) / 2
 			stack := op.Affine(f32.Affine2D{}.Offset(
-				f32.Pt(jump.Max+align, float32(i*lineHeight)+align+ui.asm.scroll))).Push(gtx.Ops)
+				f32.Pt(jump.Max+align, float32(i*lineHeight)+align+ui.asm.Offset))).Push(gtx.Ops)
 
 			var path clip.Path
 			path.Begin(gtx.Ops)
@@ -233,7 +231,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 		Min: image.Pt(int(source.Min), 0),
 		Max: image.Pt(int(source.Max), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
-	top := int(ui.src.scroll)
+	top := int(ui.src.Offset)
 	sourceRow := 0
 	paintSourceSelection := func(row, rowTop int) {
 		if ui.Selection.Contains(ViewSource, row) {
@@ -310,7 +308,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 		}
 	}
 	sourceClip.Pop()
-	return top - int(ui.src.scroll)
+	return top - int(ui.src.Offset)
 }
 
 // layoutScrollbars draws and services the assembly and source scrollbars,
@@ -320,53 +318,15 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 	pad := c.pad
 	jump, gutter, source := c.jump, c.gutter, c.source
 
+	overflow := float32(lineHeight)
+
 	{
 		stack := clip.Rect{
 			Min: image.Pt(int(jump.Min)-pad, 0),
 			Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
-
-		// overflow := gtx.Constraints.Max.Y / 3
-		overflow := lineHeight
-		contentTop := float32(-overflow)
-		contentBot := float32(len(ui.Code.Insts)*lineHeight + overflow)
-		viewTop := -ui.asm.scroll
-		viewBot := -ui.asm.scroll + float32(gtx.Constraints.Max.Y)
-
-		{
-			stack := op.Offset(image.Pt(int(jump.Min)-pad, 0)).Push(gtx.Ops)
-			gtx := gtx
-			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
-			material.Scrollbar(ui.Theme.Theme, &ui.asm.bar).Layout(gtx, layout.Vertical,
-				(viewTop-contentTop)/(contentBot-contentTop),
-				(viewBot-contentTop)/(contentBot-contentTop),
-			)
-			stack.Pop()
-		}
-
-		if distance := ui.asm.bar.ScrollDistance(); distance != 0 {
-			ui.asm.scroll -= distance * (contentBot - contentTop)
-		}
-
-		if distance := ui.asm.gesture.Update(gtx.Metric, gtx.Source, gtx.Now, gesture.Vertical,
-			pointer.ScrollRange{},
-			pointer.ScrollRange{Min: -1000, Max: 1000},
-		); distance != 0 {
-			ui.asm.scroll -= float32(distance)
-		}
-
-		if -ui.asm.scroll < contentTop {
-			ui.asm.scroll = -contentTop
-			ui.asm.anim.Stop()
-		}
-		if -ui.asm.scroll+float32(gtx.Constraints.Max.Y) > contentBot {
-			if contentBot < float32(gtx.Constraints.Max.Y) {
-				ui.asm.scroll = -contentTop
-			} else {
-				ui.asm.scroll = float32(gtx.Constraints.Max.Y) - contentBot
-			}
-			ui.asm.anim.Stop()
-		}
+		ui.asm.LayoutBar(gtx, ui.Theme.Theme, int(jump.Min)-pad, pad,
+			-overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow)
 		stack.Pop()
 	}
 
@@ -375,45 +335,8 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 			Min: image.Pt(int(source.Min), 0),
 			Max: image.Pt(int(source.Max)+pad, gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
-
-		// overflow := gtx.Constraints.Max.Y / 3
-		overflow := lineHeight
-		contentTop := float32(-overflow)
-		contentBot := float32(sourceContentHeight + overflow)
-		viewTop := -ui.src.scroll
-		viewBot := -ui.src.scroll + float32(gtx.Constraints.Max.Y)
-
-		{
-			stack := op.Offset(image.Pt(int(source.Max), 0)).Push(gtx.Ops)
-			gtx := gtx
-			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
-			material.Scrollbar(ui.Theme.Theme, &ui.src.bar).Layout(gtx, layout.Vertical,
-				(viewTop-contentTop)/(contentBot-contentTop),
-				(viewBot-contentTop)/(contentBot-contentTop),
-			)
-			stack.Pop()
-		}
-
-		if distance := ui.src.bar.ScrollDistance(); distance != 0 {
-			ui.src.scroll -= distance * (contentBot - contentTop)
-		}
-		if distance := ui.src.gesture.Update(gtx.Metric, gtx.Source, gtx.Now, gesture.Vertical,
-			pointer.ScrollRange{},
-			pointer.ScrollRange{Min: -1000, Max: 1000},
-		); distance != 0 {
-			ui.src.scroll -= float32(distance)
-		}
-
-		if -ui.src.scroll < contentTop {
-			ui.src.scroll = -contentTop
-		}
-		if -ui.src.scroll+float32(gtx.Constraints.Max.Y) > contentBot {
-			if contentBot < float32(gtx.Constraints.Max.Y) {
-				ui.src.scroll = -contentTop
-			} else {
-				ui.src.scroll = float32(gtx.Constraints.Max.Y) - contentBot
-			}
-		}
+		ui.src.LayoutBar(gtx, ui.Theme.Theme, int(source.Max), pad,
+			-overflow, float32(sourceContentHeight)+overflow)
 		stack.Pop()
 	}
 }
