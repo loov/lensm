@@ -431,10 +431,8 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				if ui.Config.Path == "" {
 					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
 				}
-				label := material.Body1(ui.Theme.Theme, ui.Config.Path)
+				label := ui.Theme.Muted(ui.Config.Path, 0.8)
 				label.MaxLines = 1
-				label.TextSize *= 0.8
-				label.Color = colors.MutedText
 				return layout.W.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -447,18 +445,14 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				if ui.copyStatus == "" {
 					return layout.Dimensions{}
 				}
-				label := material.Body1(ui.Theme.Theme, ui.copyStatus)
-				label.TextSize *= 0.75
-				label.Color = colors.MutedText
+				label := ui.Theme.Muted(ui.copyStatus, 0.75)
 				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				if ui.saveError == "" {
 					return layout.Dimensions{}
 				}
-				label := material.Body1(ui.Theme.Theme, ui.saveError)
-				label.TextSize *= 0.75
-				label.Color = colors.Error
+				label := ui.Theme.ErrorLabel(ui.saveError, 0.75)
 				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
 			}),
 		)
@@ -469,9 +463,7 @@ func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors gui.UIColors) 
 	return layout.Inset{Left: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme.Theme, "Syntax")
-				label.TextSize *= 0.85
-				label.Color = colors.MutedText
+				label := ui.Theme.Muted("Syntax", 0.85)
 				return layout.Inset{Right: 3}.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -576,8 +568,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					if ui.LoadError != nil {
 						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								txt := material.Body1(ui.Theme.Theme, ui.LoadError.Error())
-								txt.Color = colors.Error
+								txt := ui.Theme.ErrorLabel(ui.LoadError.Error(), 1)
 								return layout.UniformInset(6).Layout(gtx, txt.Layout)
 							}),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -595,9 +586,8 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					if code == nil || !code.Loaded() {
 						return layout.Dimensions{}
 					}
-					txt := material.Body1(ui.Theme.Theme, "file: "+code.Code.File)
+					txt := ui.Theme.Muted("file: "+code.Code.File, 1)
 					txt.Font.Style = font.Italic
-					txt.Color = colors.MutedText
 
 					inset := layout.Inset{Top: 2, Left: 4, Right: 4, Bottom: 4}
 					return inset.Layout(gtx, txt.Layout)

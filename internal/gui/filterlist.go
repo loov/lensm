@@ -128,9 +128,7 @@ func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions
 			if ui.FilterError == "" {
 				return layout.Dimensions{}
 			}
-			label := material.Body1(th.Theme, ui.FilterError)
-			label.Color = th.Colors.Error
-			return label.Layout(gtx)
+			return th.ErrorLabel(ui.FilterError, 1).Layout(gtx)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return ui.List.Layout(th.Theme, gtx, len(ui.Filtered),
@@ -139,8 +137,7 @@ func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions
 				}))
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			body := material.Body1(th.Theme, fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)))
-			body.TextSize *= 0.8
+			body := th.Label(fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)), 0.8)
 			return layout.Center.Layout(gtx, body.Layout)
 		}),
 	)

@@ -3,6 +3,7 @@ package gui
 import (
 	"image/color"
 
+	"gioui.org/unit"
 	"gioui.org/widget/material"
 	"loov.dev/lensm/internal/syntax"
 )
@@ -25,6 +26,29 @@ func NewTheme(base *material.Theme, dark bool) *Theme {
 // dark and light schemes.
 func (th *Theme) SetDark(dark bool) {
 	th.Colors = applyPalette(th.Theme, dark)
+}
+
+// Label returns a body label in the app text color, scaled relative
+// to the theme text size.
+func (th *Theme) Label(text string, scale float32) material.LabelStyle {
+	label := material.Body1(th.Theme, text)
+	label.TextSize = th.TextSize * unit.Sp(scale)
+	label.Color = th.Colors.Text
+	return label
+}
+
+// Muted is Label in the muted text color.
+func (th *Theme) Muted(text string, scale float32) material.LabelStyle {
+	label := th.Label(text, scale)
+	label.Color = th.Colors.MutedText
+	return label
+}
+
+// ErrorLabel is Label in the error color.
+func (th *Theme) ErrorLabel(text string, scale float32) material.LabelStyle {
+	label := th.Label(text, scale)
+	label.Color = th.Colors.Error
+	return label
 }
 
 type UIColors struct {

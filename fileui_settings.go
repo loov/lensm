@@ -58,49 +58,44 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				title := material.H6(ui.Theme.Theme, "Settings")
-				title.Color = colors.Text
 				return layout.Inset{Bottom: 12}.Layout(gtx, title.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSettingsSection(gtx, colors, "Visual", []layout.FlexChild{
+				return ui.layoutSettingsSection(gtx, "Visual", []layout.FlexChild{
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 							layout.Rigid(material.Switch(ui.Theme.Theme, &ui.Dark, "Dark theme").Layout),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								label := material.Body1(ui.Theme.Theme, "Dark theme")
-								label.Color = colors.Text
+								label := ui.Theme.Label("Dark theme", 1)
 								return layout.Inset{Left: 6}.Layout(gtx, label.Layout)
 							}),
 						)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						check := material.CheckBox(ui.Theme.Theme, &ui.ShowNativeAsm, "Native asm")
-						check.Color = colors.Text
 						return check.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						check := material.CheckBox(ui.Theme.Theme, &ui.ShowAsmHelp, "Show instruction help")
-						check.Color = colors.Text
 						return check.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return ui.layoutSyntaxSelector(gtx, colors)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.layoutLabeledEditor(gtx, colors, "Text size", &ui.TextSizeEditor)
+						return ui.layoutLabeledEditor(gtx, "Text size", &ui.TextSizeEditor)
 					}),
 				})
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: 14}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutSettingsSection(gtx, colors, "MCP", []layout.FlexChild{
+					return ui.layoutSettingsSection(gtx, "MCP", []layout.FlexChild{
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							status := "Stopped"
 							if ui.MCP != nil {
 								status = "Running: " + ui.MCP.URL()
 							}
-							label := material.Body1(ui.Theme.Theme, status)
-							label.Color = colors.MutedText
+							label := ui.Theme.Muted(status, 1)
 							return layout.Inset{Top: 6, Bottom: 6}.Layout(gtx, label.Layout)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -128,25 +123,22 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 	})
 }
 
-func (ui *FileUI) layoutSettingsSection(gtx layout.Context, colors gui.UIColors, title string, children []layout.FlexChild) layout.Dimensions {
+func (ui *FileUI) layoutSettingsSection(gtx layout.Context, title string, children []layout.FlexChild) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		append([]layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme.Theme, title)
-				label.TextSize *= 0.9
-				label.Color = colors.MutedText
+				label := ui.Theme.Muted(title, 0.9)
 				return layout.Inset{Bottom: 6}.Layout(gtx, label.Layout)
 			}),
 		}, children...)...,
 	)
 }
 
-func (ui *FileUI) layoutLabeledEditor(gtx layout.Context, colors gui.UIColors, labelText string, editor *widget.Editor) layout.Dimensions {
+func (ui *FileUI) layoutLabeledEditor(gtx layout.Context, labelText string, editor *widget.Editor) layout.Dimensions {
 	return layout.Inset{Top: 6}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme.Theme, labelText)
-				label.Color = colors.Text
+				label := ui.Theme.Label(labelText, 1)
 				return layout.Inset{Right: 8}.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
