@@ -31,7 +31,7 @@ type FilterList[T FilterListItem] struct {
 }
 
 // NewFilterList creates a new list with the specified theme.
-func NewFilterList[T FilterListItem](theme *material.Theme) *FilterList[T] {
+func NewFilterList[T FilterListItem](theme *Theme) *FilterList[T] {
 	ui := &FilterList[T]{}
 	ui.Filter.SingleLine = true
 	ui.List = NewVerticalSelectList(unit.Dp(theme.TextSize) + 4)
@@ -96,8 +96,8 @@ func (ui *FilterList[T]) updateFiltered() {
 }
 
 // Layout draws the list.
-func (ui *FilterList[T]) Layout(th *material.Theme, colors UIColors, gtx layout.Context) layout.Dimensions {
-	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Min}.Op())
+func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions {
+	paint.FillShape(gtx.Ops, th.Colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Min}.Op())
 
 	ui.SelectIndex(ui.List.Selected)
 
@@ -121,25 +121,25 @@ func (ui *FilterList[T]) Layout(th *material.Theme, colors UIColors, gtx layout.
 		Axis: layout.Vertical,
 	}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return FocusBorder(th, gtx.Focused(&ui.Filter)).Layout(gtx,
-				material.Editor(th, &ui.Filter, "Filter (regexp)").Layout)
+			return FocusBorder(th.Theme, gtx.Focused(&ui.Filter)).Layout(gtx,
+				material.Editor(th.Theme, &ui.Filter, "Filter (regexp)").Layout)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if ui.FilterError == "" {
 				return layout.Dimensions{}
 			}
-			label := material.Body1(th, ui.FilterError)
-			label.Color = colors.Error
+			label := material.Body1(th.Theme, ui.FilterError)
+			label.Color = th.Colors.Error
 			return label.Layout(gtx)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.List.Layout(th, gtx, len(ui.Filtered),
-				StringListItem(th, &ui.List, func(index int) string {
+			return ui.List.Layout(th.Theme, gtx, len(ui.Filtered),
+				StringListItem(th.Theme, &ui.List, func(index int) string {
 					return ui.Filtered[index].Name()
 				}))
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			body := material.Body1(th, fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)))
+			body := material.Body1(th.Theme, fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)))
 			body.TextSize *= 0.8
 			return layout.Center.Layout(gtx, body.Layout)
 		}),

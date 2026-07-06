@@ -7,6 +7,26 @@ import (
 	"loov.dev/lensm/internal/syntax"
 )
 
+// Theme bundles the material theme with the app palette so layout
+// code takes one argument. Colors is recomputed by SetDark, not per
+// frame.
+type Theme struct {
+	*material.Theme
+	Colors UIColors
+}
+
+func NewTheme(base *material.Theme, dark bool) *Theme {
+	th := &Theme{Theme: base}
+	th.SetDark(dark)
+	return th
+}
+
+// SetDark switches the material palette and app colors between the
+// dark and light schemes.
+func (th *Theme) SetDark(dark bool) {
+	th.Colors = applyPalette(th.Theme, dark)
+}
+
 type UIColors struct {
 	Background          color.NRGBA
 	SecondaryBackground color.NRGBA
@@ -23,7 +43,7 @@ func (c UIColors) SyntaxColors() syntax.Colors {
 	return syntax.Colors{Text: c.Text, MutedText: c.MutedText, Background: c.Background}
 }
 
-func ApplyTheme(th *material.Theme, dark bool) UIColors {
+func applyPalette(th *material.Theme, dark bool) UIColors {
 	if dark {
 		th.Palette = material.Palette{
 			Bg:         color.NRGBA{R: 0x11, G: 0x13, B: 0x18, A: 0xff},

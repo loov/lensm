@@ -21,10 +21,10 @@ import (
 )
 
 func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
-	theme := material.NewTheme()
-	theme.Shaper = text.NewShaper(text.WithCollection(gui.LoadFonts("")))
-	theme.TextSize = unit.Sp(12)
-	colors := gui.ApplyTheme(theme, false)
+	base := material.NewTheme()
+	base.Shaper = text.NewShaper(text.WithCollection(gui.LoadFonts("")))
+	base.TextSize = unit.Sp(12)
+	theme := gui.NewTheme(base, false)
 	state := &UI{Code: &disasm.Code{
 		Name:    "main.example",
 		File:    "main.go",
@@ -59,8 +59,7 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 	style := Style{
 		UI:         state,
 		Theme:      theme,
-		Colors:     colors,
-		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, colors.SyntaxColors()),
+		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, theme.Colors.SyntaxColors()),
 		ShowNative: true,
 		TextHeight: theme.TextSize,
 		CopyText: func(_ layout.Context, text string) {

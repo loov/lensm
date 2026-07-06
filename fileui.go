@@ -42,7 +42,7 @@ type FileUIConfig struct {
 
 type FileUI struct {
 	Windows *gui.Windows
-	Theme   *material.Theme
+	Theme   *gui.Theme
 
 	Config   FileUIConfig
 	Settings AppSettings
@@ -101,15 +101,15 @@ type pickerResult struct {
 func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui := &FileUI{}
 	ui.Windows = windows
-	ui.Theme = theme
 	settings, err := LoadAppSettings()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "unable to load settings: %v\n", err)
 	}
 	ui.Settings = settings
+	ui.Theme = gui.NewTheme(theme, settings.Dark)
 	ui.SyntaxStyle.Value = settings.SyntaxStyle
 	ui.Dark.Value = settings.Dark
-	ui.Funcs = gui.NewFilterList[disasm.Func](theme)
+	ui.Funcs = gui.NewFilterList[disasm.Func](ui.Theme)
 	ui.ActiveTab = -1
 	ui.Navigation.Reset()
 	ui.Tabs.List.Axis = layout.Horizontal
@@ -354,7 +354,7 @@ func (ui *FileUI) selectFuncByName(name string) {
 }
 
 func (ui *FileUI) Layout(gtx layout.Context) {
-	colors := gui.ApplyTheme(ui.Theme, ui.Dark.Value)
+	colors := ui.Theme.Colors
 	paint.FillShape(gtx.Ops, colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
 	event.Op(gtx.Ops, ui)
@@ -423,7 +423,7 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.Button(ui.Theme, &ui.BrowseButton, "Choose...")
+				button := material.Button(ui.Theme.Theme, &ui.BrowseButton, "Choose...")
 				button.Inset = layout.Inset{Top: 6, Right: 10, Bottom: 6, Left: 10}
 				return layout.Inset{Right: 6}.Layout(gtx, button.Layout)
 			}),
@@ -431,14 +431,14 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				if ui.Config.Path == "" {
 					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
 				}
-				label := material.Body1(ui.Theme, ui.Config.Path)
+				label := material.Body1(ui.Theme.Theme, ui.Config.Path)
 				label.MaxLines = 1
 				label.TextSize *= 0.8
 				label.Color = colors.MutedText
 				return layout.W.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.IconButton(ui.Theme, &ui.SettingsButton, SettingsIcon, "Settings")
+				button := material.IconButton(ui.Theme.Theme, &ui.SettingsButton, SettingsIcon, "Settings")
 				button.Size = 18
 				button.Inset = layout.UniformInset(8)
 				return layout.Inset{Left: 4}.Layout(gtx, button.Layout)
@@ -447,7 +447,7 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				if ui.copyStatus == "" {
 					return layout.Dimensions{}
 				}
-				label := material.Body1(ui.Theme, ui.copyStatus)
+				label := material.Body1(ui.Theme.Theme, ui.copyStatus)
 				label.TextSize *= 0.75
 				label.Color = colors.MutedText
 				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
@@ -456,7 +456,7 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				if ui.saveError == "" {
 					return layout.Dimensions{}
 				}
-				label := material.Body1(ui.Theme, ui.saveError)
+				label := material.Body1(ui.Theme.Theme, ui.saveError)
 				label.TextSize *= 0.75
 				label.Color = colors.Error
 				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
@@ -469,7 +469,7 @@ func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors gui.UIColors) 
 	return layout.Inset{Left: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme, "Syntax")
+				label := material.Body1(ui.Theme.Theme, "Syntax")
 				label.TextSize *= 0.85
 				label.Color = colors.MutedText
 				return layout.Inset{Right: 3}.Layout(gtx, label.Layout)
@@ -488,7 +488,7 @@ func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors gui.UIColors) 
 }
 
 func (ui *FileUI) layoutSyntaxRadio(gtx layout.Context, colors gui.UIColors, style string) layout.Dimensions {
-	radio := material.RadioButton(ui.Theme, &ui.SyntaxStyle, style, syntax.StyleLabel(style))
+	radio := material.RadioButton(ui.Theme.Theme, &ui.SyntaxStyle, style, syntax.StyleLabel(style))
 	radio.Color = colors.MutedText
 	radio.IconColor = ui.Theme.ContrastBg
 	radio.TextSize = ui.Theme.TextSize * 0.78
@@ -567,7 +567,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 				X: gtx.Metric.Sp(10 * 20),
 				Y: gtx.Constraints.Max.Y,
 			})
-			return ui.Funcs.Layout(ui.Theme, colors, gtx)
+			return ui.Funcs.Layout(ui.Theme, gtx)
 		}),
 		layout.Rigid(gui.VerticalLine{Width: 1, Color: colors.Splitter}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -576,7 +576,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					if ui.LoadError != nil {
 						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								txt := material.Body1(ui.Theme, ui.LoadError.Error())
+								txt := material.Body1(ui.Theme.Theme, ui.LoadError.Error())
 								txt.Color = colors.Error
 								return layout.UniformInset(6).Layout(gtx, txt.Layout)
 							}),
@@ -595,7 +595,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					if code == nil || !code.Loaded() {
 						return layout.Dimensions{}
 					}
-					txt := material.Body1(ui.Theme, "file: "+code.Code.File)
+					txt := material.Body1(ui.Theme.Theme, "file: "+code.Code.File)
 					txt.Font.Style = font.Italic
 					txt.Color = colors.MutedText
 
@@ -632,7 +632,6 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								CommentEditor: &ui.Comment,
 
 								Theme:      ui.Theme,
-								Colors:     colors,
 								Syntax:     syntax.PaletteFor(ui.Settings.SyntaxStyle, colors.SyntaxColors()),
 								ShowNative: ui.ShowNativeAsm.Value,
 								ShowHelp:   ui.ShowAsmHelp.Value,

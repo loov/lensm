@@ -51,16 +51,16 @@ func (ui Style) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, positi
 	dims := layout.UniformInset(8).Layout(contentContext, func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme, help.Mnemonic+" — "+help.Description)
+				label := material.Body1(ui.Theme.Theme, help.Mnemonic+" — "+help.Description)
 				label.Font.Weight = font.Bold
-				label.Color = ui.Colors.Text
+				label.Color = ui.Theme.Colors.Text
 				label.TextSize = ui.TextHeight * 9 / 10
 				return label.Layout(gtx)
 			}),
 		}
 		if help.Explanation != "" {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme, help.Explanation)
+				label := material.Body1(ui.Theme.Theme, help.Explanation)
 				label.Font.Typeface = "override-monospace,Go,monospace"
 				label.Color = ui.Syntax.Plain
 				label.TextSize = ui.TextHeight * 9 / 10
@@ -69,7 +69,7 @@ func (ui Style) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, positi
 		}
 		if len(help.Ports) > 0 {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme, "ports: "+strings.Join(help.Ports, ", "))
+				label := material.Body1(ui.Theme.Theme, "ports: "+strings.Join(help.Ports, ", "))
 				label.Font.Typeface = "override-monospace,Go,monospace"
 				label.Color = ui.Syntax.Comment
 				label.TextSize = ui.TextHeight * 8 / 10
@@ -78,7 +78,7 @@ func (ui Style) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, positi
 		}
 		if help.Note != "" {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body1(ui.Theme, help.Note)
+				label := material.Body1(ui.Theme.Theme, help.Note)
 				label.Font.Style = font.Italic
 				label.Color = ui.Syntax.Comment
 				label.TextSize = ui.TextHeight * 8 / 10
@@ -101,8 +101,8 @@ func (ui Style) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, positi
 	top = max(4, top)
 
 	stack := op.Offset(image.Pt(left, top)).Push(gtx.Ops)
-	paint.FillShape(gtx.Ops, ui.Colors.SecondaryBackground, clip.UniformRRect(image.Rectangle{Max: dims.Size}, 5).Op(gtx.Ops))
-	paint.FillShape(gtx.Ops, ui.Colors.Splitter, clip.Stroke{
+	paint.FillShape(gtx.Ops, ui.Theme.Colors.SecondaryBackground, clip.UniformRRect(image.Rectangle{Max: dims.Size}, 5).Op(gtx.Ops))
+	paint.FillShape(gtx.Ops, ui.Theme.Colors.Splitter, clip.Stroke{
 		Path:  clip.UniformRRect(image.Rectangle{Max: dims.Size}, 5).Path(gtx.Ops),
 		Width: 1,
 	}.Op())

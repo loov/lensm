@@ -29,7 +29,7 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 	var highlightRanges []disasm.LineRange
 	top := int(ui.src.scroll)
 	var highlightPaths []clip.PathSpec
-	relationStroke := ui.Colors.RelationStroke
+	relationStroke := ui.Theme.Colors.RelationStroke
 	relationFill := relationStroke
 	relationFill.A /= 2
 	for i, src := range ui.Code.Source {
@@ -105,26 +105,26 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
 	if ui.ShowNative {
-		paint.FillShape(gtx.Ops, ui.Colors.Splitter, clip.Rect{
+		paint.FillShape(gtx.Ops, ui.Theme.Colors.Splitter, clip.Rect{
 			Min: image.Pt(int(native.Min)-pad/2, 0),
 			Max: image.Pt(int(native.Min)-pad/2+1, gtx.Constraints.Max.Y),
 		}.Op())
 	}
 	for i, ix := range ui.Code.Insts {
 		if ui.Selection.Contains(ViewGoAsm, i) {
-			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+			paint.FillShape(gtx.Ops, ui.Theme.Colors.Selection, clip.Rect{
 				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.scroll)),
 				Max: image.Pt(int(asm.Max), (i+1)*lineHeight+int(ui.asm.scroll)),
 			}.Op())
 		}
 		if ui.ShowNative && ui.Selection.Contains(ViewNativeAsm, i) {
-			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+			paint.FillShape(gtx.Ops, ui.Theme.Colors.Selection, clip.Rect{
 				Min: image.Pt(int(native.Min), i*lineHeight+int(ui.asm.scroll)),
 				Max: image.Pt(int(native.Max), (i+1)*lineHeight+int(ui.asm.scroll)),
 			}.Op())
 		}
 		if ui.SelectedAsm == i {
-			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+			paint.FillShape(gtx.Ops, ui.Theme.Colors.Selection, clip.Rect{
 				Min: image.Pt(int(asm.Min), i*lineHeight+int(ui.asm.scroll)),
 				Max: image.Pt(int(gutter.Min), (i+1)*lineHeight+int(ui.asm.scroll)),
 			}.Op())
@@ -138,7 +138,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 			Italic:     ix.Call != "",
 			Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 			Color:      ui.Syntax.Plain,
-		}.Layout(ui.Theme, gtx)
+		}.Layout(ui.Theme.Theme, gtx)
 		if c.commentWidth > 0 && ix.Text != "" {
 			comment := ui.Comments.Get(ui.asmCoord(ViewGoAsm, ix))
 			if ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm {
@@ -150,8 +150,8 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 					Text:       "; " + comment,
 					TextHeight: ui.TextHeight,
 					Italic:     true,
-					Color:      ui.Colors.MutedText,
-				}.Layout(ui.Theme, gtx)
+					Color:      ui.Theme.Colors.MutedText,
+				}.Layout(ui.Theme.Theme, gtx)
 			}
 		}
 		if ui.ShowNative {
@@ -168,7 +168,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				TextHeight: ui.TextHeight,
 				Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 				Color:      ui.Syntax.Plain,
-			}.Layout(ui.Theme, gtx)
+			}.Layout(ui.Theme.Theme, gtx)
 			if ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm && c.nativeCommentWidth > 0 {
 				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.scroll), c.nativeCommentLeft, c.nativeCommentWidth, lineHeight)
 			} else if nativeComment != "" && c.nativeCommentWidth > 0 {
@@ -178,8 +178,8 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 					Text:       "; " + nativeComment,
 					TextHeight: ui.TextHeight,
 					Italic:     true,
-					Color:      ui.Colors.MutedText,
-				}.Layout(ui.Theme, gtx)
+					Color:      ui.Theme.Colors.MutedText,
+				}.Layout(ui.Theme.Theme, gtx)
 			}
 		}
 
@@ -237,7 +237,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 	sourceRow := 0
 	paintSourceSelection := func(row, rowTop int) {
 		if ui.Selection.Contains(ViewSource, row) {
-			paint.FillShape(gtx.Ops, ui.Colors.Selection, clip.Rect{
+			paint.FillShape(gtx.Ops, ui.Theme.Colors.Selection, clip.Rect{
 				Min: image.Pt(int(source.Min), rowTop),
 				Max: image.Pt(int(source.Max), rowTop+lineHeight),
 			}.Op())
@@ -255,8 +255,8 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 			Text:       src.File,
 			TextHeight: ui.TextHeight,
 			Bold:       hover.asmIndex == i,
-			Color:      ui.Colors.MutedText,
-		}.Layout(ui.Theme, gtx)
+			Color:      ui.Theme.Colors.MutedText,
+		}.Layout(ui.Theme.Theme, gtx)
 		top += lineHeight
 		sourceRow++
 		for blockIndex, block := range src.Blocks {
@@ -291,7 +291,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 					TextHeight: ui.TextHeight,
 					Bold:       highlight,
 					Color:      ui.Syntax.Plain,
-				}.Layout(ui.Theme, gtx)
+				}.Layout(ui.Theme.Theme, gtx)
 				if selectedSource && c.sourceCommentWidth > 0 {
 					ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", top, c.sourceCommentLeft, c.sourceCommentWidth, lineHeight)
 				} else if sourceComment != "" && c.sourceCommentWidth > 0 {
@@ -301,8 +301,8 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 						Text:       "// " + sourceComment,
 						TextHeight: ui.TextHeight,
 						Italic:     true,
-						Color:      ui.Colors.MutedText,
-					}.Layout(ui.Theme, gtx)
+						Color:      ui.Theme.Colors.MutedText,
+					}.Layout(ui.Theme.Theme, gtx)
 				}
 				top += lineHeight
 				sourceRow++
@@ -337,7 +337,7 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 			stack := op.Offset(image.Pt(int(jump.Min)-pad, 0)).Push(gtx.Ops)
 			gtx := gtx
 			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
-			material.Scrollbar(ui.Theme, &ui.asm.bar).Layout(gtx, layout.Vertical,
+			material.Scrollbar(ui.Theme.Theme, &ui.asm.bar).Layout(gtx, layout.Vertical,
 				(viewTop-contentTop)/(contentBot-contentTop),
 				(viewBot-contentTop)/(contentBot-contentTop),
 			)
@@ -387,7 +387,7 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 			stack := op.Offset(image.Pt(int(source.Max), 0)).Push(gtx.Ops)
 			gtx := gtx
 			gtx.Constraints = layout.Exact(image.Pt(pad, gtx.Constraints.Max.Y))
-			material.Scrollbar(ui.Theme, &ui.src.bar).Layout(gtx, layout.Vertical,
+			material.Scrollbar(ui.Theme.Theme, &ui.src.bar).Layout(gtx, layout.Vertical,
 				(viewTop-contentTop)/(contentBot-contentTop),
 				(viewBot-contentTop)/(contentBot-contentTop),
 			)

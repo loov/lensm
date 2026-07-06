@@ -54,8 +54,8 @@ func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coo
 			Text:       prefix + " " + comment,
 			TextHeight: ui.TextHeight,
 			Italic:     true,
-			Color:      ui.Colors.MutedText,
-		}.Layout(ui.Theme, gtx)
+			Color:      ui.Theme.Colors.MutedText,
+		}.Layout(ui.Theme.Theme, gtx)
 		return
 	}
 
@@ -86,17 +86,17 @@ func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coo
 		Width:      prefixWidth,
 		Text:       prefix,
 		TextHeight: ui.TextHeight,
-		Color:      ui.Colors.MutedText,
-	}.Layout(ui.Theme, gtx)
+		Color:      ui.Theme.Colors.MutedText,
+	}.Layout(ui.Theme.Theme, gtx)
 
 	editorLeft := left + prefixWidth
 	editorWidth := max(width-prefixWidth, 0)
 	stack := op.Offset(image.Pt(editorLeft, top)).Push(gtx.Ops)
 	gtx.Constraints = layout.Exact(image.Pt(editorWidth, lineHeight))
-	editor := material.Editor(ui.Theme, ui.CommentEditor, "comment")
+	editor := material.Editor(ui.Theme.Theme, ui.CommentEditor, "comment")
 	editor.TextSize = ui.TextHeight
 	editor.Font.Typeface = "override-monospace,Go,monospace"
-	editor.Color = ui.Colors.Text
+	editor.Color = ui.Theme.Colors.Text
 	editor.Layout(gtx)
 	stack.Pop()
 }

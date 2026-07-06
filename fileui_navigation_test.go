@@ -27,7 +27,7 @@ func TestFileUINavigationBackAndForward(t *testing.T) {
 		navigationTestFunc("main.B"),
 		navigationTestFunc("main.C"),
 	}
-	theme := material.NewTheme()
+	theme := gui.NewTheme(material.NewTheme(), false)
 	ui := &FileUI{
 		Theme:     theme,
 		File:      navigationTestFile{funcs: functions},
@@ -60,7 +60,7 @@ func TestFileUIPreviewTab(t *testing.T) {
 		navigationTestFunc("main.B"),
 		navigationTestFunc("main.C"),
 	}
-	theme := material.NewTheme()
+	theme := gui.NewTheme(material.NewTheme(), false)
 	ui := &FileUI{
 		Theme:     theme,
 		File:      navigationTestFile{funcs: functions},

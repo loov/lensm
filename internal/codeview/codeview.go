@@ -2,7 +2,6 @@ package codeview
 
 import (
 	"image"
-	"image/color"
 	"strings"
 
 	"gioui.org/f32"
@@ -13,7 +12,6 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
-	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
@@ -123,8 +121,7 @@ type Style struct {
 	SetComment    func(comments.Coord, string)
 	CommentKey    *string
 	CommentEditor *widget.Editor
-	Theme         *material.Theme
-	Colors        gui.UIColors
+	Theme         *gui.Theme
 	Syntax        syntax.Palette
 
 	ShowNative bool
@@ -137,22 +134,16 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 	if ui.Code == nil {
 		return layout.Dimensions{Size: gtx.Constraints.Max}
 	}
-	if ui.Colors.Background == (color.NRGBA{}) {
-		ui.Colors = gui.ApplyTheme(ui.Theme, false)
-	}
-	if ui.Syntax.Plain == (color.NRGBA{}) {
-		ui.Syntax = syntax.PaletteFor(syntax.StyleGoLand, ui.Colors.SyntaxColors())
-	}
 	ui.UI.hl.update(ui.Code, ui.Syntax)
 
-	paint.FillShape(gtx.Ops, ui.Colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
+	paint.FillShape(gtx.Ops, ui.Theme.Colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
 	c := ui.columns(gtx)
 	mouseClicked := ui.handleInput(gtx, c)
 
 	// draw gutter
-	paint.FillShape(gtx.Ops, ui.Colors.Gutter, clip.Rect{
+	paint.FillShape(gtx.Ops, ui.Theme.Colors.Gutter, clip.Rect{
 		Min: image.Pt(int(c.gutter.Min), 0),
 		Max: image.Pt(int(c.gutter.Max), gtx.Constraints.Max.Y),
 	}.Op())

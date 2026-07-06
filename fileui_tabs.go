@@ -225,7 +225,7 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout
 		tabWidth = minTabWidth
 	}
 
-	list := material.List(ui.Theme, &ui.Tabs)
+	list := material.List(ui.Theme.Theme, &ui.Tabs)
 	list.AnchorStrategy = material.Overlay
 	return list.Layout(gtx, len(ui.CodeTabs), func(gtx layout.Context, index int) layout.Dimensions {
 		gtx.Constraints = layout.Exact(image.Pt(tabWidth, height))
@@ -260,7 +260,7 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 					size := gtx.Constraints.Max
 					defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 
-					label := material.Body1(ui.Theme, tab.Name)
+					label := material.Body1(ui.Theme.Theme, tab.Name)
 					label.MaxLines = 1
 					label.TextSize = ui.Theme.TextSize * 8 / 10
 					label.Color = colors.Text
@@ -282,7 +282,7 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 					if tab.Close.Hovered() {
 						paint.FillShape(gtx.Ops, colors.Selection, clip.Rect{Max: size}.Op())
 					}
-					label := material.Body1(ui.Theme, "x")
+					label := material.Body1(ui.Theme.Theme, "x")
 					label.MaxLines = 1
 					label.TextSize = ui.Theme.TextSize * 8 / 10
 					label.Color = colors.MutedText
