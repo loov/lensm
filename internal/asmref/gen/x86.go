@@ -103,7 +103,24 @@ type x86Inst struct {
 }
 
 func addX86(b *Builder, inst *x86Inst) {
-	mnemonic := strings.ToUpper(strings.TrimSpace(inst.asm))
+	asm := strings.TrimSpace(inst.asm)
+	// The asm attribute can carry a XED annotation: {load}/{store}/{disp32}
+	// mark an encoding preference for an otherwise plain instruction (strip
+	// it), while {evex}/{nf}/{vex} force an alternate re-encoding whose plain
+	// form is measured separately (skip it).
+	if strings.HasPrefix(asm, "{") {
+		annotation, rest, ok := strings.Cut(asm[1:], "}")
+		if !ok {
+			return
+		}
+		switch strings.ToLower(annotation) {
+		case "load", "store", "disp32":
+			asm = strings.TrimSpace(rest)
+		default:
+			return
+		}
+	}
+	mnemonic := strings.ToUpper(asm)
 	if mnemonic == "" {
 		return
 	}

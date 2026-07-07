@@ -12,6 +12,7 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 
+	"loov.dev/lensm/internal/asmhelp"
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"
@@ -50,8 +51,16 @@ type highlightCache struct {
 	asm        [][]syntax.Span
 	nativeText []string
 	native     [][]syntax.Span
+	// perf is the per-instruction uops.info measurement; ok is false when
+	// there is no data for the instruction (always on non-x86).
+	perf []instPerf
 	// source is indexed by source file, block, and line within the block.
 	source [][][][]syntax.Span
+}
+
+type instPerf struct {
+	asmhelp.Perf
+	ok bool
 }
 
 func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
@@ -64,11 +73,16 @@ func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
 	hl.asm = make([][]syntax.Span, len(code.Insts))
 	hl.nativeText = make([]string, len(code.Insts))
 	hl.native = make([][]syntax.Span, len(code.Insts))
+	hl.perf = make([]instPerf, len(code.Insts))
 	for i := range code.Insts {
 		ix := &code.Insts[i]
 		hl.asm[i] = syntax.HighlightAsm(ix.Text, ix.Call, palette)
 		hl.nativeText[i] = strings.ToUpper(ix.NativeText)
 		hl.native[i] = syntax.HighlightAsm(hl.nativeText[i], "", palette)
+		if ix.NativeText != "" {
+			p, ok := asmhelp.PerfForNative(code.Arch, ix.Mnemonic, ix.NativeText)
+			hl.perf[i] = instPerf{p, ok}
+		}
 	}
 
 	hl.source = make([][][][]syntax.Span, len(code.Source))
@@ -146,6 +160,7 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 	ui.layoutAssembly(gtx, c, hover, highlightRanges)
 	sourceContentHeight := ui.layoutSource(gtx, c, hover, mouseClicked)
 	ui.layoutScrollbars(gtx, c, sourceContentHeight)
+	ui.layoutSelectionPerf(gtx, c)
 	ui.layoutHelp(gtx, c, hover)
 
 	return layout.Dimensions{Size: gtx.Constraints.Max}

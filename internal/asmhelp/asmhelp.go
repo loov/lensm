@@ -586,6 +586,9 @@ func mnemonicCandidates(arch, mnemonic string) []string {
 			base = base[:i]
 			candidates = append(candidates, base)
 		}
+		if alias := x86ConditionAlias(base); alias != "" {
+			candidates = append(candidates, alias)
+		}
 		if s := trimGoAsmSuffix(base); s != base {
 			candidates = append(candidates, s)
 		}
@@ -619,6 +622,29 @@ func mnemonicCandidates(arch, mnemonic string) []string {
 		}
 	}
 	return append(candidates, forms...)
+}
+
+// x86ConditionAlias maps an Intel condition-code spelling (JNE, SETA,
+// CMOVGE) to the XED spelling used by the uops.info table (JNZ, SETNBE,
+// CMOVNL). Empty when the mnemonic is not an aliased conditional.
+func x86ConditionAlias(mnemonic string) string {
+	for _, prefix := range []string{"CMOV", "SET", "J"} {
+		if cc, ok := strings.CutPrefix(mnemonic, prefix); ok {
+			if alias, ok := x86ConditionXED[cc]; ok {
+				return prefix + alias
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+var x86ConditionXED = map[string]string{
+	"E": "Z", "NE": "NZ",
+	"A": "NBE", "AE": "NB", "NA": "BE", "NAE": "B",
+	"G": "NLE", "GE": "NL", "NG": "LE", "NGE": "L",
+	"C": "B", "NC": "NB",
+	"PE": "P", "PO": "NP",
 }
 
 func isArmSizeSuffix(s string) bool {
