@@ -59,31 +59,31 @@ func LoadAppSettings() (AppSettings, error) {
 		}
 		return DefaultAppSettings(), fmt.Errorf("decode %s: %w", path, err)
 	}
+	return settings.normalized(), nil
+}
+
+// normalized fills invalid or missing values with defaults and drops
+// references to tabs that don't exist; applied on both load and save so
+// the file and the in-memory settings never disagree.
+func (settings AppSettings) normalized() AppSettings {
+	defaults := DefaultAppSettings()
 	settings.SyntaxStyle = syntax.NormalizeStyle(settings.SyntaxStyle)
 	if settings.TextSize <= 0 {
-		settings.TextSize = DefaultAppSettings().TextSize
+		settings.TextSize = defaults.TextSize
 	}
 	if settings.SidebarRatio <= 0 || settings.SidebarRatio >= 1 {
-		settings.SidebarRatio = DefaultAppSettings().SidebarRatio
+		settings.SidebarRatio = defaults.SidebarRatio
 	}
 	settings.LastPath = comments.CleanPath(settings.LastPath)
 	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
 	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
 		settings.ActiveTab = ""
 	}
-	return settings, nil
+	return settings
 }
 
 func SaveAppSettings(settings AppSettings) error {
-	settings.SyntaxStyle = syntax.NormalizeStyle(settings.SyntaxStyle)
-	if settings.TextSize <= 0 {
-		settings.TextSize = DefaultAppSettings().TextSize
-	}
-	settings.LastPath = comments.CleanPath(settings.LastPath)
-	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
-	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
-		settings.ActiveTab = ""
-	}
+	settings = settings.normalized()
 	path, err := appSettingsPath()
 	if err != nil {
 		return err
