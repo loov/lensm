@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -22,7 +23,14 @@ type fileLoadResult struct {
 }
 
 func loadDisasmFile(path string) (disasm.File, error) {
-	if workInProgressWASM {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	var magic [4]byte
+	_, _ = io.ReadFull(f, magic[:])
+	_ = f.Close()
+	if string(magic[:]) == "\x00asm" {
 		return wasmobj.Load(path)
 	}
 	return goobj.Load(path)

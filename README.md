@@ -77,6 +77,10 @@ one shared file only for builds of the same program.
 
 Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
 
+WebAssembly modules (`GOOS=wasip1 GOARCH=wasm`, or any `.wasm`) are
+recognised by their magic bytes and shown as WAT, one instruction per line
+with calls resolved to function names; there is no source mapping for wasm.
+
 ## Why?
 
 I wrote a blog post at https://www.storj.io/blog/lensm on why and how the core functionality works.

@@ -34,8 +34,6 @@ import (
 	"loov.dev/lensm/internal/syntax"
 )
 
-var workInProgressWASM bool
-
 type FileUIConfig struct {
 	Path         string
 	Watch        bool

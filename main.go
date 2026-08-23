@@ -19,7 +19,6 @@ import (
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
-		workInProgressWASM = os.Getenv("LENSM_EXPERIMENT_WASM") != ""
 		os.Exit(mcp.RunCommand(loadDisasmFile, os.Args[2:]))
 	}
 
@@ -31,8 +30,6 @@ func main() {
 	context := flag.Int("context", 3, "source line context")
 	comments := flag.String("comments", "", "comments sidecar path")
 	font := flag.String("font", "", "user font")
-
-	workInProgressWASM = os.Getenv("LENSM_EXPERIMENT_WASM") != ""
 
 	flag.Parse()
 	exePath := flag.Arg(0)
