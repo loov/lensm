@@ -1,6 +1,7 @@
 package codeview
 
 import (
+	"iter"
 	"strings"
 
 	"loov.dev/lensm/internal/comments"
@@ -81,50 +82,66 @@ func (s TextSelection) Contains(view View, line int) bool {
 	return ok && from <= line && line <= to
 }
 
-type sourceTextRow struct {
-	Text string
+// sourceRow is one row of the source column. kind tells what it shows;
+// file/block/line index into code.Source for header and line rows.
+type sourceRow struct {
+	kind             sourceRowKind
+	file, block, off int
+	text             string
 }
 
-func sourceTextRows(code *disasm.Code) []sourceTextRow {
-	if code == nil {
-		return nil
+type sourceRowKind int
+
+const (
+	sourceRowGap    sourceRowKind = iota // blank row between files or blocks
+	sourceRowHeader                      // "// path/to/file.go"
+	sourceRowLine                        // a source line
+)
+
+// sourceRows enumerates the rows of the source column in display order:
+// a gap between files, the file header, a gap between blocks, then the
+// lines of each block. Every consumer of the source column — drawing,
+// hit testing, copying — must agree on this order, so it lives here once.
+func sourceRows(code *disasm.Code) iter.Seq[sourceRow] {
+	return func(yield func(sourceRow) bool) {
+		if code == nil {
+			return
+		}
+		for i, src := range code.Source {
+			if i > 0 && !yield(sourceRow{kind: sourceRowGap}) {
+				return
+			}
+			if !yield(sourceRow{kind: sourceRowHeader, file: i, text: "// " + src.File}) {
+				return
+			}
+			for k, block := range src.Blocks {
+				if k > 0 && !yield(sourceRow{kind: sourceRowGap}) {
+					return
+				}
+				for off, line := range block.Lines {
+					if !yield(sourceRow{kind: sourceRowLine, file: i, block: k, off: off, text: line}) {
+						return
+					}
+				}
+			}
+		}
 	}
-	var rows []sourceTextRow
-	for sourceIndex, source := range code.Source {
-		if sourceIndex > 0 {
-			rows = append(rows, sourceTextRow{})
-		}
-		rows = append(rows, sourceTextRow{Text: "// " + source.File})
-		for blockIndex, block := range source.Blocks {
-			if blockIndex > 0 {
-				rows = append(rows, sourceTextRow{})
-			}
-			for _, line := range block.Lines {
-				rows = append(rows, sourceTextRow{Text: line})
-			}
-		}
+}
+
+func sourceTextRows(code *disasm.Code) []string {
+	var rows []string
+	for row := range sourceRows(code) {
+		rows = append(rows, row.text)
 	}
 	return rows
 }
 
-// sourceRowCount mirrors the rows produced by sourceTextRows without
-// building them; it runs on every pointer event.
+// sourceRowCount runs on every pointer event; it walks the structure
+// without building any strings.
 func sourceRowCount(code *disasm.Code) int {
-	if code == nil {
-		return 0
-	}
 	count := 0
-	for sourceIndex, source := range code.Source {
-		if sourceIndex > 0 {
-			count++
-		}
+	for range sourceRows(code) {
 		count++
-		for blockIndex, block := range source.Blocks {
-			if blockIndex > 0 {
-				count++
-			}
-			count += len(block.Lines)
-		}
 	}
 	return count
 }
@@ -178,7 +195,7 @@ func (s TextSelection) Text(code *disasm.Code) string {
 			to = len(rows) - 1
 		}
 		for i := from; i <= to; i++ {
-			lines = append(lines, rows[i].Text)
+			lines = append(lines, rows[i])
 		}
 	}
 	if len(lines) == 0 {

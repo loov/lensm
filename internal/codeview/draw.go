@@ -31,57 +31,54 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 	relationStroke := ui.Theme.Colors.RelationStroke
 	relationFill := relationStroke
 	relationFill.A /= 2
-	for i, src := range ui.Code.Source {
-		if i > 0 {
-			top += lineHeight
-		}
+	for row := range sourceRows(ui.Code) {
+		rowTop := top
 		top += lineHeight
-		for i, block := range src.Blocks {
-			if i > 0 {
-				top += lineHeight
-			}
-			for _, ranges := range block.Related {
-				if len(ranges) > 0 {
-					highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
-					if !highlight && mouseInAsm {
-						for _, r := range ranges {
-							if float32(r.From*lineHeight)+ui.asm.Offset <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.asm.Offset {
-								highlight = true
-								break
-							}
-						}
-					}
-					if highlight {
-						highlightRanges = ranges
-
-						var p clip.Path
-						p.Begin(gtx.Ops)
-						p.MoveTo(f32.Pt(gutter.Max, float32(top+lineHeight)))
-						p.LineTo(f32.Pt(source.Max, float32(top+lineHeight)))
-						p.LineTo(f32.Pt(source.Max, float32(top)))
-						p.LineTo(f32.Pt(gutter.Max, float32(top)))
-						pin := float32(top)
-						for i, r := range ranges {
-							const S = 0.1
-							p.CubeTo(
-								f32.Pt(gutter.Lerp(0.5-S), pin),
-								f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.asm.Offset),
-								f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.asm.Offset))
-							p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.asm.Offset))
-							p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.asm.Offset))
-							p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.asm.Offset))
-							pin = float32(top) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
-							p.CubeTo(
-								f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.asm.Offset),
-								f32.Pt(gutter.Lerp(0.5-S), pin),
-								f32.Pt(gutter.Max, pin))
-						}
-						highlightPaths = append(highlightPaths, p.End())
-					}
+		if row.kind != sourceRowLine {
+			continue
+		}
+		block := ui.Code.Source[row.file].Blocks[row.block]
+		if row.off >= len(block.Related) || len(block.Related[row.off]) == 0 {
+			continue
+		}
+		ranges := block.Related[row.off]
+		highlight := mouseInSource && float32(rowTop) <= mousePosition.Y && mousePosition.Y < float32(rowTop+lineHeight)
+		if !highlight && mouseInAsm {
+			for _, r := range ranges {
+				if float32(r.From*lineHeight)+ui.asm.Offset <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.asm.Offset {
+					highlight = true
+					break
 				}
-				top += lineHeight
 			}
 		}
+		if !highlight {
+			continue
+		}
+		highlightRanges = ranges
+
+		var p clip.Path
+		p.Begin(gtx.Ops)
+		p.MoveTo(f32.Pt(gutter.Max, float32(rowTop+lineHeight)))
+		p.LineTo(f32.Pt(source.Max, float32(rowTop+lineHeight)))
+		p.LineTo(f32.Pt(source.Max, float32(rowTop)))
+		p.LineTo(f32.Pt(gutter.Max, float32(rowTop)))
+		pin := float32(rowTop)
+		for i, r := range ranges {
+			const S = 0.1
+			p.CubeTo(
+				f32.Pt(gutter.Lerp(0.5-S), pin),
+				f32.Pt(gutter.Lerp(0.5+S), float32(r.From*lineHeight)+ui.asm.Offset),
+				f32.Pt(gutter.Min, float32(r.From*lineHeight)+ui.asm.Offset))
+			p.LineTo(f32.Pt(asm.Min, float32(r.From*lineHeight)+ui.asm.Offset))
+			p.LineTo(f32.Pt(asm.Min, float32(r.To*lineHeight)+ui.asm.Offset))
+			p.LineTo(f32.Pt(gutter.Min, float32(r.To*lineHeight)+ui.asm.Offset))
+			pin = float32(rowTop) + float32(lineHeight)*float32(i+1)/float32(len(ranges))
+			p.CubeTo(
+				f32.Pt(gutter.Lerp(0.5+S), float32(r.To*lineHeight)+ui.asm.Offset),
+				f32.Pt(gutter.Lerp(0.5-S), pin),
+				f32.Pt(gutter.Max, pin))
+		}
+		highlightPaths = append(highlightPaths, p.End())
 	}
 	for _, path := range highlightPaths {
 		paint.FillShape(gtx.Ops, relationFill, clip.Outline{Path: path}.Op())
@@ -242,69 +239,57 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 			}.Op())
 		}
 	}
-	for i, src := range ui.Code.Source {
-		if i > 0 {
-			paintSourceSelection(sourceRow, top)
-			top += lineHeight
-			sourceRow++
-		}
+	for row := range sourceRows(ui.Code) {
 		paintSourceSelection(sourceRow, top)
-		gui.SourceLine{
-			TopLeft:    image.Pt(int(source.Min), top),
-			Text:       src.File,
-			TextHeight: ui.TextHeight,
-			Bold:       false,
-			Color:      ui.Theme.Colors.MutedText,
-		}.Layout(ui.Theme.Theme, gtx)
+		rowTop := top
 		top += lineHeight
 		sourceRow++
-		for blockIndex, block := range src.Blocks {
-			if blockIndex > 0 {
-				paintSourceSelection(sourceRow, top)
-				top += lineHeight
-				sourceRow++
+		switch row.kind {
+		case sourceRowHeader:
+			gui.SourceLine{
+				TopLeft:    image.Pt(int(source.Min), rowTop),
+				Text:       row.text,
+				TextHeight: ui.TextHeight,
+				Color:      ui.Theme.Colors.MutedText,
+			}.Layout(ui.Theme.Theme, gtx)
+		case sourceRowLine:
+			src := ui.Code.Source[row.file]
+			lineNo := src.Blocks[row.block].From + row.off
+			highlight := mouseInSource && float32(rowTop) <= mousePosition.Y && mousePosition.Y < float32(rowTop+lineHeight)
+			if highlight && mouseClicked {
+				ui.SelectedAsm = -1
+				ui.SelectedView = ViewSource
+				ui.SelectedFile = src.File
+				ui.SelectedLine = lineNo
+				if ui.CommentEditor != nil {
+					gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
+				}
 			}
-			for off := range block.Lines {
-				paintSourceSelection(sourceRow, top)
-				highlight := mouseInSource && float32(top) <= mousePosition.Y && mousePosition.Y < float32(top+lineHeight)
-				lineNo := block.From + off
-				if highlight && mouseClicked {
-					ui.SelectedAsm = -1
-					ui.SelectedView = ViewSource
-					ui.SelectedFile = src.File
-					ui.SelectedLine = lineNo
-					if ui.CommentEditor != nil {
-						gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
-					}
-				}
-				sourceComment := ui.Comments.Get(ui.sourceCoord(src.File, lineNo))
-				width := c.sourceTextWidth
-				selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
-				if (sourceComment != "" || selectedSource) && c.sourceCommentWidth > 0 {
-					width = c.sourceCodeWidth
-				}
+			sourceComment := ui.Comments.Get(ui.sourceCoord(src.File, lineNo))
+			width := c.sourceTextWidth
+			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
+			if (sourceComment != "" || selectedSource) && c.sourceCommentWidth > 0 {
+				width = c.sourceCodeWidth
+			}
+			gui.SourceLine{
+				TopLeft:    image.Pt(int(source.Min), rowTop),
+				Width:      width,
+				Spans:      hl.source[row.file][row.block][row.off],
+				TextHeight: ui.TextHeight,
+				Bold:       highlight,
+				Color:      ui.Syntax.Plain,
+			}.Layout(ui.Theme.Theme, gtx)
+			if selectedSource && c.sourceCommentWidth > 0 {
+				ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", rowTop, c.sourceCommentLeft, c.sourceCommentWidth, lineHeight)
+			} else if sourceComment != "" && c.sourceCommentWidth > 0 {
 				gui.SourceLine{
-					TopLeft:    image.Pt(int(source.Min), top),
-					Width:      width,
-					Spans:      hl.source[i][blockIndex][off],
+					TopLeft:    image.Pt(c.sourceCommentLeft, rowTop),
+					Width:      c.sourceCommentWidth,
+					Text:       "// " + sourceComment,
 					TextHeight: ui.TextHeight,
-					Bold:       highlight,
-					Color:      ui.Syntax.Plain,
+					Italic:     true,
+					Color:      ui.Theme.Colors.MutedText,
 				}.Layout(ui.Theme.Theme, gtx)
-				if selectedSource && c.sourceCommentWidth > 0 {
-					ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", top, c.sourceCommentLeft, c.sourceCommentWidth, lineHeight)
-				} else if sourceComment != "" && c.sourceCommentWidth > 0 {
-					gui.SourceLine{
-						TopLeft:    image.Pt(c.sourceCommentLeft, top),
-						Width:      c.sourceCommentWidth,
-						Text:       "// " + sourceComment,
-						TextHeight: ui.TextHeight,
-						Italic:     true,
-						Color:      ui.Theme.Colors.MutedText,
-					}.Layout(ui.Theme.Theme, gtx)
-				}
-				top += lineHeight
-				sourceRow++
 			}
 		}
 	}
