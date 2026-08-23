@@ -411,10 +411,12 @@ func openELF(r *bytes.Reader, data []byte) (*Binary, error) {
 		}
 	case elf.EM_LOONGARCH:
 		bin.Arch = "loong64"
+	case elf.EM_AVR:
+		bin.Arch = "avr"
 	default:
 		return nil, fmt.Errorf("unsupported ELF machine %v", ef.Machine)
 	}
-	if ef.Class != elf.ELFCLASS64 && bin.Arch != "386" && bin.Arch != "arm" && bin.Arch != "riscv32" {
+	if ef.Class != elf.ELFCLASS64 && bin.Arch != "386" && bin.Arch != "arm" && bin.Arch != "riscv32" && bin.Arch != "avr" {
 		return nil, fmt.Errorf("unsupported 32-bit ELF for %s", bin.Arch)
 	}
 

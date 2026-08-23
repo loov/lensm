@@ -13,6 +13,7 @@ import (
 	"golang.org/x/arch/s390x/s390xasm"
 	"golang.org/x/arch/x86/x86asm"
 
+	"loov.dev/lensm/internal/avrasm"
 	"loov.dev/lensm/internal/thumbasm"
 )
 
@@ -29,9 +30,11 @@ type Inst struct {
 	Op string
 	// Text is the Go assembler syntax, GNU the native syntax.
 	Text, GNU string
-	// Ref is the absolute target of a branch or call when the decoder
-	// resolved one (Thumb); zero otherwise, where callers parse Text.
-	Ref uint64
+	// RefKnown reports that the decoder determined the instruction's
+	// reference itself (Thumb, AVR): Ref is then the absolute target of
+	// a branch or call, or zero for none. Otherwise callers parse Text.
+	RefKnown bool
+	Ref      uint64
 	// Call reports that Ref is a call target rather than a jump.
 	Call bool
 }
@@ -113,7 +116,7 @@ func (b *Binary) Disassemble(fn *Func) ([]Inst, error) {
 							}
 						}
 					}
-					in := Inst{Addr: addr, Len: inst.Len, Op: inst.Mnemonic, Text: text, GNU: text, Call: inst.Call}
+					in := Inst{Addr: addr, Len: inst.Len, Op: inst.Mnemonic, Text: text, GNU: text, Call: inst.Call, RefKnown: true}
 					if inst.Branch {
 						in.Ref = inst.Target
 					}
@@ -141,6 +144,30 @@ func (b *Binary) Disassemble(fn *Func) ([]Inst, error) {
 					emit(inst.Len, inst.Op.String(), armasm.GoSyntax(inst, addr, lookup, reader), armasm.GNUSyntax(inst))
 				}
 			}
+		}
+	case "avr":
+		for len(code) > 0 {
+			inst, err := avrasm.Decode(code, addr)
+			if err != nil {
+				undecodable(2)
+				continue
+			}
+			text := inst.Text
+			if inst.HasTarget {
+				if name, base := lookup(inst.Target); name != "" {
+					if base == inst.Target {
+						text += " <" + name + ">"
+					} else {
+						text += fmt.Sprintf(" <%s+%#x>", name, inst.Target-base)
+					}
+				}
+			}
+			in := Inst{Addr: addr, Len: inst.Len, Op: inst.Mnemonic, Text: text, GNU: text, Call: inst.Call, RefKnown: true}
+			if inst.HasTarget {
+				in.Ref = inst.Target
+			}
+			insts = append(insts, in)
+			code, addr = code[inst.Len:], addr+uint64(inst.Len)
 		}
 	case "loong64":
 		for len(code) > 0 {

@@ -14,9 +14,11 @@
 # pico.elf is the same program for the Raspberry Pi Pico (RP2040,
 # Cortex-M0+): Thumb-only code with $t/$d mapping symbols, literal pools
 # inside functions, and function symbols with the Thumb bit set.
+# arduino.elf is the same program for the Arduino Uno (ATmega328P, AVR).
 PHONY := build
 build:
 	tinygo build -o example.wasm -target=wasi .
 	tinygo build -o component.wasm -target=wasip2 .
 	tinygo build -o esp32c3.elf -target=xiao-esp32c3 .
 	tinygo build -o pico.elf -target=pico .
+	tinygo build -o arduino.elf -target=arduino .

@@ -391,3 +391,54 @@ func TestLoadThumb(t *testing.T) {
 		t.Error("literal pool not rendered as .word data")
 	}
 }
+
+// TestLoadAVR loads a TinyGo Arduino Uno build: an 8-bit AVR ELF with
+// DWARF, where branch targets are resolved from word-addressed fields.
+func TestLoadAVR(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "arduino.elf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	var sumInts disasm.Func
+	for _, fn := range file.Funcs() {
+		if fn.Name() == "main.sumInts" {
+			sumInts = fn
+		}
+	}
+	if sumInts == nil {
+		t.Fatal("main.sumInts not found")
+	}
+	code, err := sumInts.Load(disasm.Options{Context: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code.Arch != "avr" {
+		t.Errorf("Arch = %q, want avr", code.Arch)
+	}
+	if !strings.HasSuffix(code.File, "main.go") {
+		t.Errorf("File = %q, want main.go", code.File)
+	}
+	var lines, branches int
+	for _, in := range code.Insts {
+		if in.Line != 0 {
+			lines++
+		}
+		if in.RefPC != 0 {
+			branches++
+		}
+		if strings.HasPrefix(in.Text, "BYTE") {
+			t.Errorf("undecoded instruction at %#x", in.PC)
+		}
+	}
+	if len(code.Insts) == 0 || !strings.HasPrefix(code.Insts[0].Text, "push r12") {
+		t.Errorf("unexpected start: %+v", code.Insts[:min(3, len(code.Insts))])
+	}
+	if lines == 0 {
+		t.Error("no instruction carries a source position")
+	}
+	if branches == 0 {
+		t.Error("no branch target resolved")
+	}
+}
