@@ -40,7 +40,7 @@ func NewFilterList[T FilterListItem](theme *Theme) *FilterList[T] {
 
 // SelectIndex selects the specified item.
 func (ui *FilterList[T]) SelectIndex(index int) {
-	if !InRange(index, len(ui.Filtered)) {
+	if index < 0 || index >= len(ui.Filtered) {
 		return
 	}
 

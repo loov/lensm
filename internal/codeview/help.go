@@ -22,7 +22,7 @@ import (
 // line, when help is enabled and the user is not selecting or editing.
 func (ui Style) layoutHelp(gtx layout.Context, c codeColumns, hover codeHover) {
 	commentEditing := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
-	if !ui.ShowHelp || ui.selecting || commentEditing || !gui.InRange(hover.asmIndex, len(ui.Code.Insts)) {
+	if !ui.ShowHelp || ui.selecting || commentEditing || hover.asmIndex < 0 || hover.asmIndex >= len(ui.Code.Insts) {
 		return
 	}
 	inst := ui.Code.Insts[hover.asmIndex]

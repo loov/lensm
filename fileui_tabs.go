@@ -25,7 +25,7 @@ type CodeTab struct {
 }
 
 func (ui *FileUI) activeTab() *CodeTab {
-	if !gui.InRange(ui.ActiveTab, len(ui.CodeTabs)) {
+	if ui.ActiveTab < 0 || ui.ActiveTab >= len(ui.CodeTabs) {
 		return nil
 	}
 	return ui.CodeTabs[ui.ActiveTab]
@@ -115,7 +115,7 @@ func (ui *FileUI) openTab(fn disasm.Func, next bool) *CodeTab {
 			return nil
 		}
 		index := len(ui.CodeTabs) - 1
-		if next && gui.InRange(ui.ActiveTab, index) {
+		if next && 0 <= ui.ActiveTab && ui.ActiveTab < index {
 			at := ui.ActiveTab + 1
 			if at < index {
 				copy(ui.CodeTabs[at+1:], ui.CodeTabs[at:index])
@@ -156,7 +156,7 @@ func (ui *FileUI) keepActiveTab() {
 }
 
 func (ui *FileUI) selectTab(index int) {
-	if !gui.InRange(index, len(ui.CodeTabs)) {
+	if index < 0 || index >= len(ui.CodeTabs) {
 		return
 	}
 	ui.ActiveTab = index
@@ -168,7 +168,7 @@ func (ui *FileUI) selectTab(index int) {
 }
 
 func (ui *FileUI) closeTab(index int) {
-	if !gui.InRange(index, len(ui.CodeTabs)) {
+	if index < 0 || index >= len(ui.CodeTabs) {
 		return
 	}
 	ui.CodeTabs = append(ui.CodeTabs[:index], ui.CodeTabs[index+1:]...)

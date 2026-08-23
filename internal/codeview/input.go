@@ -32,7 +32,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 				return ViewNone, -1, false
 			}
 			line := int(relative) / lineHeight
-			return ViewGoAsm, line, gui.InRange(line, len(ui.Code.Insts))
+			return ViewGoAsm, line, 0 <= line && line < len(ui.Code.Insts)
 		}
 		if ui.ShowNative && c.native.Contains(position.X) {
 			relative := position.Y - ui.asm.Offset
@@ -40,7 +40,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 				return ViewNone, -1, false
 			}
 			line := int(relative) / lineHeight
-			return ViewNativeAsm, line, gui.InRange(line, len(ui.Code.Insts))
+			return ViewNativeAsm, line, 0 <= line && line < len(ui.Code.Insts)
 		}
 		if c.source.Contains(position.X) {
 			line := sourceRowAtY(ui.Code, ui.src.Offset, lineHeight, position.Y)
@@ -211,7 +211,7 @@ func (ui Style) resolveHover(gtx layout.Context, c codeColumns, mouseClicked boo
 		highlightAsmIndex = int(relative) / lineHeight
 	}
 
-	if gui.InRange(highlightAsmIndex, len(ui.Code.Insts)) {
+	if 0 <= highlightAsmIndex && highlightAsmIndex < len(ui.Code.Insts) {
 		activateClicked := mouseClicked && ui.SelectedAsm == highlightAsmIndex
 		ix := &ui.Code.Insts[highlightAsmIndex]
 		callTargetHovered := ui.TryOpen != nil &&
@@ -252,7 +252,7 @@ func (ui Style) resolveHover(gtx layout.Context, c codeColumns, mouseClicked boo
 			}
 		}
 	}
-	if !gui.InRange(ui.SelectedAsm, len(ui.Code.Insts)) {
+	if ui.SelectedAsm < 0 || ui.SelectedAsm >= len(ui.Code.Insts) {
 		ui.SelectedAsm = -1
 	}
 

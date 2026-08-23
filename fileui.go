@@ -322,7 +322,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		ui.afterFileLoaded()
 		return
 	}
-	if !gui.InRange(ui.ActiveTab, len(ui.CodeTabs)) {
+	if ui.ActiveTab < 0 || ui.ActiveTab >= len(ui.CodeTabs) {
 		ui.ActiveTab = 0
 		ui.selectFuncByName(ui.CodeTabs[ui.ActiveTab].Name)
 	}
