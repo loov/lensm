@@ -253,7 +253,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 			TopLeft:    image.Pt(int(source.Min), top),
 			Text:       src.File,
 			TextHeight: ui.TextHeight,
-			Bold:       hover.asmIndex == i,
+			Bold:       false,
 			Color:      ui.Theme.Colors.MutedText,
 		}.Layout(ui.Theme.Theme, gtx)
 		top += lineHeight
