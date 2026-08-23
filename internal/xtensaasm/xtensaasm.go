@@ -31,10 +31,10 @@ var (
 // value. Narrow encodings use op0 8..13 and have no op1/op2. tpat
 // constrains the t nibble bitwise ("0xxx") where a field straddles it.
 type encoding struct {
-	mn                      string
+	mn                     string
 	op0, op1, op2, r, s, t int8
-	tpat                    string
-	ops                     string // comma-separated operand codes
+	tpat                   string
+	ops                    string // comma-separated operand codes
 }
 
 const any = -1
@@ -396,10 +396,10 @@ func matchPattern(pat string, v uint32) bool {
 }
 
 type fields struct {
-	x             uint32
-	t, s, r       int8
-	op1, op2      int8
-	pc            uint64
+	x        uint32
+	t, s, r  int8
+	op1, op2 int8
+	pc       uint64
 }
 
 func (f *fields) sysreg(kind string) (string, int) {
@@ -529,4 +529,3 @@ func (f *fields) reg(which byte) int8 {
 	}
 	return f.t
 }
-
