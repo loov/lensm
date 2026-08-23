@@ -28,3 +28,20 @@ func TestUnjoinCompDir(t *testing.T) {
 		t.Errorf("unjoinCompDir(missing) = %q, want it unchanged", got)
 	}
 }
+
+func TestDemangle(t *testing.T) {
+	for _, test := range []struct{ in, want string }{
+		{"_Z8sum_intsRKSt6vectorIlSaIlEE", "sum_ints(std::vector<long, std::allocator<long> > const&)"},
+		{"_ZN3foo3barEi", "foo::bar(int)"},
+		// Not mangled: Go, C and assembly symbols pass through.
+		{"main.sumInts", "main.sumInts"},
+		{"sum_ints", "sum_ints"},
+		{"_main", "_main"},
+		// Mangled-looking but not decodable.
+		{"_Znope", "_Znope"},
+	} {
+		if got := Demangle(test.in); got != test.want {
+			t.Errorf("Demangle(%q) = %q, want %q", test.in, got, test.want)
+		}
+	}
+}

@@ -78,8 +78,8 @@ one shared file only for builds of the same program.
 Binaries from other compilers work too. Functions come from the symbol
 table and source from DWARF, so a C or C++ program built with `-g` shows
 its source alongside the assembly; on macOS the debug info lives in the
-`.dSYM` bundle next to the binary, which is read automatically. C++ names
-are the mangled ones from the symbol table.
+`.dSYM` bundle next to the binary, which is read automatically. C++
+symbols are demangled, signature included, so overloads stay apart.
 
 Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
 

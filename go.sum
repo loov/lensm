@@ -17,6 +17,8 @@ github.com/go-text/typesetting-utils v0.0.0-20260223113751-2d88ac90dae3 h1:drBZz
 github.com/go-text/typesetting-utils v0.0.0-20260223113751-2d88ac90dae3/go.mod h1:3/62I4La/HBRX9TcTpBj4eipLiwzf+vhI+7whTc9V7o=
 github.com/godbus/dbus/v5 v5.0.6 h1:mkgN1ofwASrYnJ5W6U/BxG15eXXXjirgZc7CLqkcaro=
 github.com/godbus/dbus/v5 v5.0.6/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
+github.com/ianlancetaylor/demangle v0.0.0-20260724033716-83e58baca724 h1:QixF8Mcbe87ET7pK/fPbBJ9GXFddmEY8yYMepzMzo30=
+github.com/ianlancetaylor/demangle v0.0.0-20260724033716-83e58baca724/go.mod h1:gx7rwoVhcfuVKG5uya9Hs3Sxj7EIvldVofAWIUtGouw=
 golang.org/x/arch v0.30.0 h1:sB9h+1gRGa2+LauFSV0tm8bK1J2yo1bx6/Uyi/P6DTU=
 golang.org/x/arch v0.30.0/go.mod h1:0X+GdSIP+kL5wPmpK7sdkEVTt2XoYP0cSjQSbZBwOi8=
 golang.org/x/exp v0.0.0-20260112195511-716be5621a96 h1:Z/6YuSHTLOHfNFdb8zVZomZr7cqNgTJvA8+Qz75D8gU=

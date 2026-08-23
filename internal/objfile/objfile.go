@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/ianlancetaylor/demangle"
 )
 
 // Binary is a loaded executable.
@@ -156,7 +158,17 @@ func (b *Binary) addSym(name string, addr, size uint64) {
 	if sectionMarkers[name] || addr == 0 {
 		return
 	}
-	b.syms = append(b.syms, sym{name: name, addr: addr, size: size})
+	b.syms = append(b.syms, sym{name: Demangle(name), addr: addr, size: size})
+}
+
+// Demangle turns a C++ symbol into the name it had in the source,
+// signature and all, so that overloads stay apart. Anything that isn't a
+// mangled name — every Go and C symbol — is returned unchanged.
+func Demangle(name string) string {
+	if !strings.HasPrefix(name, "_Z") {
+		return name
+	}
+	return demangle.Filter(name)
 }
 
 // loadPclntab parses a Go runtime pclntab; it gives exact function

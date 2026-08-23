@@ -6,6 +6,7 @@ require (
 	gioui.org v0.10.2
 	gioui.org/x v0.10.2
 	github.com/eliben/watgo v0.8.0
+	github.com/ianlancetaylor/demangle v0.0.0-20260724033716-83e58baca724
 	golang.org/x/arch v0.30.0
 	golang.org/x/exp/shiny v0.0.0-20260820142414-ca536658362e
 )

@@ -125,7 +125,7 @@ func loadModule(data []byte, index int, qualify bool) ([]disasm.Func, error) {
 	codeStart, bodies := codeSection(data)
 	var funcs []disasm.Func
 	for i, fn := range decoded.Funcs {
-		name := fn.Name
+		name := objfile.Demangle(fn.Name)
 		if name == "" {
 			name = fmt.Sprintf("func%d", len(mod.names))
 		}

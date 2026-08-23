@@ -129,8 +129,8 @@ int main() {
 }
 `
 
-// TestLoadCPP checks a C++ binary. Names come from the symbol table, so
-// they are the mangled ones; the source mapping is what has to work.
+// TestLoadCPP checks a C++ binary: mangled symbols come back as the
+// names they had in the source, and the source mapping works.
 func TestLoadCPP(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles a C++ program")
@@ -144,12 +144,20 @@ func TestLoadCPP(t *testing.T) {
 
 	var sumInts disasm.Func
 	for _, fn := range file.Funcs() {
-		if strings.Contains(fn.Name(), "sum_ints") {
+		if strings.HasPrefix(fn.Name(), "sum_ints(") {
 			sumInts = fn
 		}
 	}
 	if sumInts == nil {
-		t.Fatal("no symbol mentioning sum_ints")
+		names := make([]string, 0, len(file.Funcs()))
+		for _, fn := range file.Funcs() {
+			names = append(names, fn.Name())
+		}
+		t.Fatalf("no demangled sum_ints among %v", names)
+	}
+	// The signature is what keeps overloads apart, so it has to survive.
+	if !strings.Contains(sumInts.Name(), "vector<long") {
+		t.Errorf("Name = %q, want the parameter types", sumInts.Name())
 	}
 	code, err := sumInts.Load(disasm.Options{Context: 1})
 	if err != nil {
