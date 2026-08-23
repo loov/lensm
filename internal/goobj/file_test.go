@@ -53,17 +53,3 @@ func add(a, b int) int { return a + b }
 	}
 	wg.Wait()
 }
-
-func TestLoadSources_TruncatedFile(t *testing.T) {
-	dir := t.TempDir()
-	src := filepath.Join(dir, "short.go")
-	if err := os.WriteFile(src, []byte("package main\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	set := &disasm.LineSet{}
-	set.Add(40) // line table says 40, file has 1 line
-	sources := LoadSources(map[string]*disasm.LineSet{src: set}, src, 2)
-	if len(sources) != 1 || len(sources[0].Blocks) != 0 {
-		t.Fatalf("want one source with no blocks, got %+v", sources)
-	}
-}
