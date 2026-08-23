@@ -230,8 +230,13 @@ func LoadSources(needed map[string]*disasm.LineSet, symbolFile string, context i
 			File: file,
 		}
 		for _, r := range set.Ranges(context) {
-			to := min(r.To-1, len(lines))
-			lineBlock := lines[r.From-1 : to]
+			// The file may have been edited since the build; clamp both
+			// ends rather than trusting the line table.
+			from, to := r.From-1, min(r.To-1, len(lines))
+			if from >= to {
+				continue
+			}
+			lineBlock := lines[from:to]
 			for i, v := range lineBlock {
 				lineBlock[i] = strings.Replace(v, "\t", "    ", -1)
 			}
