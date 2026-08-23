@@ -1,0 +1,406 @@
+// Package objfile loads executables into a format-independent
+// representation: the architecture, the functions with their machine
+// code, a symbol lookup, and the Go pclntab for PC to line mapping.
+//
+// It is a trimmed port of github.com/loov/ixdiff/internal/objfile and
+// replaces vendored cmd/internal packages: only stdlib debug/* is used.
+package objfile
+
+import (
+	"bytes"
+	"cmp"
+	"debug/elf"
+	"debug/gosym"
+	"debug/macho"
+	"debug/pe"
+	"encoding/binary"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+)
+
+// Binary is a loaded executable.
+type Binary struct {
+	Arch string // GOARCH name, e.g. "amd64"
+	// Funcs are the functions inside the text section, sorted by address.
+	Funcs []*Func
+
+	text     []byte
+	textAddr uint64
+	// byteOrder of instruction words; only ppc64 has a big-endian variant.
+	byteOrder binary.ByteOrder
+	// syms are all symbols sorted by address, used to resolve addresses to names.
+	syms []sym
+	pcln *gosym.Table
+}
+
+// Func is a single function inside a binary.
+type Func struct {
+	Name string
+	Addr uint64
+	Size uint64
+
+	bin *Binary
+}
+
+// Code returns the machine code of the function, or nil when it lies
+// outside the text section.
+func (f *Func) Code() []byte {
+	return sectionSlice(f.bin.text, f.Addr-f.bin.textAddr, f.Size)
+}
+
+// PCToLine maps a pc to its source location using the Go pclntab;
+// zero values when unknown.
+func (b *Binary) PCToLine(pc uint64) (file string, line int) {
+	if b.pcln == nil {
+		return "", 0
+	}
+	file, line, _ = b.pcln.PCToLine(pc)
+	return file, line
+}
+
+// Lookup resolves addr to the name and base of the symbol containing it,
+// matching the contract of the x/arch GoSyntax symname functions.
+func (b *Binary) Lookup(addr uint64) (name string, base uint64) {
+	i, _ := slices.BinarySearchFunc(b.syms, addr, func(s sym, a uint64) int {
+		return cmp.Compare(s.addr, a)
+	})
+	// i is the first symbol at or after addr; the containing one is at
+	// i-1 unless addr hits a symbol start exactly.
+	if i >= len(b.syms) || b.syms[i].addr != addr {
+		if i == 0 {
+			return "", 0
+		}
+		i--
+	}
+	if s := b.syms[i]; s.addr != 0 && addr < s.addr+s.size {
+		return s.name, s.addr
+	}
+	return "", 0
+}
+
+type sym struct {
+	name string
+	addr uint64
+	size uint64 // zero when the format does not record sizes (Mach-O, PE)
+}
+
+// Open reads and parses the binary at path, detecting ELF, Mach-O and PE
+// from the magic bytes.
+func Open(path string) (*Binary, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < 4 {
+		return nil, fmt.Errorf("%q: too short to be a binary", path)
+	}
+	r := bytes.NewReader(data)
+	var bin *Binary
+	switch magic := string(data[:4]); {
+	case magic == elf.ELFMAG:
+		bin, err = openELF(r, data)
+	case magic == "\xcf\xfa\xed\xfe" || magic == "\xfe\xed\xfa\xcf":
+		bin, err = openMachO(r, data)
+	case magic[0] == 'M' && magic[1] == 'Z':
+		bin, err = openPE(r, data)
+	default:
+		err = fmt.Errorf("unsupported binary format")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%q: %w", path, err)
+	}
+	bin.finish()
+	return bin, nil
+}
+
+// sectionSlice returns data[off:off+size], or nil when the range is
+// invalid; overflow-safe for corrupt headers near 2^64.
+func sectionSlice(data []byte, off, size uint64) []byte {
+	if off > uint64(len(data)) || size > uint64(len(data))-off {
+		return nil
+	}
+	return data[off : off+size]
+}
+
+// sectionMarkers are linker boundary symbols; they are not functions and
+// would shadow the first real symbol in Lookup.
+var sectionMarkers = map[string]bool{
+	"runtime.text": true, "text": true, "_text": true,
+	"runtime.etext": true, "etext": true, "_etext": true,
+}
+
+func (b *Binary) addSym(name string, addr, size uint64) {
+	if sectionMarkers[name] || addr == 0 {
+		return
+	}
+	b.syms = append(b.syms, sym{name: name, addr: addr, size: size})
+}
+
+// loadPclntab parses a Go runtime pclntab; it gives exact function
+// ranges even for stripped binaries. Best-effort: on failure the
+// symbol-table functions remain.
+func (b *Binary) loadPclntab(pclntab []byte) {
+	if len(pclntab) == 0 {
+		return
+	}
+	tab, err := gosym.NewTable(nil, gosym.NewLineTable(pclntab, b.textAddr))
+	if err != nil {
+		return
+	}
+	b.pcln = tab
+}
+
+// finish sorts symbols, infers missing sizes as the distance to the next
+// symbol, and collects the functions: pclntab entries first (exact sizes,
+// present even when stripped), then any remaining text symbols.
+func (b *Binary) finish() {
+	if b.pcln != nil {
+		for _, fn := range b.pcln.Funcs {
+			b.addSym(fn.Name, fn.Entry, fn.End-fn.Entry)
+		}
+	}
+	// Sort sized symbols last at equal addresses, so Lookup's "last
+	// symbol at or before addr" prefers the one with a real extent.
+	slices.SortStableFunc(b.syms, func(x, y sym) int {
+		return cmp.Or(cmp.Compare(x.addr, y.addr), cmp.Compare(x.size, y.size))
+	})
+	textEnd := b.textAddr + uint64(len(b.text))
+	for i := range b.syms {
+		s := &b.syms[i]
+		if s.size != 0 {
+			continue
+		}
+		for _, next := range b.syms[i+1:] {
+			if next.addr != s.addr {
+				s.size = next.addr - s.addr
+				break
+			}
+		}
+		if s.size == 0 && s.addr < textEnd {
+			s.size = textEnd - s.addr
+		}
+	}
+
+	seen := map[string]bool{}
+	add := func(name string, addr, size uint64) {
+		if addr < b.textAddr || addr >= textEnd || seen[name] {
+			return
+		}
+		seen[name] = true
+		b.Funcs = append(b.Funcs, &Func{Name: name, Addr: addr, Size: size, bin: b})
+	}
+	if b.pcln != nil {
+		for _, fn := range b.pcln.Funcs {
+			add(fn.Name, fn.Entry, fn.End-fn.Entry)
+		}
+	}
+	for _, s := range b.syms {
+		add(s.name, s.addr, s.size)
+	}
+	slices.SortFunc(b.Funcs, func(x, y *Func) int { return cmp.Compare(x.Addr, y.Addr) })
+}
+
+// pclntabMagics are the little-endian header magics of pclntab versions.
+var pclntabMagics = [][]byte{
+	{0xf1, 0xff, 0xff, 0xff, 0x00, 0x00}, // Go 1.20+
+	{0xf0, 0xff, 0xff, 0xff, 0x00, 0x00}, // Go 1.18–1.19
+	{0xfa, 0xff, 0xff, 0xff, 0x00, 0x00}, // Go 1.16–1.17
+}
+
+// findPclntab locates a pclntab inside data by its header: a version
+// magic followed by a plausible pc quantum and pointer size. It is the
+// fallback for binaries without a dedicated section: PE always, and ELF
+// when the system linker merged it into another data section.
+func findPclntab(data []byte) []byte {
+	for _, magic := range pclntabMagics {
+		for off := 0; ; off += len(magic) {
+			i := bytes.Index(data[off:], magic)
+			if i < 0 {
+				break
+			}
+			off += i
+			if off+8 <= len(data) {
+				quantum, ptrsize := data[off+6], data[off+7]
+				if (quantum == 1 || quantum == 4) && (ptrsize == 4 || ptrsize == 8) {
+					return data[off:]
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func openELF(r *bytes.Reader, data []byte) (*Binary, error) {
+	ef, err := elf.NewFile(r)
+	if err != nil {
+		return nil, err
+	}
+	bin := &Binary{byteOrder: binary.LittleEndian}
+	switch ef.Machine {
+	case elf.EM_X86_64:
+		bin.Arch = "amd64"
+	case elf.EM_AARCH64:
+		bin.Arch = "arm64"
+	case elf.EM_386:
+		bin.Arch = "386"
+	case elf.EM_ARM:
+		bin.Arch = "arm"
+	case elf.EM_S390:
+		bin.Arch = "s390x"
+	case elf.EM_PPC64:
+		bin.Arch = "ppc64le"
+		if ef.ByteOrder == binary.BigEndian {
+			bin.Arch, bin.byteOrder = "ppc64", binary.BigEndian
+		}
+	case elf.EM_RISCV:
+		bin.Arch = "riscv64"
+	case elf.EM_LOONGARCH:
+		bin.Arch = "loong64"
+	default:
+		return nil, fmt.Errorf("unsupported ELF machine %v", ef.Machine)
+	}
+	if ef.Class != elf.ELFCLASS64 && bin.Arch != "386" && bin.Arch != "arm" {
+		return nil, fmt.Errorf("unsupported 32-bit ELF for %s", bin.Arch)
+	}
+
+	text := ef.Section(".text")
+	if text == nil {
+		return nil, fmt.Errorf("no .text section")
+	}
+	bin.text = sectionSlice(data, text.Offset, text.FileSize)
+	if bin.text == nil || text.Flags&elf.SHF_COMPRESSED != 0 {
+		return nil, fmt.Errorf("unreadable .text section")
+	}
+	bin.textAddr = text.Addr
+
+	syms, err := ef.Symbols()
+	if err != nil && err != elf.ErrNoSymbols {
+		return nil, fmt.Errorf("reading symbols: %w", err)
+	}
+	for _, s := range syms {
+		switch elf.ST_TYPE(s.Info) {
+		case elf.STT_FUNC, elf.STT_OBJECT:
+			bin.addSym(s.Name, s.Value, s.Size)
+		}
+	}
+
+	if sec := ef.Section(".gopclntab"); sec != nil {
+		if tab, err := sec.Data(); err == nil {
+			bin.loadPclntab(tab)
+		}
+	} else {
+		for _, sec := range ef.Sections {
+			if sec.Type == elf.SHT_PROGBITS && sec.Flags&elf.SHF_ALLOC != 0 && sec.Flags&elf.SHF_EXECINSTR == 0 {
+				if d, err := sec.Data(); err == nil && findPclntab(d) != nil {
+					bin.loadPclntab(findPclntab(d))
+					break
+				}
+			}
+		}
+	}
+	return bin, nil
+}
+
+func openMachO(r *bytes.Reader, data []byte) (*Binary, error) {
+	mf, err := macho.NewFile(r)
+	if err != nil {
+		return nil, err
+	}
+	bin := &Binary{byteOrder: binary.LittleEndian}
+	switch mf.Cpu {
+	case macho.CpuAmd64:
+		bin.Arch = "amd64"
+	case macho.CpuArm64:
+		bin.Arch = "arm64"
+	default:
+		return nil, fmt.Errorf("unsupported Mach-O cpu %v", mf.Cpu)
+	}
+
+	text := mf.Section("__text")
+	if text == nil {
+		return nil, fmt.Errorf("no __text section")
+	}
+	bin.text = sectionSlice(data, uint64(text.Offset), text.Size)
+	if bin.text == nil {
+		return nil, fmt.Errorf("unreadable __text section")
+	}
+	bin.textAddr = text.Addr
+
+	if mf.Symtab != nil {
+		for _, s := range mf.Symtab.Syms {
+			// 0xe0 masks the N_STAB debugging bits; such entries
+			// describe source info, not symbols.
+			if s.Type&0xe0 != 0 {
+				continue
+			}
+			bin.addSym(strings.TrimPrefix(s.Name, "_"), s.Value, 0)
+		}
+	}
+	if sec := mf.Section("__gopclntab"); sec != nil {
+		if tab, err := sec.Data(); err == nil {
+			bin.loadPclntab(tab)
+		}
+	}
+	return bin, nil
+}
+
+func openPE(r *bytes.Reader, data []byte) (*Binary, error) {
+	pf, err := pe.NewFile(r)
+	if err != nil {
+		return nil, err
+	}
+	bin := &Binary{byteOrder: binary.LittleEndian}
+	switch pf.Machine {
+	case pe.IMAGE_FILE_MACHINE_AMD64:
+		bin.Arch = "amd64"
+	case pe.IMAGE_FILE_MACHINE_ARM64:
+		bin.Arch = "arm64"
+	case pe.IMAGE_FILE_MACHINE_I386:
+		bin.Arch = "386"
+	default:
+		return nil, fmt.Errorf("unsupported PE machine %#x", pf.Machine)
+	}
+
+	var imageBase uint64
+	switch hdr := pf.OptionalHeader.(type) {
+	case *pe.OptionalHeader64:
+		imageBase = hdr.ImageBase
+	case *pe.OptionalHeader32:
+		imageBase = uint64(hdr.ImageBase)
+	default:
+		return nil, fmt.Errorf("missing PE optional header")
+	}
+
+	text := pf.Section(".text")
+	if text == nil {
+		return nil, fmt.Errorf("no .text section")
+	}
+	// The on-disk section can be padded past its virtual size.
+	bin.text = sectionSlice(data, uint64(text.Offset), min(uint64(text.Size), uint64(text.VirtualSize)))
+	if bin.text == nil {
+		return nil, fmt.Errorf("unreadable .text section")
+	}
+	bin.textAddr = imageBase + uint64(text.VirtualAddress)
+
+	// COFF symbol values are offsets within their 1-based section.
+	for _, s := range pf.Symbols {
+		if s.SectionNumber <= 0 || int(s.SectionNumber) > len(pf.Sections) {
+			continue
+		}
+		sec := pf.Sections[s.SectionNumber-1]
+		bin.addSym(s.Name, imageBase+uint64(sec.VirtualAddress)+uint64(s.Value), 0)
+	}
+
+	// PE has no pclntab section; scan the data sections for its header.
+	for _, name := range []string{".rdata", ".data"} {
+		if sec := pf.Section(name); sec != nil {
+			if d, err := sec.Data(); err == nil && findPclntab(d) != nil {
+				bin.loadPclntab(findPclntab(d))
+				break
+			}
+		}
+	}
+	return bin, nil
+}

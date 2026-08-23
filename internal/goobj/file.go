@@ -7,8 +7,7 @@ import (
 	"sync"
 
 	"loov.dev/lensm/internal/disasm"
-	godisasm "loov.dev/lensm/internal/go/src/disasm"
-	"loov.dev/lensm/internal/go/src/objfile"
+	"loov.dev/lensm/internal/objfile"
 )
 
 var _ disasm.File = (*File)(nil)
@@ -16,13 +15,10 @@ var _ disasm.Func = (*Func)(nil)
 
 // File contains information about the object file.
 type File struct {
-	objfile *objfile.File
-	disasm  *godisasm.Disasm
-	funcs   []disasm.Func
+	bin   *objfile.Binary
+	funcs []disasm.Func
 
-	// mu guards cache and serializes Disassemble calls: disassembly
-	// lazily populates line-table caches inside disasm, which is not
-	// safe for concurrent use.
+	// mu guards cache.
 	mu    sync.Mutex
 	cache map[cacheKey]cacheEntry
 }
@@ -47,45 +43,32 @@ func (file *File) Funcs() []disasm.Func { return file.funcs }
 // Function contains information about the executable.
 type Func struct {
 	obj *File
-	sym objfile.Sym
+	fn  *objfile.Func
 
 	sortName string
 }
 
-func (fn *Func) Name() string { return fn.sym.Name }
+func (fn *Func) Name() string { return fn.fn.Name }
 
-func (file *File) Close() error {
-	return file.objfile.Close()
-}
+func (file *File) Close() error { return nil }
 
 func Load(path string) (*File, error) {
-	f, err := objfile.Open(path)
+	bin, err := objfile.Open(path)
 	if err != nil {
-		return nil, err
-	}
-
-	dis, err := godisasm.DisasmForFile(f)
-	if err != nil {
-		_ = f.Close()
 		return nil, err
 	}
 
 	file := &File{
-		objfile: f,
-		disasm:  dis,
-		cache:   make(map[cacheKey]cacheEntry),
+		bin:   bin,
+		cache: make(map[cacheKey]cacheEntry),
 	}
 
-	for _, sym := range dis.Syms() {
-		if sym.Code != 'T' && sym.Code != 't' || sym.Addr < dis.TextStart() {
-			continue
-		}
-		sym := &Func{
+	for _, fn := range bin.Funcs {
+		file.funcs = append(file.funcs, &Func{
 			obj:      file,
-			sym:      sym,
-			sortName: sortingName(sym.Name),
-		}
-		file.funcs = append(file.funcs, sym)
+			fn:       fn,
+			sortName: sortingName(fn.Name),
+		})
 	}
 
 	sort.SliceStable(file.funcs, func(i, k int) bool {
@@ -105,7 +88,7 @@ func (file *File) LoadCode(fn *Func, opts disasm.Options) (*disasm.Code, error) 
 	key := cacheKey{fn: fn, context: opts.Context}
 	entry, ok := file.cache[key]
 	if !ok {
-		entry.code, entry.err = Disassemble(fn.obj.disasm, fn, opts)
+		entry.code, entry.err = Disassemble(fn.obj.bin, fn, opts)
 		file.cache[key] = entry
 	}
 	return entry.code, entry.err

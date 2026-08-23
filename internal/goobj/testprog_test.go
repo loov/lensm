@@ -49,8 +49,10 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 				}
 				if len(code.Insts) == 0 {
 					t.Error("main.sumInts disassembled to 0 instructions")
-				} else if code.Insts[0].NativeText == "" {
-					t.Error("main.sumInts has no native syntax")
+				} else if in := code.Insts[0]; in.NativeText == "" || in.Mnemonic == "" {
+					t.Errorf("main.sumInts has no native syntax or mnemonic: %+v", in)
+				} else if in.Line == 0 || !strings.HasSuffix(in.File, "main.go") {
+					t.Errorf("main.sumInts has no source location: %+v", in)
 				}
 				return
 			}
