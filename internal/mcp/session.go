@@ -23,9 +23,6 @@ func NewSessionWithComments(load LoadFile, path string, commentsPath string, sto
 		return nil, err
 	}
 	if store == nil {
-		if commentsPath == "" {
-			commentsPath = comments.DefaultPath(path)
-		}
 		var err error
 		store, err = comments.Open(commentsPath, path)
 		if err != nil {

@@ -128,7 +128,7 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
 	ui.TextSizeEditor.SetText(strconv.Itoa(settings.TextSize))
-	ui.Comments, _ = comments.Open("", "")
+	ui.Comments = comments.NewMemory("")
 	return ui
 }
 

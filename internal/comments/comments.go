@@ -72,14 +72,14 @@ func DefaultPath(binaryPath string) string {
 	return binaryPath + ".lensm-comments.json"
 }
 
+// Open loads the sidecar at path for binaryPath; an empty path means the
+// default sidecar next to the binary.
 func Open(path, binaryPath string) (*Store, error) {
-	binaryPath = CleanPath(binaryPath)
-	store := &Store{
-		path:    path,
-		binary:  binaryPath,
-		records: map[string]Record{},
-		touched: map[string]bool{},
+	if path == "" {
+		path = DefaultPath(binaryPath)
 	}
+	store := NewMemory(binaryPath)
+	store.path = path
 	if path == "" {
 		return store, nil
 	}
@@ -87,6 +87,15 @@ func Open(path, binaryPath string) (*Store, error) {
 		return nil, err
 	}
 	return store, nil
+}
+
+// NewMemory returns a store for binaryPath that never touches disk.
+func NewMemory(binaryPath string) *Store {
+	return &Store{
+		binary:  CleanPath(binaryPath),
+		records: map[string]Record{},
+		touched: map[string]bool{},
+	}
 }
 
 func (store *Store) Path() string {
@@ -270,10 +279,10 @@ func (store *Store) load() error {
 
 	var disk commentsDiskFile
 	if err := json.Unmarshal(data, &disk); err != nil {
-		return fmt.Errorf("load comments: %w", err)
+		return fmt.Errorf("load comments from %q: %w", store.path, err)
 	}
 	if disk.Version != 0 && disk.Version != commentsFileVersion {
-		return fmt.Errorf("unsupported comments file version %d", disk.Version)
+		return fmt.Errorf("unsupported comments file version %d in %q", disk.Version, store.path)
 	}
 	store.preserved = nil
 	for key, rec := range store.decodeRecords(disk) {

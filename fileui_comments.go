@@ -12,14 +12,10 @@ func (ui *FileUI) loadCommentsForPath(exePath string) {
 	if err := ui.Comments.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "unable to save comments: %v\n", err)
 	}
-	commentsPath := ui.Config.CommentsPath
-	if commentsPath == "" {
-		commentsPath = comments.DefaultPath(exePath)
-	}
-	store, err := comments.Open(commentsPath, exePath)
+	store, err := comments.Open(ui.Config.CommentsPath, exePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to load comments from %q: %v\n", commentsPath, err)
-		store, _ = comments.Open("", exePath)
+		fmt.Fprintf(os.Stderr, "unable to load comments: %v\n", err)
+		store = comments.NewMemory(exePath)
 	}
 	ui.Comments = store
 }
