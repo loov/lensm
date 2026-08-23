@@ -399,13 +399,18 @@ func openELF(r *bytes.Reader, data []byte) (*Binary, error) {
 			bin.Arch, bin.byteOrder = "ppc64", binary.BigEndian
 		}
 	case elf.EM_RISCV:
+		// RV32 (e.g. TinyGo for ESP32-C3) shares RV64's encoding; the
+		// riscv64 decoder handles it, only the label differs.
 		bin.Arch = "riscv64"
+		if ef.Class == elf.ELFCLASS32 {
+			bin.Arch = "riscv32"
+		}
 	case elf.EM_LOONGARCH:
 		bin.Arch = "loong64"
 	default:
 		return nil, fmt.Errorf("unsupported ELF machine %v", ef.Machine)
 	}
-	if ef.Class != elf.ELFCLASS64 && bin.Arch != "386" && bin.Arch != "arm" {
+	if ef.Class != elf.ELFCLASS64 && bin.Arch != "386" && bin.Arch != "arm" && bin.Arch != "riscv32" {
 		return nil, fmt.Errorf("unsupported 32-bit ELF for %s", bin.Arch)
 	}
 

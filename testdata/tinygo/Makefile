@@ -9,7 +9,10 @@
 # carries DWARF in .debug_* custom sections instead of a Go pclntab.
 # component.wasm is the same program built for wasip2, which wraps the
 # core modules in a component; it needs wasm-tools on PATH.
+# esp32c3.elf is the same program for a 32-bit RISC-V microcontroller
+# (RV32IMC, ELFCLASS32, DWARF line table, no pclntab).
 PHONY := build
 build:
 	tinygo build -o example.wasm -target=wasi .
 	tinygo build -o component.wasm -target=wasip2 .
+	tinygo build -o esp32c3.elf -target=xiao-esp32c3 .

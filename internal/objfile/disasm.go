@@ -96,7 +96,7 @@ func (b *Binary) Disassemble(fn *Func) ([]Inst, error) {
 			}
 			emit(inst.Len, inst.Op.String(), ppc64asm.GoSyntax(inst, addr, lookup), ppc64asm.GNUSyntax(inst, addr))
 		}
-	case "riscv64":
+	case "riscv64", "riscv32":
 		for len(code) > 0 {
 			inst, err := riscv64asm.Decode(code)
 			if err != nil || inst.Len == 0 || inst.Op == 0 {

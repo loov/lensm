@@ -266,3 +266,48 @@ func TestLoadRust(t *testing.T) {
 		t.Error("no instruction carries a source position")
 	}
 }
+
+// TestLoadRISCV32 loads a TinyGo ESP32-C3 build: a 32-bit RISC-V ELF with
+// DWARF but no pclntab, decoded by the riscv64 decoder.
+func TestLoadRISCV32(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "esp32c3.elf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	var sumInts disasm.Func
+	for _, fn := range file.Funcs() {
+		if fn.Name() == "main.sumInts" {
+			sumInts = fn
+		}
+	}
+	if sumInts == nil {
+		t.Fatal("main.sumInts not found")
+	}
+	code, err := sumInts.Load(disasm.Options{Context: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code.Arch != "riscv32" {
+		t.Errorf("Arch = %q, want riscv32", code.Arch)
+	}
+	if !strings.HasSuffix(code.File, "main.go") {
+		t.Errorf("File = %q, want main.go", code.File)
+	}
+	var lines, decoded int
+	for _, in := range code.Insts {
+		if in.Line != 0 {
+			lines++
+		}
+		if in.Text != "" && !strings.HasPrefix(in.Text, "BYTE") {
+			decoded++
+		}
+	}
+	if lines == 0 {
+		t.Error("no instruction carries a source position")
+	}
+	if decoded == 0 {
+		t.Error("no instruction decoded")
+	}
+}
