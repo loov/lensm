@@ -44,8 +44,6 @@ func (file *File) Funcs() []disasm.Func { return file.funcs }
 type Func struct {
 	obj *File
 	fn  *objfile.Func
-
-	sortName string
 }
 
 func (fn *Func) Name() string { return fn.fn.Name }
@@ -65,9 +63,8 @@ func Load(path string) (*File, error) {
 
 	for _, fn := range bin.Funcs {
 		file.funcs = append(file.funcs, &Func{
-			obj:      file,
-			fn:       fn,
-			sortName: sortingName(fn.Name),
+			obj: file,
+			fn:  fn,
 		})
 	}
 

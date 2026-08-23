@@ -26,11 +26,10 @@ func (file *File) Funcs() []disasm.Func { return file.funcs }
 
 // Func contains information about the executable.
 type Func struct {
-	obj      *File
-	index    wasm.Index
-	name     string
-	code     *wasm.Code
-	sortName string
+	obj   *File
+	index wasm.Index
+	name  string
+	code  *wasm.Code
 }
 
 func (fn *Func) Name() string { return fn.name }
@@ -56,11 +55,10 @@ func Load(path string) (*File, error) {
 	for i, fnname := range module.NameSection.FunctionNames {
 		code := module.CodeSection[i]
 		sym := &Func{
-			obj:      obj,
-			index:    fnname.Index,
-			name:     fnname.Name,
-			code:     code,
-			sortName: strings.ToLower(fnname.Name),
+			obj:   obj,
+			index: fnname.Index,
+			name:  fnname.Name,
+			code:  code,
 		}
 		obj.funcs = append(obj.funcs, sym)
 	}
@@ -91,50 +89,3 @@ func (file *File) LoadCode(fn *Func, opts disasm.Options) *disasm.Code {
 	}
 	return code
 }
-
-/*
-func (file *File) LoadCode(fn *Func, opts disasm.Options) *disasm.Code {
-	dis, err := wasmdisasm.NewDisassembly(*fn.fn, file.module)
-	if err != nil {
-		return &disasm.Code{Name: err.Error()}
-	}
-
-	code := &disasm.Code{
-		Name: fn.fn.Name,
-	}
-
-	for i, ix := range dis.Code {
-		code.Insts = append(code.Insts, file.toInstr(dis, i, ix))
-	}
-
-	return code
-}
-func (file *File) toInstr(dis *wasmdisasm.Disassembly, i int, ix wasmdisasm.Instr) disasm.Inst {
-	inst := disasm.Inst{
-		PC:   uint64(i),
-		Text: ix.Op.Name + " " + file.immediatesToString(ix.Immediates),
-	}
-
-	switch ix.Op.Code {
-	case operators.Call:
-		target := ix.Immediates[0].(uint32)
-		fn := file.module.FunctionIndexSpace[target]
-		inst.Text = ix.Op.Name + " " + fn.Name
-		inst.Call = fn.Name
-
-	// TODO: figure out ix.Branches and ix.Block.IfElseIndex (similar)
-	default:
-
-	}
-
-	return inst
-}
-
-func (file *File) immediatesToString(xs []interface{}) string {
-	var str strings.Builder
-	for _, im := range xs {
-		fmt.Fprintf(&str, " %v", im)
-	}
-	return str.String()
-}
-*/
