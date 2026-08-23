@@ -25,6 +25,11 @@ func (ui Style) layoutHelp(gtx layout.Context, c codeColumns, hover codeHover) {
 	if !ui.ShowHelp || ui.selecting || commentEditing || hover.asmIndex < 0 || hover.asmIndex >= len(ui.Code.Insts) {
 		return
 	}
+	// The reference covers machine instructions; a wasm mnemonic only
+	// ever matches its generic fallback, which says nothing.
+	if ui.Code.Arch == "wasm" {
+		return
+	}
 	inst := ui.Code.Insts[hover.asmIndex]
 	nativeHovered := ui.ShowNative && c.native.Contains(hover.position.X)
 	var help asmhelp.Help
