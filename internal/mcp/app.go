@@ -83,10 +83,7 @@ func (server *AppServer) SetPath(path string, store *comments.Store) {
 	server.generation++
 	generation := server.generation
 	commentsPath := server.commentsPath
-	old, oldActive := server.session, server.active
-	server.session = nil
-	server.loadError = nil
-	server.active = &sync.WaitGroup{}
+	old, oldActive := server.swapSessionLocked(nil, nil)
 	server.mu.Unlock()
 	// SetPath runs on the UI event loop: don't block on in-flight requests.
 	closeSessionWhenIdle(old, oldActive)
@@ -112,10 +109,7 @@ func (server *AppServer) Close() error {
 	}
 	server.mu.Lock()
 	server.generation++
-	old, oldActive := server.session, server.active
-	server.session = nil
-	server.loadError = nil
-	server.active = &sync.WaitGroup{}
+	old, oldActive := server.swapSessionLocked(nil, nil)
 	server.mu.Unlock()
 	if old != nil {
 		if oldActive != nil {
@@ -138,12 +132,20 @@ func (server *AppServer) replaceSession(generation uint64, session *Session, loa
 		}
 		return
 	}
-	old, oldActive := server.session, server.active
+	old, oldActive := server.swapSessionLocked(session, loadErr)
+	server.mu.Unlock()
+	closeSessionWhenIdle(old, oldActive)
+}
+
+// swapSessionLocked installs session (or a load error) and returns the
+// previous session with the WaitGroup of requests still using it, for
+// the caller to close once idle. Caller holds server.mu.
+func (server *AppServer) swapSessionLocked(session *Session, loadErr error) (old *Session, oldActive *sync.WaitGroup) {
+	old, oldActive = server.session, server.active
 	server.session = session
 	server.loadError = loadErr
 	server.active = &sync.WaitGroup{}
-	server.mu.Unlock()
-	closeSessionWhenIdle(old, oldActive)
+	return old, oldActive
 }
 
 // closeSessionWhenIdle closes session once in-flight requests holding it
