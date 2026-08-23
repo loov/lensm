@@ -7,6 +7,9 @@
 #
 # Built with TinyGo 0.41.1 (LLVM 20.1.1). Unlike a `GOOS=wasip1` build, it
 # carries DWARF in .debug_* custom sections instead of a Go pclntab.
+# component.wasm is the same program built for wasip2, which wraps the
+# core modules in a component; it needs wasm-tools on PATH.
 PHONY := build
 build:
 	tinygo build -o example.wasm -target=wasi .
+	tinygo build -o component.wasm -target=wasip2 .

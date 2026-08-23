@@ -102,3 +102,51 @@ func (c *cursor) bytes(n uint64) []byte {
 	c.pos += int(n)
 	return b
 }
+
+// Component sections, of which only the two that can hold code matter
+// here: a core module is embedded whole, and a nested component holds
+// sections of its own.
+const (
+	componentCoreModuleID = 1
+	componentNestedID     = 4
+)
+
+// isComponent reports whether data starts with a component header: the
+// magic of a core module, with the component-model layer and version.
+func isComponent(data []byte) bool {
+	return len(data) >= 8 && string(data[:4]) == "\x00asm" &&
+		data[4] == 0x0d && data[5] == 0x00 && data[6] == 0x01 && data[7] == 0x00
+}
+
+// coreModules returns every core module a component embeds, outermost
+// first, descending into nested components. Modules are stored whole, so
+// each one is returned as its own module binary.
+func coreModules(data []byte) [][]byte {
+	// A component nests components nests components; the limit is only
+	// there so a malformed file cannot recurse without end.
+	const maxDepth = 8
+	var collect func(data []byte, depth int) [][]byte
+	collect = func(data []byte, depth int) [][]byte {
+		var out [][]byte
+		if depth > maxDepth {
+			return out
+		}
+		c := &cursor{data: data, pos: 8} // past the magic and version
+		for c.pos < len(data) && !c.fail {
+			id := c.byte()
+			size := c.uint()
+			payload := c.bytes(size)
+			if c.fail {
+				return out
+			}
+			switch id {
+			case componentCoreModuleID:
+				out = append(out, payload)
+			case componentNestedID:
+				out = append(out, collect(payload, depth+1)...)
+			}
+		}
+		return out
+	}
+	return collect(data, 0)
+}

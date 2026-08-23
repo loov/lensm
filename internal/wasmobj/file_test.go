@@ -143,10 +143,11 @@ func TestLoadTinyGo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if file.pcln != nil {
+	mod := file.funcs[0].(*Func).mod
+	if mod.pcln != nil {
 		t.Error("TinyGo module should have no Go line table")
 	}
-	if file.lines == nil {
+	if mod.lines == nil {
 		t.Fatal("no DWARF line table")
 	}
 	for _, fn := range file.Funcs() {
@@ -209,15 +210,55 @@ func TestInstructionOffsetsVerified(t *testing.T) {
 	}
 }
 
-// TestLoadComponent checks that a component — TinyGo's wasip2 output —
-// is refused by name instead of as a version number.
+// TestLoadComponent checks TinyGo's wasip2 output: a component, whose
+// code lives in the core modules nested inside it.
 func TestLoadComponent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "component.wasm")
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "component.wasm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	modules := map[*module]bool{}
+	var sumInts disasm.Func
+	for _, fn := range file.Funcs() {
+		modules[fn.(*Func).mod] = true
+		if fn.Name() == "main/main.sumInts" {
+			sumInts = fn
+		}
+	}
+	if len(modules) < 2 {
+		t.Errorf("functions come from %d core modules, want the program and its adapters", len(modules))
+	}
+	if sumInts == nil {
+		t.Fatal("main/main.sumInts not found; names should be qualified by module")
+	}
+	// The nested module keeps its own DWARF, so source still maps.
+	code, err := sumInts.Load(disasm.Options{Context: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(code.File, "main.go") {
+		t.Errorf("File = %q", code.File)
+	}
+	lines := map[int]bool{}
+	for _, in := range code.Insts {
+		if in.Line != 0 {
+			lines[in.Line] = true
+		}
+	}
+	if !lines[7] || !lines[9] {
+		t.Errorf("instructions map to lines %v, want 7 and 9 among them", lines)
+	}
+}
+
+// TestLoadEmptyComponent checks that a component with nothing in it is
+// reported as such rather than as a version number.
+func TestLoadEmptyComponent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty.wasm")
 	if err := os.WriteFile(path, []byte("\x00asm\x0d\x00\x01\x00"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Load(path)
-	if err == nil || !strings.Contains(err.Error(), "component") {
-		t.Fatalf("err = %v, want it to mention components", err)
+	if err == nil || !strings.Contains(err.Error(), "core module") {
+		t.Fatalf("err = %v, want it to report an empty component", err)
 	}
 }

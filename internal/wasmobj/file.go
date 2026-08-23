@@ -20,14 +20,22 @@ import (
 var _ disasm.File = (*File)(nil)
 var _ disasm.Func = (*Func)(nil)
 
-// File is a loaded wasm module.
+// File is a loaded wasm binary: one core module, or every core module
+// nested in a component.
 type File struct {
+	funcs []disasm.Func
+}
+
+func (file *File) Funcs() []disasm.Func { return file.funcs }
+func (file *File) Close() error         { return nil }
+
+// module is one core module and what it takes to read code out of it.
+type module struct {
+	// data is the module's bytes, which its own offsets index into.
+	data []byte
 	// names maps the function index space (imports first, then defined
 	// functions) to display names, for resolving call targets.
 	names []string
-	funcs []disasm.Func
-	// data is the module file, which DWARF addresses index into.
-	data []byte
 	// pcln is the Go line table recovered from the module's data
 	// segments, addressed by wasm PC; nil for non-Go modules.
 	pcln *gosym.Table
@@ -36,18 +44,15 @@ type File struct {
 	lines *lineIndex
 }
 
-func (file *File) Funcs() []disasm.Func { return file.funcs }
-func (file *File) Close() error         { return nil }
-
 // Func is one module-defined function.
 type Func struct {
-	obj  *File
+	mod  *module
 	name string
 	fn   wasmir.Function
 	// index is the function's position in the module's function index
 	// space, the PC_F half of every PC inside it.
 	index int
-	// body is where this function's instructions start in the file and
+	// body is where this function's instructions start in the module and
 	// how many bytes they span, for looking up DWARF rows.
 	body codeRange
 }
@@ -60,44 +65,83 @@ func Load(path string) (*File, error) {
 		return nil, err
 	}
 	// A component — what TinyGo's wasip2 target and other component-model
-	// tools emit — shares the magic of a core module but carries a
-	// different version, and holds its core modules nested inside.
-	if len(data) >= 8 && data[4] == 0x0d && data[5] == 0x00 && data[6] == 0x01 && data[7] == 0x00 {
-		return nil, fmt.Errorf("%q: WebAssembly component, only core modules are supported", path)
-	}
-	module, err := watgo.DecodeWASM(data)
-	if err != nil {
-		return nil, fmt.Errorf("%q: %w", path, err)
+	// tools emit — shares the magic of a core module but carries its core
+	// modules nested inside, so its code is theirs.
+	modules := [][]byte{data}
+	if isComponent(data) {
+		if modules = coreModules(data); len(modules) == 0 {
+			return nil, fmt.Errorf("%q: component holds no core module", path)
+		}
 	}
 
 	file := &File{}
-	for _, imp := range module.Imports {
-		if imp.Kind == wasmir.ExternalKindFunction {
-			file.names = append(file.names, imp.Module+"."+imp.Name)
+	for i, data := range modules {
+		// A component pairs the program with adapter modules that have
+		// function names of their own, so each module's functions are
+		// qualified by the module they live in.
+		funcs, err := loadModule(data, i, len(modules) > 1)
+		if err != nil {
+			if len(modules) == 1 {
+				return nil, fmt.Errorf("%q: %w", path, err)
+			}
+			// One unreadable adapter should not hide the program.
+			fmt.Fprintf(os.Stderr, "unable to load core module %d of %q: %v\n", i, path, err)
+			continue
 		}
+		file.funcs = append(file.funcs, funcs...)
 	}
-	codeStart, bodies := codeSection(data)
-	for i, fn := range module.Funcs {
-		name := fn.Name
-		if name == "" {
-			name = fmt.Sprintf("func%d", len(file.names))
-		}
-		entry := codeRange{}
-		if i < len(bodies) {
-			entry = bodies[i]
-		}
-		file.funcs = append(file.funcs, &Func{obj: file, name: name, fn: module.Funcs[i], index: i, body: entry})
-		file.names = append(file.names, name)
+	if len(file.funcs) == 0 {
+		return nil, fmt.Errorf("%q: no readable core module", path)
 	}
-	file.pcln = objfile.FindWasmLineTable(linearMemory(module))
-	if file.pcln == nil {
-		file.lines = newLineIndex(module, codeStart, bodies)
-	}
-	file.data = data
 	sort.SliceStable(file.funcs, func(i, k int) bool {
 		return strings.ToLower(file.funcs[i].Name()) < strings.ToLower(file.funcs[k].Name())
 	})
 	return file, nil
+}
+
+// loadModule decodes one core module and returns its functions. When
+// qualify is set the names are prefixed with the module they belong to,
+// which the module usually names itself ("main", "wit-component:shim").
+func loadModule(data []byte, index int, qualify bool) ([]disasm.Func, error) {
+	decoded, err := watgo.DecodeWASM(data)
+	if err != nil {
+		return nil, err
+	}
+
+	prefix := ""
+	if qualify {
+		if decoded.Name != "" {
+			prefix = decoded.Name + "/"
+		} else {
+			prefix = fmt.Sprintf("module%d/", index)
+		}
+	}
+	mod := &module{data: data}
+	for _, imp := range decoded.Imports {
+		if imp.Kind == wasmir.ExternalKindFunction {
+			mod.names = append(mod.names, prefix+imp.Module+"."+imp.Name)
+		}
+	}
+	codeStart, bodies := codeSection(data)
+	var funcs []disasm.Func
+	for i, fn := range decoded.Funcs {
+		name := fn.Name
+		if name == "" {
+			name = fmt.Sprintf("func%d", len(mod.names))
+		}
+		name = prefix + name
+		entry := codeRange{}
+		if i < len(bodies) {
+			entry = bodies[i]
+		}
+		funcs = append(funcs, &Func{mod: mod, name: name, fn: decoded.Funcs[i], index: i, body: entry})
+		mod.names = append(mod.names, name)
+	}
+	mod.pcln = objfile.FindWasmLineTable(linearMemory(decoded))
+	if mod.pcln == nil {
+		mod.lines = newLineIndex(decoded, codeStart, bodies)
+	}
+	return funcs, nil
 }
 
 // wasmPCBase is the first PC_F value the Go linker assigns to a
@@ -189,10 +233,10 @@ func resumeBlocks(body []wasmir.Instruction) []int {
 // pcToLine maps the resume point block of this function to a source
 // position; zero values when the module carries no Go line table.
 func (fn *Func) pcToLine(block int) (string, int) {
-	if fn.obj.pcln == nil {
+	if fn.mod.pcln == nil {
 		return "", 0
 	}
-	file, line, _ := fn.obj.pcln.PCToLine(uint64(wasmPCBase+fn.index)<<16 | uint64(block))
+	file, line, _ := fn.mod.pcln.PCToLine(uint64(wasmPCBase+fn.index)<<16 | uint64(block))
 	if line < 0 {
 		return "", 0
 	}
@@ -207,10 +251,10 @@ func (fn *Func) pcToLine(block int) (string, int) {
 // would otherwise shift every later offset silently. nil when the module
 // carries no DWARF, the body is unreadable, or the check fails.
 func (fn *Func) instructionOffsets() []uint64 {
-	if fn.obj.lines == nil || fn.body.size == 0 {
+	if fn.mod.lines == nil || fn.body.size == 0 {
 		return nil
 	}
-	body := fn.obj.data[fn.body.start : fn.body.start+fn.body.size]
+	body := fn.mod.data[fn.body.start : fn.body.start+fn.body.size]
 	locals := localsSize(body)
 	if locals < 0 {
 		return nil
@@ -267,7 +311,7 @@ func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 	offsets := fn.instructionOffsets()
 	position := func(i int) (string, int) {
 		if offsets != nil {
-			return fn.obj.lines.at(offsets[i], fn.body.start)
+			return fn.mod.lines.at(offsets[i], fn.body.start)
 		}
 		return fn.pcToLine(blocks[i])
 	}
@@ -293,8 +337,8 @@ func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 			break
 		}
 		if in := fn.fn.Body[i]; in.Kind == wasmir.InstrCall {
-			if idx := int(in.FuncIndex); idx < len(fn.obj.names) {
-				text = "call " + fn.obj.names[idx]
+			if idx := int(in.FuncIndex); idx < len(fn.mod.names) {
+				text = "call " + fn.mod.names[idx]
 			}
 		}
 		level := (len(line) - len(strings.TrimLeft(line, " ")) - 4) / 2
