@@ -93,22 +93,6 @@ func layoutSourceSpan(th *material.Theme, gtx layout.Context, line SourceLine, s
 	return widget.Label{MaxLines: 1}.Layout(gtx, th.Shaper, f, line.TextHeight, span.Text, op.CallOp{})
 }
 
-type VerticalLine struct {
-	Width unit.Dp
-	Color color.NRGBA
-}
-
-func (line VerticalLine) Layout(gtx layout.Context) layout.Dimensions {
-	size := image.Point{
-		X: gtx.Metric.Dp(line.Width),
-		Y: gtx.Constraints.Min.Y,
-	}
-	paint.FillShape(gtx.Ops, line.Color, clip.Rect{Max: size}.Op())
-	return layout.Dimensions{
-		Size: size,
-	}
-}
-
 type HorizontalLine struct {
 	Height unit.Dp
 	Color  color.NRGBA
