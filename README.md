@@ -77,12 +77,13 @@ one shared file only for builds of the same program.
 
 Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
 
-WebAssembly modules (`GOOS=wasip1 GOARCH=wasm`, or any `.wasm`) are
+WebAssembly modules (`GOOS=wasip1 GOARCH=wasm`, TinyGo, or any `.wasm`) are
 recognised by their magic bytes and shown as WAT, one instruction per line
-with calls resolved to function names. Go modules also get source: the
-line table the compiler embeds in the data segments records a position per
-resume point rather than per instruction, so a run of instructions between
-two resume points shares one source line.
+with calls resolved to function names. Source comes from whichever line
+table the module carries. Go embeds a pclntab in its data segments, which
+records a position per resume point rather than per instruction, so a run
+of instructions between two resume points shares one line. TinyGo and
+clang emit DWARF instead, which is per statement.
 
 ## Why?
 

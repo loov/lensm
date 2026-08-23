@@ -26,9 +26,14 @@ type File struct {
 	// functions) to display names, for resolving call targets.
 	names []string
 	funcs []disasm.Func
+	// data is the module file, which DWARF addresses index into.
+	data []byte
 	// pcln is the Go line table recovered from the module's data
 	// segments, addressed by wasm PC; nil for non-Go modules.
 	pcln *gosym.Table
+	// lines is the DWARF line table, addressed by module offset; what
+	// TinyGo and clang emit instead of a pclntab. nil when absent.
+	lines *lineIndex
 }
 
 func (file *File) Funcs() []disasm.Func { return file.funcs }
@@ -42,6 +47,9 @@ type Func struct {
 	// index is the function's position in the module's function index
 	// space, the PC_F half of every PC inside it.
 	index int
+	// body is where this function's instructions start in the file and
+	// how many bytes they span, for looking up DWARF rows.
+	body codeRange
 }
 
 func (fn *Func) Name() string { return fn.name }
@@ -62,15 +70,24 @@ func Load(path string) (*File, error) {
 			file.names = append(file.names, imp.Module+"."+imp.Name)
 		}
 	}
+	codeStart, bodies := codeSection(data)
 	for i, fn := range module.Funcs {
 		name := fn.Name
 		if name == "" {
 			name = fmt.Sprintf("func%d", len(file.names))
 		}
-		file.funcs = append(file.funcs, &Func{obj: file, name: name, fn: module.Funcs[i], index: i})
+		entry := codeRange{}
+		if i < len(bodies) {
+			entry = bodies[i]
+		}
+		file.funcs = append(file.funcs, &Func{obj: file, name: name, fn: module.Funcs[i], index: i, body: entry})
 		file.names = append(file.names, name)
 	}
 	file.pcln = objfile.FindWasmLineTable(linearMemory(module))
+	if file.pcln == nil {
+		file.lines = newLineIndex(module, codeStart, bodies)
+	}
+	file.data = data
 	sort.SliceStable(file.funcs, func(i, k int) bool {
 		return strings.ToLower(file.funcs[i].Name()) < strings.ToLower(file.funcs[k].Name())
 	})
@@ -176,6 +193,58 @@ func (fn *Func) pcToLine(block int) (string, int) {
 	return file, line
 }
 
+// instructionOffsets returns the file offset of every instruction in the
+// body, for looking up DWARF rows. Lengths come from re-encoding each
+// instruction, and the total is checked against the bytes the function
+// actually occupies: a module whose encoding differs from watgo's — a
+// non-canonical integer, an instruction it round-trips differently —
+// would otherwise shift every later offset silently. nil when the module
+// carries no DWARF, the body is unreadable, or the check fails.
+func (fn *Func) instructionOffsets() []uint64 {
+	if fn.obj.lines == nil || fn.body.size == 0 {
+		return nil
+	}
+	body := fn.obj.data[fn.body.start : fn.body.start+fn.body.size]
+	locals := localsSize(body)
+	if locals < 0 {
+		return nil
+	}
+
+	// Encoding a body of just "end" gives the fixed cost of the wrapper
+	// module, so each instruction's length is what it adds to that.
+	empty, ok := encodedSize(fn.fn.Locals, []wasmir.Instruction{{Kind: wasmir.InstrEnd}})
+	if !ok {
+		return nil
+	}
+	offsets := make([]uint64, len(fn.fn.Body))
+	next := fn.body.start + uint64(locals)
+	for i, instruction := range fn.fn.Body {
+		size, ok := encodedSize(fn.fn.Locals, []wasmir.Instruction{instruction, {Kind: wasmir.InstrEnd}})
+		if !ok {
+			return nil
+		}
+		offsets[i] = next
+		next += uint64(size - empty)
+	}
+	if next != fn.body.start+fn.body.size {
+		return nil
+	}
+	return offsets
+}
+
+// encodedSize is the size of a module holding one function with this
+// body; only differences between calls are meaningful.
+func encodedSize(locals []wasmir.ValueType, body []wasmir.Instruction) (int, bool) {
+	encoded, err := watgo.EncodeWASM(&wasmir.Module{
+		Types: []wasmir.TypeDef{{Kind: wasmir.TypeDefKindFunc}},
+		Funcs: []wasmir.Function{{Locals: locals, Body: body}},
+	})
+	if err != nil {
+		return 0, false
+	}
+	return len(encoded), true
+}
+
 func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 	// watgo prints whole modules only, so the body goes into a synthetic
 	// single-function module under a void signature; the real signature
@@ -188,9 +257,16 @@ func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 		return nil, err
 	}
 
-	entryFile, _ := fn.pcToLine(0)
-	code := &disasm.Code{Name: fn.name, File: entryFile, Arch: "wasm"}
 	blocks := resumeBlocks(fn.fn.Body)
+	offsets := fn.instructionOffsets()
+	position := func(i int) (string, int) {
+		if offsets != nil {
+			return fn.obj.lines.at(offsets[i], fn.body.start)
+		}
+		return fn.pcToLine(blocks[i])
+	}
+
+	code := &disasm.Code{Name: fn.name, Arch: "wasm"}
 	refs := source.Refs{}
 	// The body prints one instruction per line between "(func" and its
 	// closing ")", in Body order; the final InstrEnd becomes the ")".
@@ -217,7 +293,13 @@ func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 		}
 		level := (len(line) - len(strings.TrimLeft(line, " ")) - 4) / 2
 		inst := disasm.Inst{PC: uint64(i), Text: strings.Repeat(" ", max(level, 0)) + text}
-		inst.File, inst.Line = fn.pcToLine(blocks[i])
+		inst.File, inst.Line = position(i)
+		if code.File == "" {
+			// The function's own file: the prologue can precede the first
+			// line-table row, so take it from the first instruction that
+			// has one rather than from the entry.
+			code.File = inst.File
+		}
 		if strings.HasPrefix(text, "call ") {
 			inst.Call = strings.TrimPrefix(text, "call ")
 		}

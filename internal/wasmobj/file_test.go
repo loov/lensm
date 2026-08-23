@@ -135,3 +135,76 @@ func TestSourceMapping(t *testing.T) {
 	}
 	t.Fatal("main.sumInts not found")
 }
+
+// TestLoadTinyGo checks the TinyGo path: names from the name section and
+// source positions from DWARF rather than from a Go pclntab.
+func TestLoadTinyGo(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "example.wasm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.pcln != nil {
+		t.Error("TinyGo module should have no Go line table")
+	}
+	if file.lines == nil {
+		t.Fatal("no DWARF line table")
+	}
+	for _, fn := range file.Funcs() {
+		if fn.Name() != "main.sumInts" {
+			continue
+		}
+		code, err := fn.Load(disasm.Options{Context: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasSuffix(code.File, "main.go") {
+			t.Errorf("File = %q", code.File)
+		}
+		// The body is a loop adding into a total, then the return: the
+		// two statements of the function that generate code.
+		lines := map[int]bool{}
+		for _, in := range code.Insts {
+			if in.Line != 0 {
+				lines[in.Line] = true
+			}
+		}
+		if !lines[7] || !lines[9] {
+			t.Errorf("instructions map to lines %v, want 7 and 9 among them", lines)
+		}
+		related := 0
+		for _, src := range code.Source {
+			for _, block := range src.Blocks {
+				for _, ranges := range block.Related {
+					related += len(ranges)
+				}
+			}
+		}
+		if related == 0 {
+			t.Error("no source line relates back to the instructions")
+		}
+		return
+	}
+	t.Fatal("main.sumInts not found")
+}
+
+// TestInstructionOffsetsVerified checks the self-check in
+// instructionOffsets: every function's re-encoded instruction lengths
+// must add up to the bytes it occupies, or it reports no offsets.
+func TestInstructionOffsetsVerified(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "example.wasm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := 0
+	for _, f := range file.Funcs() {
+		fn := f.(*Func)
+		if offsets := fn.instructionOffsets(); offsets == nil {
+			missing++
+		} else if len(offsets) != len(fn.fn.Body) {
+			t.Fatalf("%s: %d offsets for %d instructions", fn.Name(), len(offsets), len(fn.fn.Body))
+		}
+	}
+	if missing > 0 {
+		t.Errorf("%d of %d functions failed the encoding check", missing, len(file.Funcs()))
+	}
+}
