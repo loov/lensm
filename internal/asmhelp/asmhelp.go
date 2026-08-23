@@ -311,13 +311,13 @@ func explainNativeInstruction(mnemonic string, operands []string) string {
 		case mnemonic == "MOVZX", strings.HasPrefix(mnemonic, "MOV"):
 			return destination + " := " + value(operands[1])
 		case mnemonic == "LDR" || mnemonic == "LDUR" || mnemonic == "LOAD":
-			return explainNativeLoad(destination, operands[1:])
+			return explainNativeAccess(destination, false, false, operands[1:])
 		case mnemonic == "STR" || mnemonic == "STUR" || mnemonic == "STORE":
-			return explainNativeStore(value(operands[0]), operands[1:])
+			return explainNativeAccess(value(operands[0]), true, false, operands[1:])
 		case mnemonic == "LDP" && len(operands) >= 3:
-			return explainNativePairLoad(value(operands[0]), value(operands[1]), operands[2:])
+			return explainNativeAccess(value(operands[0])+", "+value(operands[1]), false, true, operands[2:])
 		case mnemonic == "STP" && len(operands) >= 3:
-			return explainNativePairStore(value(operands[0]), value(operands[1]), operands[2:])
+			return explainNativeAccess(value(operands[0])+", "+value(operands[1]), true, true, operands[2:])
 		case mnemonic == "LEA", mnemonic == "ADR", mnemonic == "ADRP":
 			return destination + " := address(" + value(operands[1]) + ")"
 		case mnemonic == "ADD" || mnemonic == "ADC":
@@ -410,52 +410,33 @@ func formatNativeMemory(operand string) string {
 	return "memory[" + address + "]"
 }
 
-func explainNativeLoad(destination string, addressOperands []string) string {
+// explainNativeAccess renders a load (store=false) or store through an
+// ARM-style addressing mode — plain, pre-index ([base, #off]!) or
+// post-index ([base], #off). regs is the register side, "x0" or "x0, x1";
+// pair wraps the other side in pair(...) for LDP/STP.
+func explainNativeAccess(regs string, store, pair bool, addressOperands []string) string {
 	base, address, preIndex := parseNativeMemory(addressOperands[0])
+	mem := "memory[" + address + "]"
 	if preIndex {
-		return base + " := " + address + "; " + destination + " := memory[" + base + "]"
+		mem = "memory[" + base + "]"
 	}
-	effect := destination + " := memory[" + address + "]"
+	wrap := func(s string) string {
+		if pair {
+			return "pair(" + s + ")"
+		}
+		return s
+	}
+	effect := regs + " := " + wrap(mem)
+	if store {
+		effect = mem + " := " + wrap(regs)
+	}
+	if preIndex {
+		return base + " := " + address + "; " + effect
+	}
 	if len(addressOperands) > 1 {
 		effect += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
 	}
 	return effect
-}
-
-func explainNativeStore(source string, addressOperands []string) string {
-	base, address, preIndex := parseNativeMemory(addressOperands[0])
-	if preIndex {
-		return base + " := " + address + "; memory[" + base + "] := " + source
-	}
-	effect := "memory[" + address + "] := " + source
-	if len(addressOperands) > 1 {
-		effect += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
-	}
-	return effect
-}
-
-func explainNativePairLoad(first, second string, addressOperands []string) string {
-	base, address, preIndex := parseNativeMemory(addressOperands[0])
-	load := first + ", " + second + " := pair(memory[" + address + "])"
-	if preIndex {
-		return base + " := " + address + "; " + first + ", " + second + " := pair(memory[" + base + "])"
-	}
-	if len(addressOperands) > 1 {
-		load += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
-	}
-	return load
-}
-
-func explainNativePairStore(first, second string, addressOperands []string) string {
-	base, address, preIndex := parseNativeMemory(addressOperands[0])
-	store := "memory[" + address + "] := pair(" + first + ", " + second + ")"
-	if preIndex {
-		return base + " := " + address + "; memory[" + base + "] := pair(" + first + ", " + second + ")"
-	}
-	if len(addressOperands) > 1 {
-		store += "; " + base + " := " + addNativeOffset(base, addressOperands[1])
-	}
-	return store
 }
 
 func parseNativeMemory(operand string) (base, address string, preIndex bool) {
