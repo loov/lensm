@@ -63,19 +63,18 @@ func (b *Binary) PCToLine(pc uint64) (file string, line int) {
 // Lookup resolves addr to the name and base of the symbol containing it,
 // matching the contract of the x/arch GoSyntax symname functions.
 func (b *Binary) Lookup(addr uint64) (name string, base uint64) {
-	i, _ := slices.BinarySearchFunc(b.syms, addr, func(s sym, a uint64) int {
+	// i is the first symbol at or after addr; unless addr hits a symbol
+	// start exactly, the containing one is the symbol before it.
+	i, found := slices.BinarySearchFunc(b.syms, addr, func(s sym, a uint64) int {
 		return cmp.Compare(s.addr, a)
 	})
-	// i is the first symbol at or after addr; the containing one is at
-	// i-1 unless addr hits a symbol start exactly.
-	if i >= len(b.syms) || b.syms[i].addr != addr {
-		if i == 0 {
-			return "", 0
-		}
+	if !found {
 		i--
 	}
-	if s := b.syms[i]; s.addr != 0 && addr < s.addr+s.size {
-		return s.name, s.addr
+	if i >= 0 {
+		if s := b.syms[i]; addr < s.addr+s.size {
+			return s.name, s.addr
+		}
 	}
 	return "", 0
 }
