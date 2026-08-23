@@ -99,6 +99,7 @@ var allowAsmABIPkgs = []string{
 	"loov.dev/lensm/internal/go/src/runtime/syscall/linux",
 	"loov.dev/lensm/internal/go/src/runtime/syscall/windows",
 	"loov.dev/lensm/internal/go/src/runtime/startlinetest",
+	"loov.dev/lensm/internal/go/src/runtime/maps",
 }
 
 // LookupPkgSpecial returns special build properties for the given package path.

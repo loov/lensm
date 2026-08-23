@@ -38,7 +38,6 @@ type SymKind uint8
 //
 // TODO(rsc): Give idiomatic Go names.
 //
-//go:generate stringer -type=SymKind
 const (
 	// An otherwise invalid zero value for the type
 	Sxxx SymKind = iota

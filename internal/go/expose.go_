@@ -18,7 +18,9 @@ func (d *Disasm) GOARCH() string      { return d.goarch }
 // This is a lensm addition, re-applied on every `go generate` because upstream
 // Decode only yields a single combined syntax. It relies on Decode's gnuAsm=true
 // format of "%-36s // %s" (goText // gnuText) to split the two apart.
-func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(pc, size uint64, file string, line int, goText, nativeText string)) {
+// mnemonic is the canonical decoder mnemonic (e.g. "LD1" where the Go syntax
+// spells it "VLD1"), used for reference lookups; empty for undecodable bytes.
+func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(pc, size uint64, file string, line int, goText, nativeText, mnemonic string)) {
 	if start < d.textStart {
 		start = d.textStart
 	}
@@ -29,7 +31,7 @@ func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(
 	lookup := d.lookup
 	for pc := start; pc < end; {
 		i := pc - d.textStart
-		combined, size := d.disasm(code[i:], pc, lookup, d.byteOrder, true)
+		combined, mnemonic, size := d.disasm(code[i:], pc, lookup, d.byteOrder, true)
 		goText, nativeText := combined, combined
 		if j := strings.Index(combined, " // "); j >= 0 {
 			goText = strings.TrimRight(combined[:j], " ")
@@ -43,7 +45,7 @@ func (d *Disasm) DecodeSyntax(start, end uint64, relocs []objfile.Reloc, f func(
 			sep = " "
 			relocs = relocs[1:]
 		}
-		f(pc, uint64(size), file, line, goText+reloc, nativeText+reloc)
+		f(pc, uint64(size), file, line, goText+reloc, nativeText+reloc, mnemonic)
 		pc += uint64(size)
 	}
 }

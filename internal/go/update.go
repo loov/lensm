@@ -1,13 +1,12 @@
 package main
 
-//go:generate go run update.go
-
 import (
 	"bytes"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -27,7 +26,16 @@ func main() {
 
 	must0(os.WriteFile("src/disasm/expose.go", must(os.ReadFile("expose.go_")), 0644))
 	must0(os.Remove("src/abi/abi_test.s"))
+
+	// disasm.patch makes d.disasm also return the decoder mnemonic, which expose.go needs.
+	// git apply exits 0 when it silently skips a patch, so verify it landed.
+	must(run("git", "apply", "-p1", "disasm.patch"))
+	if !bytes.Contains(must(os.ReadFile("src/disasm/disasm.go")), []byte("mnemonic")) {
+		panic("disasm.patch did not apply; regenerate it for this Go version")
+	}
 }
+
+var goGenerate = regexp.MustCompile(`(?m)^//go:generate .*\n`)
 
 func copydir(srcdir, dstdir string) {
 	must0(os.MkdirAll(dstdir, 0755))
@@ -54,6 +62,8 @@ func copydir(srcdir, dstdir string) {
 		data = bytes.ReplaceAll(data, []byte(`import "cmd/internal/`), []byte(`import "loov.dev/lensm/internal/go/src/`))
 		data = bytes.ReplaceAll(data, []byte(`	"internal/`), []byte(`	"loov.dev/lensm/internal/go/src/`))
 		data = bytes.ReplaceAll(data, []byte(`import "internal/`), []byte(`import "loov.dev/lensm/internal/go/src/`))
+		// upstream generators don't work outside GOROOT, so keep `go generate ./...` out of the vendored copy
+		data = goGenerate.ReplaceAll(data, nil)
 
 		return os.WriteFile(dstfile, data, 0755)
 	}))
