@@ -12,7 +12,13 @@ import (
 // code the Go compiler didn't produce. Rows sit at the start of a
 // statement and hold until the next one, so a lookup takes the last row
 // at or before the address.
-type Lines struct{ rows []lineRow }
+type Lines struct {
+	rows []lineRow
+	// declared maps a function's entry address to the file it was
+	// written in, which is not always the file its first instruction
+	// belongs to: an inlined call can own the entry.
+	declared map[uint64]string
+}
 
 type lineRow struct {
 	addr uint64
@@ -25,39 +31,58 @@ type lineRow struct {
 // relative to something other than the addresses used elsewhere — wasm
 // counts from the start of the code section. nil when there are no rows.
 func LinesFromDWARF(data *dwarf.Data, shift int64) *Lines {
-	lines := &Lines{}
+	lines := &Lines{declared: map[uint64]string{}}
+	// Compilation-unit state, carried to the subprograms that follow it.
+	var (
+		compDir string
+		files   []*dwarf.LineFile
+		fixed   map[string]string
+	)
+	fixName := func(name string) string {
+		if out, ok := fixed[name]; ok {
+			return out
+		}
+		out := unjoinCompDir(compDir, name)
+		fixed[name] = out
+		return out
+	}
+
 	reader := data.Reader()
 	for {
 		entry, err := reader.Next()
 		if err != nil || entry == nil {
 			break
 		}
-		if entry.Tag != dwarf.TagCompileUnit {
-			continue
-		}
-		unit, err := data.LineReader(entry)
-		if err != nil || unit == nil {
-			continue
-		}
-		compDir, _ := entry.Val(dwarf.AttrCompDir).(string)
-		fixed := map[string]string{}
-		var row dwarf.LineEntry
-		for unit.Next(&row) == nil {
-			out := lineRow{addr: uint64(int64(row.Address) + shift)}
-			// An end-sequence row marks where the code of a sequence
-			// stops. Keeping it with no position is what stops the last
-			// statement of one function from covering whatever follows.
-			if !row.EndSequence && row.File != nil {
-				name, ok := fixed[row.File.Name]
-				if !ok {
-					name = unjoinCompDir(compDir, row.File.Name)
-					fixed[row.File.Name] = name
-				}
-				out.file, out.line = name, row.Line
+		switch entry.Tag {
+		case dwarf.TagCompileUnit:
+			compDir, _ = entry.Val(dwarf.AttrCompDir).(string)
+			files, fixed = nil, map[string]string{}
+			unit, err := data.LineReader(entry)
+			if err != nil || unit == nil {
+				continue
 			}
-			lines.rows = append(lines.rows, out)
+			files = unit.Files()
+			var row dwarf.LineEntry
+			for unit.Next(&row) == nil {
+				out := lineRow{addr: uint64(int64(row.Address) + shift)}
+				// An end-sequence row marks where the code of a sequence
+				// stops. Keeping it with no position is what stops the
+				// last statement of one function from covering whatever
+				// follows.
+				if !row.EndSequence && row.File != nil {
+					out.file, out.line = fixName(row.File.Name), row.Line
+				}
+				lines.rows = append(lines.rows, out)
+			}
+
+		case dwarf.TagSubprogram:
+			low, ok := entry.Val(dwarf.AttrLowpc).(uint64)
+			index, ok2 := entry.Val(dwarf.AttrDeclFile).(int64)
+			if !ok || !ok2 || low == 0 || index < 0 || int(index) >= len(files) || files[index] == nil {
+				continue
+			}
+			lines.declared[uint64(int64(low)+shift)] = fixName(files[index].Name)
 		}
-		reader.SkipChildren()
 	}
 	if len(lines.rows) == 0 {
 		return nil
@@ -66,6 +91,15 @@ func LinesFromDWARF(data *dwarf.Data, shift int64) *Lines {
 		return cmp.Or(cmp.Compare(a.addr, b.addr), cmp.Compare(a.line, b.line))
 	})
 	return lines
+}
+
+// DeclFile returns the file a function starting at addr was written in;
+// empty when the debug info doesn't say.
+func (lines *Lines) DeclFile(addr uint64) string {
+	if lines == nil {
+		return ""
+	}
+	return lines.declared[addr]
 }
 
 // unjoinCompDir undoes debug/dwarf joining an absolute file name onto

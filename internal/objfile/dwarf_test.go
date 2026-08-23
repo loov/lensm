@@ -33,6 +33,9 @@ func TestDemangle(t *testing.T) {
 	for _, test := range []struct{ in, want string }{
 		{"_Z8sum_intsRKSt6vectorIlSaIlEE", "sum_ints(std::vector<long, std::allocator<long> > const&)"},
 		{"_ZN3foo3barEi", "foo::bar(int)"},
+		// Rust, in both of its mangling schemes.
+		{"_ZN4prog8sum_ints17h8ff3155123bef508E", "prog::sum_ints"},
+		{"_RNvCshN3ET9YTcYm_4prog8sum_ints", "prog::sum_ints"},
 		// Not mangled: Go, C and assembly symbols pass through.
 		{"main.sumInts", "main.sumInts"},
 		{"sum_ints", "sum_ints"},

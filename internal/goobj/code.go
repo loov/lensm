@@ -19,6 +19,12 @@ var rxCallOrJump = regexp.MustCompile(`^(?:CALL|JMP)\s+(.+?)\(SB\)`)
 // position inside it that has one. A line table need not have a row at
 // the entry itself, and the file decides which source block sorts first.
 func entryFile(bin *objfile.Binary, sym *Func) string {
+	// What the debug info says the function was written in, which beats
+	// guessing from positions: with inlining the first instruction can
+	// belong to a callee in another file.
+	if file := bin.FuncFile(sym.fn.Addr); file != "" {
+		return file
+	}
 	for pc := sym.fn.Addr; pc < sym.fn.Addr+sym.fn.Size; pc++ {
 		if file, _ := bin.PCToLine(pc); file != "" {
 			return file

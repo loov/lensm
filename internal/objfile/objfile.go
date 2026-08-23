@@ -67,6 +67,12 @@ func (b *Binary) PCToLine(pc uint64) (file string, line int) {
 	return file, line
 }
 
+// FuncFile returns the file a function starting at addr was written in,
+// from the debug info; empty when it isn't recorded.
+func (b *Binary) FuncFile(addr uint64) string {
+	return b.lines.DeclFile(addr)
+}
+
 // Lookup resolves addr to the name and base of the symbol containing it,
 // matching the contract of the x/arch GoSyntax symname functions.
 func (b *Binary) Lookup(addr uint64) (name string, base uint64) {
@@ -161,11 +167,13 @@ func (b *Binary) addSym(name string, addr, size uint64) {
 	b.syms = append(b.syms, sym{name: Demangle(name), addr: addr, size: size})
 }
 
-// Demangle turns a C++ symbol into the name it had in the source,
-// signature and all, so that overloads stay apart. Anything that isn't a
-// mangled name — every Go and C symbol — is returned unchanged.
+// Demangle turns a C++ or Rust symbol into the name it had in the
+// source, signature and all, so that overloads stay apart. Anything that
+// isn't a mangled name — every Go and C symbol — is returned unchanged.
+// Rust has two schemes: the older one looks like C++ ("_ZN4prog8sum_ints
+// 17h<hash>E"), the current one has its own prefix.
 func Demangle(name string) string {
-	if !strings.HasPrefix(name, "_Z") {
+	if !strings.HasPrefix(name, "_Z") && !strings.HasPrefix(name, "_R") {
 		return name
 	}
 	return demangle.Filter(name)

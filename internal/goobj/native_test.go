@@ -197,3 +197,72 @@ func buildCPP(t *testing.T, src string) string {
 	}
 	return binary
 }
+
+const rustSumInts = `#[inline(never)]
+pub fn sum_ints(xs: &[i64]) -> i64 {
+    let mut total = 0;
+    for x in xs {
+        total += x;
+    }
+    total
+}
+
+fn main() {
+    let xs = vec![1i64, 2, 3];
+    println!("{}", sum_ints(&xs));
+}
+`
+
+// TestLoadRust checks a Rust binary: symbols come back demangled, and
+// the function's file is the one it was written in rather than whatever
+// got inlined into its first instruction.
+func TestLoadRust(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles a Rust program")
+	}
+	if _, err := exec.LookPath("rustc"); err != nil {
+		t.Skipf("no rustc: %v", err)
+	}
+	dir := t.TempDir()
+	source := filepath.Join(dir, "prog.rs")
+	if err := os.WriteFile(source, []byte(rustSumInts), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(dir, "prog")
+	cmd := exec.Command("rustc", "-g", "-O", "-o", binary, source)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("rustc: %v\n%s", err, out)
+	}
+
+	file, err := Load(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	var sumInts disasm.Func
+	for _, fn := range file.Funcs() {
+		if fn.Name() == "prog::sum_ints" {
+			sumInts = fn
+		}
+	}
+	if sumInts == nil {
+		t.Fatal("prog::sum_ints not found; Rust symbols should demangle")
+	}
+	code, err := sumInts.Load(disasm.Options{Context: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(code.File, "prog.rs") {
+		t.Errorf("File = %q, want the Rust source", code.File)
+	}
+	lines := 0
+	for _, in := range code.Insts {
+		if in.Line != 0 {
+			lines++
+		}
+	}
+	if lines == 0 {
+		t.Error("no instruction carries a source position")
+	}
+}
