@@ -41,7 +41,7 @@ type module struct {
 	pcln *gosym.Table
 	// lines is the DWARF line table, addressed by module offset; what
 	// TinyGo and clang emit instead of a pclntab. nil when absent.
-	lines *lineIndex
+	lines *objfile.Lines
 }
 
 // Func is one module-defined function.
@@ -139,7 +139,7 @@ func loadModule(data []byte, index int, qualify bool) ([]disasm.Func, error) {
 	}
 	mod.pcln = objfile.FindWasmLineTable(linearMemory(decoded))
 	if mod.pcln == nil {
-		mod.lines = newLineIndex(decoded, codeStart, bodies)
+		mod.lines = dwarfLines(decoded, codeStart, bodies)
 	}
 	return funcs, nil
 }
@@ -311,7 +311,7 @@ func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 	offsets := fn.instructionOffsets()
 	position := func(i int) (string, int) {
 		if offsets != nil {
-			return fn.mod.lines.at(offsets[i], fn.body.start)
+			return fn.mod.lines.At(offsets[i])
 		}
 		return fn.pcToLine(blocks[i])
 	}

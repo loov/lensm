@@ -15,14 +15,25 @@ var rxRefAbs = regexp.MustCompile(`\s0x[\da-fA-F]+$`)
 var rxRefRel = regexp.MustCompile(`\s-?\d+\(PC\)$`)
 var rxCallOrJump = regexp.MustCompile(`^(?:CALL|JMP)\s+(.+?)\(SB\)`)
 
+// entryFile is the file a function belongs to: its entry's, or the first
+// position inside it that has one. A line table need not have a row at
+// the entry itself, and the file decides which source block sorts first.
+func entryFile(bin *objfile.Binary, sym *Func) string {
+	for pc := sym.fn.Addr; pc < sym.fn.Addr+sym.fn.Size; pc++ {
+		if file, _ := bin.PCToLine(pc); file != "" {
+			return file
+		}
+	}
+	return ""
+}
+
 // Disassemble disassembles the specified symbol.
 func Disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.Code, error) {
-	file, _ := bin.PCToLine(sym.fn.Addr)
 	needRefPCs := map[uint64]struct{}{}
 
 	code := &disasm.Code{
 		Name: sym.Name(),
-		File: file,
+		File: entryFile(bin, sym),
 		Arch: bin.Arch,
 	}
 	decoded, err := bin.Disassemble(sym.fn)

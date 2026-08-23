@@ -9,6 +9,7 @@ package objfile
 import (
 	"bytes"
 	"cmp"
+	"debug/dwarf"
 	"debug/elf"
 	"debug/gosym"
 	"debug/macho"
@@ -16,6 +17,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -33,6 +35,9 @@ type Binary struct {
 	// syms are all symbols sorted by address, used to resolve addresses to names.
 	syms []sym
 	pcln *gosym.Table
+	// lines is the DWARF line table, used when there is no pclntab:
+	// binaries from clang, gcc and anything else that isn't Go.
+	lines *Lines
 }
 
 // Func is a single function inside a binary.
@@ -54,7 +59,7 @@ func (f *Func) Code() []byte {
 // zero values when unknown.
 func (b *Binary) PCToLine(pc uint64) (file string, line int) {
 	if b.pcln == nil {
-		return "", 0
+		return b.lines.At(pc)
 	}
 	file, line, _ = b.pcln.PCToLine(pc)
 	return file, line
@@ -110,8 +115,25 @@ func Open(path string) (*Binary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%q: %w", path, err)
 	}
+	if bin.pcln == nil && bin.lines == nil {
+		bin.loadCompanionDWARF(path)
+	}
 	bin.finish()
 	return bin, nil
+}
+
+// loadCompanionDWARF reads the line table from a dSYM bundle beside the
+// binary. On macOS the linker leaves debug info in the object files and
+// dsymutil collects it there, so an executable built with -g carries no
+// DWARF of its own.
+func (b *Binary) loadCompanionDWARF(path string) {
+	dsym := path + ".dSYM/Contents/Resources/DWARF/" + filepath.Base(path)
+	file, err := macho.Open(dsym)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	b.loadDWARF(file.DWARF)
 }
 
 // sectionSlice returns data[off:off+size], or nil when the range is
@@ -290,6 +312,20 @@ func (b *Binary) finish() {
 	slices.SortFunc(b.Funcs, func(x, y *Func) int { return cmp.Compare(x.Addr, y.Addr) })
 }
 
+// loadDWARF reads the line table a non-Go compiler left in the binary.
+// Best-effort: most binaries carry none, and a Go binary has its pclntab
+// instead.
+func (b *Binary) loadDWARF(open func() (*dwarf.Data, error)) {
+	if b.lines != nil {
+		return
+	}
+	data, err := open()
+	if err != nil {
+		return
+	}
+	b.lines = LinesFromDWARF(data, 0)
+}
+
 // pclntabMagics are the little-endian header magics of pclntab versions.
 var pclntabMagics = [][]byte{
 	{0xf1, 0xff, 0xff, 0xff, 0x00, 0x00}, // Go 1.20+
@@ -374,6 +410,7 @@ func openELF(r *bytes.Reader, data []byte) (*Binary, error) {
 		}
 	}
 
+	bin.loadDWARF(ef.DWARF)
 	if sec := ef.Section(".gopclntab"); sec != nil {
 		if tab, err := sec.Data(); err == nil {
 			bin.loadPclntab(tab)
@@ -431,6 +468,7 @@ func openMachO(r *bytes.Reader, data []byte) (*Binary, error) {
 			bin.loadPclntab(tab)
 		}
 	}
+	bin.loadDWARF(mf.DWARF)
 	return bin, nil
 }
 
@@ -481,6 +519,7 @@ func openPE(r *bytes.Reader, data []byte) (*Binary, error) {
 		bin.addSym(s.Name, imageBase+uint64(sec.VirtualAddress)+uint64(s.Value), 0)
 	}
 
+	bin.loadDWARF(pf.DWARF)
 	// PE has no pclntab section; scan the data sections for its header.
 	for _, name := range []string{".rdata", ".data"} {
 		if sec := pf.Section(name); sec != nil {

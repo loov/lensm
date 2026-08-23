@@ -75,6 +75,12 @@ saves landing in the same instant can still lose one side's changes.
 Comments are keyed by function name, not by binary: point `-comments` at
 one shared file only for builds of the same program.
 
+Binaries from other compilers work too. Functions come from the symbol
+table and source from DWARF, so a C or C++ program built with `-g` shows
+its source alongside the assembly; on macOS the debug info lives in the
+`.dSYM` bundle next to the binary, which is read automatically. C++ names
+are the mangled ones from the symbol table.
+
 Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
 
 WebAssembly modules (`GOOS=wasip1 GOARCH=wasm`, TinyGo, or any `.wasm`) are
