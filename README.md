@@ -79,7 +79,10 @@ Note: The program requires a binary that is built on your computer, otherwise th
 
 WebAssembly modules (`GOOS=wasip1 GOARCH=wasm`, or any `.wasm`) are
 recognised by their magic bytes and shown as WAT, one instruction per line
-with calls resolved to function names; there is no source mapping for wasm.
+with calls resolved to function names. Go modules also get source: the
+line table the compiler embeds in the data segments records a position per
+resume point rather than per instruction, so a run of instructions between
+two resume points shares one source line.
 
 ## Why?
 

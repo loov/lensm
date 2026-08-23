@@ -141,14 +141,103 @@ func (b *Binary) addSym(name string, addr, size uint64) {
 // ranges even for stripped binaries. Best-effort: on failure the
 // symbol-table functions remain.
 func (b *Binary) loadPclntab(pclntab []byte) {
+	b.pcln = LineTable(pclntab, b.textAddr)
+}
+
+// LineTable parses a Go pclntab whose text starts at textAddr; nil when
+// the data isn't a table this Go version understands.
+func LineTable(pclntab []byte, textAddr uint64) *gosym.Table {
 	if len(pclntab) == 0 {
-		return
+		return nil
 	}
-	tab, err := gosym.NewTable(nil, gosym.NewLineTable(pclntab, b.textAddr))
+	tab, err := gosym.NewTable(nil, gosym.NewLineTable(pclntab, textAddr))
 	if err != nil {
-		return
+		return nil
 	}
-	b.pcln = tab
+	return tab
+}
+
+// FindLineTable scans data — a memory image or data section — for an
+// embedded pclntab and parses it. nil when there is none.
+func FindLineTable(data []byte, textAddr uint64) *gosym.Table {
+	return LineTable(findPclntab(data), textAddr)
+}
+
+// FindWasmLineTable scans a reconstructed linear-memory image for a Go
+// pclntab and returns a table addressed by wasm PCs: function index plus
+// funcValueOffset, shifted left 16, with the resume-point block in the
+// low bits. That is the PC the compiler's line deltas are relative to,
+// but the table stores function entries unshifted, so gosym would place
+// every block after the first inside the following function. Scaling the
+// stored entries — and only those — puts them back in PC space, leaving
+// the deltas to count blocks. nil when there is no usable table.
+func FindWasmLineTable(image []byte) *gosym.Table {
+	tab := findPclntab(image)
+	if tab == nil {
+		return nil
+	}
+	tab = bytes.Clone(tab)
+	if !scaleWasmEntries(tab) {
+		return nil
+	}
+	return LineTable(tab, 0)
+}
+
+// scaleWasmEntries shifts every function entry in a pclntab left by 16,
+// in the function table and in each _func. It reports whether the layout
+// was understood and every entry fitted.
+func scaleWasmEntries(tab []byte) bool {
+	if len(tab) < 8 {
+		return false
+	}
+	ptrSize := int(tab[7])
+	if ptrSize != 4 && ptrSize != 8 {
+		return false
+	}
+	// Header: magic, pad, quantum, ptrSize, then ptr-sized nfunc, nfiles,
+	// textStart and the offsets of the name, cu, file, pc and func tables.
+	field := func(i int) (uint64, bool) {
+		off := 8 + i*ptrSize
+		if off+ptrSize > len(tab) {
+			return 0, false
+		}
+		if ptrSize == 8 {
+			return binary.LittleEndian.Uint64(tab[off:]), true
+		}
+		return uint64(binary.LittleEndian.Uint32(tab[off:])), true
+	}
+	nfunc, ok1 := field(0)
+	funcTab, ok2 := field(7)
+	if !ok1 || !ok2 || nfunc > uint64(len(tab)) {
+		return false
+	}
+	// The function table is nfunc (entryOff, funcOff) uint32 pairs plus a
+	// final entryOff marking the end of the text.
+	shift := func(off uint64) bool {
+		if off+4 > uint64(len(tab)) {
+			return false
+		}
+		v := binary.LittleEndian.Uint32(tab[off:])
+		if v >= 1<<16 { // already in PC space, or too many functions
+			return false
+		}
+		binary.LittleEndian.PutUint32(tab[off:], v<<16)
+		return true
+	}
+	for i := uint64(0); i <= nfunc; i++ {
+		if !shift(funcTab + i*8) {
+			return false
+		}
+		if i == nfunc {
+			break
+		}
+		funcOff := uint64(binary.LittleEndian.Uint32(tab[funcTab+i*8+4:]))
+		// _func starts with its own entryOff.
+		if !shift(funcTab + funcOff) {
+			return false
+		}
+	}
+	return true
 }
 
 // finish sorts symbols, infers missing sizes as the distance to the next
