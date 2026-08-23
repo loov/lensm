@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/ianlancetaylor/demangle"
 )
@@ -44,6 +45,11 @@ type Binary struct {
 	// regions begin within the text of a 32-bit ARM ELF. Empty for
 	// everything else, and for binaries that carry no mapping symbols.
 	arm32 *armRegions
+	// xtensaLiterals are the addresses L32R instructions load from: the
+	// literal pools that share .text with the code, found by a pass over
+	// every function. Computed on first use.
+	xtensaLiterals     map[uint64]bool
+	xtensaLiteralsOnce sync.Once
 }
 
 // Func is a single function inside a binary.
@@ -413,10 +419,12 @@ func openELF(r *bytes.Reader, data []byte) (*Binary, error) {
 		bin.Arch = "loong64"
 	case elf.EM_AVR:
 		bin.Arch = "avr"
+	case elf.EM_XTENSA:
+		bin.Arch = "xtensa"
 	default:
 		return nil, fmt.Errorf("unsupported ELF machine %v", ef.Machine)
 	}
-	if ef.Class != elf.ELFCLASS64 && bin.Arch != "386" && bin.Arch != "arm" && bin.Arch != "riscv32" && bin.Arch != "avr" {
+	if ef.Class != elf.ELFCLASS64 && bin.Arch != "386" && bin.Arch != "arm" && bin.Arch != "riscv32" && bin.Arch != "avr" && bin.Arch != "xtensa" {
 		return nil, fmt.Errorf("unsupported 32-bit ELF for %s", bin.Arch)
 	}
 

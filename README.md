@@ -102,8 +102,9 @@ disassembler generated from ARM's architecture reference XML — Thumb-1,
 Thumb-2 and the floating-point extension, IT blocks included, with branch
 targets resolved to function names and the literal pools inside functions
 shown as `.word` data. 32-bit RISC-V targets such as the ESP32-C3 are
-decoded with the RISC-V decoder, and AVR (`arduino`, `attiny`, ...) by a
-decoder of its own. Xtensa (classic ESP32/ESP8266) has no decoder.
+decoded with the RISC-V decoder; AVR (`arduino`, `attiny`, ...) and Xtensa
+(`esp32-*`, `nodemcu`, `d1mini`) by decoders of their own, in the syntax
+of the GNU objdump for each.
 
 ## Why?
 

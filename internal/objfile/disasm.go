@@ -1,6 +1,7 @@
 package objfile
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"loov.dev/lensm/internal/avrasm"
 	"loov.dev/lensm/internal/thumbasm"
+	"loov.dev/lensm/internal/xtensaasm"
 )
 
 // decodeMu serializes the x/arch decoders, which mutate package-level
@@ -169,6 +171,37 @@ func (b *Binary) Disassemble(fn *Func) ([]Inst, error) {
 			insts = append(insts, in)
 			code, addr = code[inst.Len:], addr+uint64(inst.Len)
 		}
+	case "xtensa":
+		literals := b.literalPools()
+		for len(code) > 0 {
+			if literals[addr] && len(code) >= 4 {
+				v := binary.LittleEndian.Uint32(code)
+				text := fmt.Sprintf(".word %#010x", v)
+				emit(4, "", text, text)
+				continue
+			}
+			inst, err := xtensaasm.Decode(code, addr)
+			if err != nil {
+				undecodable(1)
+				continue
+			}
+			text := inst.Text
+			if inst.HasTarget {
+				if name, base := lookup(inst.Target); name != "" && inst.Branch {
+					if base == inst.Target {
+						text += " <" + name + ">"
+					} else {
+						text += fmt.Sprintf(" <%s+%#x>", name, inst.Target-base)
+					}
+				}
+			}
+			in := Inst{Addr: addr, Len: inst.Len, Op: inst.Mnemonic, Text: text, GNU: text, Call: inst.Call, RefKnown: true}
+			if inst.Branch {
+				in.Ref = inst.Target
+			}
+			insts = append(insts, in)
+			code, addr = code[inst.Len:], addr+uint64(inst.Len)
+		}
 	case "loong64":
 		for len(code) > 0 {
 			inst, err := loong64asm.Decode(code)
@@ -227,4 +260,27 @@ func (r textReader) ReadAt(p []byte, off int64) (int, error) {
 		return n, io.EOF
 	}
 	return n, nil
+}
+
+// literalPools finds the words L32R loads from by decoding every
+// function once; they are data inside .text and are rendered as such.
+func (b *Binary) literalPools() map[uint64]bool {
+	b.xtensaLiteralsOnce.Do(func() {
+		b.xtensaLiterals = map[uint64]bool{}
+		for _, fn := range b.Funcs {
+			code, addr := fn.Code(), fn.Addr
+			for len(code) > 0 {
+				inst, err := xtensaasm.Decode(code, addr)
+				if err != nil {
+					code, addr = code[1:], addr+1
+					continue
+				}
+				if inst.HasTarget && !inst.Branch {
+					b.xtensaLiterals[inst.Target] = true
+				}
+				code, addr = code[inst.Len:], addr+uint64(inst.Len)
+			}
+		}
+	})
+	return b.xtensaLiterals
 }

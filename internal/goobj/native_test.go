@@ -442,3 +442,73 @@ func TestLoadAVR(t *testing.T) {
 		t.Error("no branch target resolved")
 	}
 }
+
+// TestLoadXtensa loads a TinyGo ESP32 build: Xtensa LX6 code with
+// windowed calls and literal pools inside .text.
+func TestLoadXtensa(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "esp32.elf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	funcs := map[string]disasm.Func{}
+	for _, fn := range file.Funcs() {
+		funcs[fn.Name()] = fn
+	}
+	sumInts := funcs["main.sumInts"]
+	if sumInts == nil {
+		t.Fatal("main.sumInts not found")
+	}
+	code, err := sumInts.Load(disasm.Options{Context: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code.Arch != "xtensa" {
+		t.Errorf("Arch = %q, want xtensa", code.Arch)
+	}
+	if !strings.HasSuffix(code.File, "main.go") {
+		t.Errorf("File = %q, want main.go", code.File)
+	}
+	var texts []string
+	var branches int
+	for _, in := range code.Insts {
+		if in.Text == "" {
+			continue
+		}
+		texts = append(texts, in.Text)
+		if in.RefPC != 0 {
+			branches++
+		}
+	}
+	if len(texts) == 0 || texts[0] != "entry a1, 32" {
+		t.Errorf("unexpected start: %q", texts)
+	}
+	if branches != 2 {
+		t.Errorf("%d branches, want 2: %q", branches, texts)
+	}
+
+	// Across the binary, direct window calls (call4/call8) resolve to
+	// callee names, and the literal pools L32R reads show as .word data.
+	var calls, words int
+	for _, fn := range file.Funcs() {
+		code, err := fn.Load(disasm.Options{})
+		if err != nil {
+			continue
+		}
+		for _, in := range code.Insts {
+			if in.Call != "" {
+				calls++
+			}
+			if strings.HasPrefix(in.Text, ".word ") {
+				words++
+			}
+		}
+	}
+	if calls == 0 {
+		t.Error("no call resolved to a callee name")
+	}
+	if words == 0 {
+		t.Error("no literal pool rendered as .word data")
+	}
+}

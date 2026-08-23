@@ -15,6 +15,8 @@
 # Cortex-M0+): Thumb-only code with $t/$d mapping symbols, literal pools
 # inside functions, and function symbols with the Thumb bit set.
 # arduino.elf is the same program for the Arduino Uno (ATmega328P, AVR).
+# esp32.elf is the same program for the ESP32 (Xtensa LX6, windowed ABI,
+# literal pools inside .text).
 PHONY := build
 build:
 	tinygo build -o example.wasm -target=wasi .
@@ -22,3 +24,4 @@ build:
 	tinygo build -o esp32c3.elf -target=xiao-esp32c3 .
 	tinygo build -o pico.elf -target=pico .
 	tinygo build -o arduino.elf -target=arduino .
+	tinygo build -o esp32.elf -target=esp32-coreboard-v2 .
