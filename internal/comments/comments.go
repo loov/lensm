@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -274,26 +275,40 @@ func (store *Store) load() error {
 	if disk.Version != 0 && disk.Version != commentsFileVersion {
 		return fmt.Errorf("unsupported comments file version %d", disk.Version)
 	}
-	for _, raw := range disk.Comments {
-		var rec Record
-		if err := json.Unmarshal(raw, &rec); err != nil {
-			store.preserved = append(store.preserved, raw)
-			continue
-		}
-		if rec.Binary == "" {
-			rec.Binary = cmp.Or(disk.Binary, store.binary)
-		}
-		rec.PCHex = commentPCHex(rec.Coord)
-		if err := rec.Coord.validate(); err != nil {
-			store.preserved = append(store.preserved, raw)
-			continue
-		}
-		if rec.Text == "" {
-			continue
-		}
-		store.records[store.key(rec.Coord)] = rec
+	store.preserved = nil
+	for key, rec := range store.decodeRecords(disk) {
+		store.records[key] = rec
 	}
 	return nil
+}
+
+// decodeRecords yields the valid, non-empty records of a comments file
+// keyed for the store; entries it can't decode or validate are kept
+// verbatim in store.preserved so a save doesn't destroy them.
+func (store *Store) decodeRecords(disk commentsDiskFile) iter.Seq2[string, Record] {
+	return func(yield func(string, Record) bool) {
+		for _, raw := range disk.Comments {
+			var rec Record
+			if err := json.Unmarshal(raw, &rec); err != nil {
+				store.preserved = append(store.preserved, raw)
+				continue
+			}
+			if rec.Binary == "" {
+				rec.Binary = cmp.Or(disk.Binary, store.binary)
+			}
+			rec.PCHex = commentPCHex(rec.Coord)
+			if err := rec.Coord.validate(); err != nil {
+				store.preserved = append(store.preserved, raw)
+				continue
+			}
+			if rec.Text == "" {
+				continue
+			}
+			if !yield(store.key(rec.Coord), rec) {
+				return
+			}
+		}
+	}
 }
 
 func (store *Store) saveLocked() error {
@@ -373,28 +388,10 @@ func (store *Store) mergeExternalLocked() {
 		}
 	}
 	store.preserved = nil
-	for _, raw := range disk.Comments {
-		var rec Record
-		if err := json.Unmarshal(raw, &rec); err != nil {
-			store.preserved = append(store.preserved, raw)
-			continue
+	for key, rec := range store.decodeRecords(disk) {
+		if !store.touched[key] {
+			merged[key] = rec
 		}
-		if rec.Binary == "" {
-			rec.Binary = cmp.Or(disk.Binary, store.binary)
-		}
-		rec.PCHex = commentPCHex(rec.Coord)
-		if err := rec.Coord.validate(); err != nil {
-			store.preserved = append(store.preserved, raw)
-			continue
-		}
-		if rec.Text == "" {
-			continue
-		}
-		key := store.key(rec.Coord)
-		if store.touched[key] {
-			continue
-		}
-		merged[key] = rec
 	}
 	store.records = merged
 }
