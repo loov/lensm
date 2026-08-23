@@ -120,16 +120,22 @@ func TestSourceMapping(t *testing.T) {
 		if len(lines) < 2 {
 			t.Errorf("instructions map to %d distinct lines, want several: %v", len(lines), lines)
 		}
-		related := 0
-		for _, src := range code.Source {
-			for _, block := range src.Blocks {
-				for _, ranges := range block.Related {
-					related += len(ranges)
+		// The fixture is checked in, so its debug info names the source
+		// by the absolute path of the checkout it was built in. Reading
+		// the source back only works there; TestSourceMapping covers
+		// that wiring with a binary built by the test itself.
+		if _, err := os.Stat(code.File); err == nil {
+			related := 0
+			for _, src := range code.Source {
+				for _, block := range src.Blocks {
+					for _, ranges := range block.Related {
+						related += len(ranges)
+					}
 				}
 			}
-		}
-		if related == 0 {
-			t.Error("no source line relates back to the instructions")
+			if related == 0 {
+				t.Error("no source line relates back to the instructions")
+			}
 		}
 		return
 	}
@@ -172,16 +178,22 @@ func TestLoadTinyGo(t *testing.T) {
 		if !lines[7] || !lines[9] {
 			t.Errorf("instructions map to lines %v, want 7 and 9 among them", lines)
 		}
-		related := 0
-		for _, src := range code.Source {
-			for _, block := range src.Blocks {
-				for _, ranges := range block.Related {
-					related += len(ranges)
+		// The fixture is checked in, so its debug info names the source
+		// by the absolute path of the checkout it was built in. Reading
+		// the source back only works there; TestSourceMapping covers
+		// that wiring with a binary built by the test itself.
+		if _, err := os.Stat(code.File); err == nil {
+			related := 0
+			for _, src := range code.Source {
+				for _, block := range src.Blocks {
+					for _, ranges := range block.Related {
+						related += len(ranges)
+					}
 				}
 			}
-		}
-		if related == 0 {
-			t.Error("no source line relates back to the instructions")
+			if related == 0 {
+				t.Error("no source line relates back to the instructions")
+			}
 		}
 		return
 	}
