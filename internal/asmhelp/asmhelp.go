@@ -98,7 +98,7 @@ var asmInstructionRules = []asmInstructionRule{
 	{Prefixes: []string{"MFENCE", "LFENCE", "SFENCE", "DMB", "DSB", "ISB"}, Description: "Order memory or instruction accesses across this barrier."},
 }
 
-// NativeAssemblyInstructionHelp returns reference text and a syntax-correct
+// ForNative returns reference text and a syntax-correct
 // effect for the native (GNU) spelling of an instruction. GNU x86/AT&T uses
 // source-first operands while ARM-family GNU syntax uses destination-first.
 func ForNative(arch, canonical, text string) (Help, bool) {
