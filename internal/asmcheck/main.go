@@ -33,7 +33,7 @@ func main() {
 		// fields): file:line, addr, hex, instr. The instruction is the last
 		// non-empty field.
 		var instr string
-		for _, f := range strings.Split(line, "\t") {
+		for f := range strings.SplitSeq(line, "\t") {
 			if f = strings.TrimSpace(f); f != "" {
 				instr = f
 			}

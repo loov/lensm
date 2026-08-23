@@ -41,8 +41,8 @@ func PerfForNative(arch, canonical, nativeText string) (Perf, bool) {
 	// AT&T orders operands source-first; the forms are Intel-ordered
 	// (destination-first), so match positionally against the reversal.
 	operands := make([]operandClass, 0, len(rawOperands))
-	for i := len(rawOperands) - 1; i >= 0; i-- {
-		operands = append(operands, classifyNativeOperand(rawOperands[i]))
+	for _, rawOperand := range slices.Backward(rawOperands) {
+		operands = append(operands, classifyNativeOperand(rawOperand))
 	}
 	widthHint := gnuSuffixWidth(mnemonic)
 

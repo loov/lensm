@@ -36,8 +36,8 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 		Source: []disasm.Source{{
 			File: "main.go",
 			Blocks: []disasm.SourceBlock{{
-				LineRange: disasm.LineRange{From: 1, To: 2},
-				Lines:     []string{"func example() {", "}"},
+				From: 1, To: 2,
+				Lines: []string{"func example() {", "}"},
 			}},
 		}},
 	}}
