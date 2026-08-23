@@ -11,8 +11,12 @@
 # core modules in a component; it needs wasm-tools on PATH.
 # esp32c3.elf is the same program for a 32-bit RISC-V microcontroller
 # (RV32IMC, ELFCLASS32, DWARF line table, no pclntab).
+# pico.elf is the same program for the Raspberry Pi Pico (RP2040,
+# Cortex-M0+): Thumb-only code with $t/$d mapping symbols, literal pools
+# inside functions, and function symbols with the Thumb bit set.
 PHONY := build
 build:
 	tinygo build -o example.wasm -target=wasi .
 	tinygo build -o component.wasm -target=wasip2 .
 	tinygo build -o esp32c3.elf -target=xiao-esp32c3 .
+	tinygo build -o pico.elf -target=pico .

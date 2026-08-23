@@ -311,3 +311,83 @@ func TestLoadRISCV32(t *testing.T) {
 		t.Error("no instruction decoded")
 	}
 }
+
+// TestLoadThumb loads a TinyGo Raspberry Pi Pico build: Thumb code in a
+// 32-bit ARM ELF, with literal pools marked by $d mapping symbols and
+// function symbols carrying the Thumb bit.
+func TestLoadThumb(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "pico.elf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	funcs := map[string]disasm.Func{}
+	for _, fn := range file.Funcs() {
+		funcs[fn.Name()] = fn
+	}
+	sumInts := funcs["main.sumInts"]
+	if sumInts == nil {
+		t.Fatal("main.sumInts not found")
+	}
+	code, err := sumInts.Load(disasm.Options{Context: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code.Arch != "arm" {
+		t.Errorf("Arch = %q, want arm", code.Arch)
+	}
+	if !strings.HasSuffix(code.File, "main.go") {
+		t.Errorf("File = %q, want main.go", code.File)
+	}
+	var texts []string
+	var jumps int
+	for _, in := range code.Insts {
+		if in.Text == "" {
+			continue
+		}
+		texts = append(texts, in.Text)
+		if in.RefPC != 0 {
+			jumps++
+		}
+	}
+	// The loop: a compare, a conditional branch forward, the body and a
+	// branch back; the function symbol's Thumb bit must not shift the
+	// code by a byte.
+	want := []string{"movs r2, #0", "mov r1, r2", "cmp r2, #0xc"}
+	for i, w := range want {
+		if i >= len(texts) || texts[i] != w {
+			t.Errorf("instruction %d = %q, want %q", i, texts[i], w)
+		}
+	}
+	if jumps != 2 {
+		t.Errorf("%d branches with targets, want 2; instructions: %q", jumps, texts)
+	}
+
+	// The scheduler wrapper calls machine functions and ends with a
+	// literal pool: calls must resolve to names and the pool must show
+	// as data words, not garbage instructions.
+	wrapper := funcs["runtime.run$1$gowrapper"]
+	if wrapper == nil {
+		t.Fatal("runtime.run$1$gowrapper not found")
+	}
+	code, err = wrapper.Load(disasm.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls, words int
+	for _, in := range code.Insts {
+		if in.Call != "" {
+			calls++
+		}
+		if strings.HasPrefix(in.Text, ".word ") {
+			words++
+		}
+	}
+	if calls == 0 {
+		t.Error("no bl resolved to a callee name")
+	}
+	if words == 0 {
+		t.Error("literal pool not rendered as .word data")
+	}
+}

@@ -12,6 +12,8 @@ import (
 	"golang.org/x/arch/riscv64/riscv64asm"
 	"golang.org/x/arch/s390x/s390xasm"
 	"golang.org/x/arch/x86/x86asm"
+
+	"loov.dev/lensm/internal/thumbasm"
 )
 
 // decodeMu serializes the x/arch decoders, which mutate package-level
@@ -27,6 +29,11 @@ type Inst struct {
 	Op string
 	// Text is the Go assembler syntax, GNU the native syntax.
 	Text, GNU string
+	// Ref is the absolute target of a branch or call when the decoder
+	// resolved one (Thumb); zero otherwise, where callers parse Text.
+	Ref uint64
+	// Call reports that Ref is a call target rather than a jump.
+	Call bool
 }
 
 // Disassemble decodes the machine code of fn. Undecodable bytes become
@@ -70,13 +77,70 @@ func (b *Binary) Disassemble(fn *Func) ([]Inst, error) {
 			emit(4, inst.Op.String(), arm64asm.GoSyntax(inst, addr, lookup, reader), arm64asm.GNUSyntax(inst))
 		}
 	case "arm":
-		for len(code) > 0 {
-			inst, err := armasm.Decode(code, armasm.ModeARM)
-			if err != nil || inst.Len == 0 || inst.Op == 0 {
-				undecodable(4)
-				continue
+		// Mapping symbols split the text into ARM, Thumb and data
+		// regions; a binary without them is all ARM.
+		data := func(w int) {
+			w = min(w, len(code))
+			var v uint64
+			for i := w - 1; i >= 0; i-- {
+				v = v<<8 | uint64(code[i])
 			}
-			emit(inst.Len, inst.Op.String(), armasm.GoSyntax(inst, addr, lookup, reader), armasm.GNUSyntax(inst))
+			directive := map[int]string{4: ".word", 2: ".short", 1: ".byte"}[w]
+			text := fmt.Sprintf("%s %#0*x", directive, 2*w+2, v)
+			emit(w, "", text, text)
+		}
+		for len(code) > 0 {
+			kind, end := byte('a'), addr+uint64(len(code))
+			if b.arm32 != nil {
+				kind, end = b.arm32.at(addr, end)
+			}
+			switch kind {
+			case 't':
+				var dec thumbasm.Decoder
+				for addr < end {
+					inst, err := dec.Decode(code[:end-addr], addr)
+					if err != nil {
+						undecodable(2)
+						continue
+					}
+					text := inst.Text
+					if inst.HasTarget {
+						if name, base := lookup(inst.Target); name != "" {
+							if base == inst.Target {
+								text += " <" + name + ">"
+							} else {
+								text += fmt.Sprintf(" <%s+%#x>", name, inst.Target-base)
+							}
+						}
+					}
+					in := Inst{Addr: addr, Len: inst.Len, Op: inst.Mnemonic, Text: text, GNU: text, Call: inst.Call}
+					if inst.Branch {
+						in.Ref = inst.Target
+					}
+					insts = append(insts, in)
+					code, addr = code[inst.Len:], addr+uint64(inst.Len)
+				}
+			case 'd':
+				for addr < end {
+					switch n := end - addr; {
+					case n >= 4 && addr%4 == 0:
+						data(4)
+					case n >= 2 && addr%2 == 0:
+						data(2)
+					default:
+						data(1)
+					}
+				}
+			default:
+				for addr < end {
+					inst, err := armasm.Decode(code[:end-addr], armasm.ModeARM)
+					if err != nil || inst.Len == 0 || inst.Op == 0 {
+						undecodable(4)
+						continue
+					}
+					emit(inst.Len, inst.Op.String(), armasm.GoSyntax(inst, addr, lookup, reader), armasm.GNUSyntax(inst))
+				}
+			}
 		}
 	case "loong64":
 		for len(code) > 0 {

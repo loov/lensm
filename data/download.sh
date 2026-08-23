@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Downloads the CPU ISA source dumps that internal/asmref/gen parses into
-# table.json. Both files are large and gitignored (see .gitignore); this script
-# fetches them into .data/ so the generator can be pointed at them.
+# table.json and internal/thumbasm/gen into its encoding table. The files are
+# large and gitignored (see .gitignore); this script fetches them into data/ so
+# the generators can be pointed at them.
 #
 # Usage:
 #   .data/download.sh          # download anything missing
@@ -25,6 +26,13 @@ ARM_VERSION="ISA_A64_xml_A_profile-2025-12"
 ARM_URL="https://developer.arm.com/-/cdn-downloads/permalink/Exploration-Tools-A64-ISA/ISA_A64/${ARM_VERSION}.tar.gz"
 ARM_TARBALL="$DATA_DIR/arm64/${ARM_VERSION}.tar.gz"
 ARM_DIR="$DATA_DIR/arm64/${ARM_VERSION}"
+
+# arm32: ARM's official AArch32 (A32/T32) ISA XML, the T32 half of which
+# internal/thumbasm/gen turns into the Thumb decoder table.
+ARM32_VERSION="ISA_AArch32_xml_A_profile-2025-12"
+ARM32_URL="https://developer.arm.com/-/cdn-downloads/permalink/Exploration-Tools-AArch32-ISA/ISA_AArch32/${ARM32_VERSION}.tar.gz"
+ARM32_TARBALL="$DATA_DIR/arm32/${ARM32_VERSION}.tar.gz"
+ARM32_DIR="$DATA_DIR/arm32/${ARM32_VERSION}"
 
 fetch() { # url dest
 	echo "  downloading $1"
@@ -52,6 +60,17 @@ else
 	echo "  extracted ${xml_count} xml files"
 fi
 
+echo "==> arm32 (ARM AArch32 ISA XML, ${ARM32_VERSION})"
+if [[ "$FORCE" != "1" && -d "$ARM32_DIR" ]]; then
+	echo "  present, skipping: $ARM32_DIR"
+else
+	mkdir -p "$DATA_DIR/arm32"
+	fetch "$ARM32_URL" "$ARM32_TARBALL"
+	echo "  extracting"
+	tar xzf "$ARM32_TARBALL" -C "$DATA_DIR/arm32"
+	rm -f "$ARM32_TARBALL"
+fi
+
 echo
 echo "Sources ready. Generate the real table with:"
 echo
@@ -60,3 +79,7 @@ echo "    -arm     $ARM_DIR \\"
 echo "    -x86     $X86_FILE \\"
 echo "    -x86arch ADL-P \\"
 echo "    -out     internal/asmref/table.json"
+echo
+echo "and the Thumb decoder table with:"
+echo
+echo "  go generate ./internal/thumbasm"

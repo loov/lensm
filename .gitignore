@@ -22,3 +22,4 @@ lensm
 /dist/
 /tmp/
 *.lensm-comments.json
+data/arm32/

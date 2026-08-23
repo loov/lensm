@@ -53,7 +53,15 @@ func Disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 		// TODO: find a better way to calculate the jump target
 		var refPC uint64
 		var call string
-		if match := rxRefAbs.FindString(text); match != "" {
+		if in.Ref != 0 {
+			// The decoder resolved the target itself (Thumb): a call
+			// becomes a link to the callee, a jump an arrow.
+			if name, base := bin.Lookup(in.Ref); in.Call && name != "" && base == in.Ref {
+				call = name
+			} else {
+				refPC = in.Ref
+			}
+		} else if match := rxRefAbs.FindString(text); match != "" {
 			if target, err := strconv.ParseInt(match[3:], 16, 64); err == nil {
 				refPC = uint64(target)
 			}

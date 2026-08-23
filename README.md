@@ -96,6 +96,14 @@ targets work. A `wasip2` build is a component rather than a plain module,
 so its functions come from the core modules nested inside it and are
 listed under the module they belong to, as in `main/main.sumInts`.
 
+Microcontroller builds work too. TinyGo's Cortex-M targets (`pico`, `pico2`,
+`feather-m4`, `teensy40`, ...) produce Thumb code, which is decoded by a
+disassembler generated from ARM's architecture reference XML — Thumb-1,
+Thumb-2 and the floating-point extension, IT blocks included, with branch
+targets resolved to function names and the literal pools inside functions
+shown as `.word` data. 32-bit RISC-V targets such as the ESP32-C3 are
+decoded with the RISC-V decoder. AVR and Xtensa have no decoder.
+
 ## Why?
 
 I wrote a blog post at https://www.storj.io/blog/lensm on why and how the core functionality works.

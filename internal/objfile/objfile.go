@@ -40,6 +40,10 @@ type Binary struct {
 	// lines is the DWARF line table, used when there is no pclntab:
 	// binaries from clang, gcc and anything else that isn't Go.
 	lines *Lines
+	// arm32 is the ARM mapping-symbol map: where ARM, Thumb and data
+	// regions begin within the text of a 32-bit ARM ELF. Empty for
+	// everything else, and for binaries that carry no mapping symbols.
+	arm32 *armRegions
 }
 
 // Func is a single function inside a binary.
@@ -431,7 +435,22 @@ func openELF(r *bytes.Reader, data []byte) (*Binary, error) {
 	for _, s := range syms {
 		switch elf.ST_TYPE(s.Info) {
 		case elf.STT_FUNC, elf.STT_OBJECT:
-			bin.addSym(s.Name, s.Value, s.Size)
+			addr := s.Value
+			if bin.Arch == "arm" {
+				// A Thumb function's symbol value has bit 0 set to mark
+				// the instruction set; the code itself is at the even
+				// address.
+				addr &^= 1
+			}
+			bin.addSym(s.Name, addr, s.Size)
+		}
+	}
+	if bin.Arch == "arm" {
+		bin.arm32 = armRegionsFromMapping(syms, bin.textAddr, bin.textAddr+uint64(len(bin.text)))
+		if bin.arm32 == nil {
+			// No mapping symbols: each function symbol's low bit says
+			// which instruction set it is in (odd = Thumb).
+			bin.arm32 = armRegionsFromFuncs(syms)
 		}
 	}
 
