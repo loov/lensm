@@ -135,27 +135,13 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 			Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 			Color:      ui.Syntax.Plain,
 		}.Layout(ui.Theme.Theme, gtx)
-		if c.goCol.commentWidth > 0 && ix.Text != "" {
-			comment := ui.Comments.Get(ui.asmCoord(ViewGoAsm, ix))
-			if ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.goCol.commentLeft, c.goCol.commentWidth, lineHeight)
-			} else if comment != "" {
-				gui.SourceLine{
-					TopLeft:    image.Pt(c.goCol.commentLeft, i*lineHeight+int(ui.asm.Offset)),
-					Width:      c.goCol.commentWidth,
-					Text:       "; " + comment,
-					TextHeight: ui.TextHeight,
-					Italic:     true,
-					Color:      ui.Theme.Colors.MutedText,
-				}.Layout(ui.Theme.Theme, gtx)
-			}
+		if ix.Text != "" {
+			ui.layoutRowComment(gtx, ui.asmCoord(ViewGoAsm, ix), ";", c.goCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
+				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
 		}
 		if ui.ShowNative {
-			nativeComment := ui.Comments.Get(ui.asmCoord(ViewNativeAsm, ix))
-			width := c.nativeCol.textWidth
-			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm)) && c.nativeCol.commentWidth > 0 {
-				width = c.nativeCol.codeWidth
-			}
+			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
+				ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm)
 			gui.SourceLine{
 				TopLeft:    image.Pt(c.nativeCol.textLeft, i*lineHeight+int(ui.asm.Offset)),
 				Width:      width,
@@ -165,18 +151,6 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 				Color:      ui.Syntax.Plain,
 			}.Layout(ui.Theme.Theme, gtx)
-			if ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm && c.nativeCol.commentWidth > 0 {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.nativeCol.commentLeft, c.nativeCol.commentWidth, lineHeight)
-			} else if nativeComment != "" && c.nativeCol.commentWidth > 0 {
-				gui.SourceLine{
-					TopLeft:    image.Pt(c.nativeCol.commentLeft, i*lineHeight+int(ui.asm.Offset)),
-					Width:      c.nativeCol.commentWidth,
-					Text:       "; " + nativeComment,
-					TextHeight: ui.TextHeight,
-					Italic:     true,
-					Color:      ui.Theme.Colors.MutedText,
-				}.Layout(ui.Theme.Theme, gtx)
-			}
 		}
 
 		// jump line
@@ -265,12 +239,8 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 					gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
 				}
 			}
-			sourceComment := ui.Comments.Get(ui.sourceCoord(src.File, lineNo))
-			width := c.sourceCol.textWidth
 			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
-			if (sourceComment != "" || selectedSource) && c.sourceCol.commentWidth > 0 {
-				width = c.sourceCol.codeWidth
-			}
+			width := ui.layoutRowComment(gtx, ui.sourceCoord(src.File, lineNo), "//", c.sourceCol, rowTop, lineHeight, selectedSource)
 			gui.SourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),
 				Width:      width,
@@ -279,18 +249,6 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 				Bold:       highlight,
 				Color:      ui.Syntax.Plain,
 			}.Layout(ui.Theme.Theme, gtx)
-			if selectedSource && c.sourceCol.commentWidth > 0 {
-				ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", rowTop, c.sourceCol.commentLeft, c.sourceCol.commentWidth, lineHeight)
-			} else if sourceComment != "" && c.sourceCol.commentWidth > 0 {
-				gui.SourceLine{
-					TopLeft:    image.Pt(c.sourceCol.commentLeft, rowTop),
-					Width:      c.sourceCol.commentWidth,
-					Text:       "// " + sourceComment,
-					TextHeight: ui.TextHeight,
-					Italic:     true,
-					Color:      ui.Theme.Colors.MutedText,
-				}.Layout(ui.Theme.Theme, gtx)
-			}
 		}
 	}
 	sourceClip.Pop()

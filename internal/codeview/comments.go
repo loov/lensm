@@ -44,6 +44,33 @@ func commentEditKey(coord comments.Coord) string {
 // editable field (when the line is selected and editing is wired up) or
 // read-only. prefix is the leading marker: ";" for assembly, "//" for
 // source.
+// layoutRowComment draws the comment region of one row: the inline editor
+// when the row is selected, otherwise the stored comment if there is one.
+// It returns the width left for the row's text: the narrower codeWidth
+// when a comment shares the row, the full textWidth otherwise.
+func (ui Style) layoutRowComment(gtx layout.Context, coord comments.Coord, prefix string, col columnSplit, top, lineHeight int, selected bool) int {
+	if col.commentWidth <= 0 {
+		return col.textWidth
+	}
+	if selected {
+		ui.layoutInlineCommentEditor(gtx, coord, prefix, top, col.commentLeft, col.commentWidth, lineHeight)
+		return col.codeWidth
+	}
+	comment := ui.Comments.Get(coord)
+	if comment == "" {
+		return col.textWidth
+	}
+	gui.SourceLine{
+		TopLeft:    image.Pt(col.commentLeft, top),
+		Width:      col.commentWidth,
+		Text:       prefix + " " + comment,
+		TextHeight: ui.TextHeight,
+		Italic:     true,
+		Color:      ui.Theme.Colors.MutedText,
+	}.Layout(ui.Theme.Theme, gtx)
+	return col.codeWidth
+}
+
 func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coord, prefix string, top, left, width, lineHeight int) {
 	if ui.CommentEditor == nil || ui.CommentKey == nil || ui.SetComment == nil {
 		comment := ui.Comments.Get(coord)
