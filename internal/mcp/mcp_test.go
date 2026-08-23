@@ -16,7 +16,7 @@ import (
 func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
 	server := &AppServer{
 		load:    func(path string) (disasm.File, error) { return goobj.Load(path) },
-		session: &Session{Path: "old"},
+		session: &Session{Path: "old", File: emptyFile{}},
 	}
 
 	server.SetPath(filepath.Join(t.TempDir(), "missing-binary"), nil)
@@ -111,3 +111,10 @@ func TestMCPToolCallReportsLoadError(t *testing.T) {
 		t.Fatalf("tool error content = %#v", toolResult.Content)
 	}
 }
+
+// emptyFile is a disasm.File with no functions, for tests that need a
+// stand-in session without building a binary.
+type emptyFile struct{}
+
+func (emptyFile) Close() error         { return nil }
+func (emptyFile) Funcs() []disasm.Func { return nil }

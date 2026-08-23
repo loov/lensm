@@ -40,19 +40,9 @@ func NewSessionWithComments(load LoadFile, path string, commentsPath string, sto
 	}, nil
 }
 
-func (s *Session) Close() error {
-	if s == nil || s.File == nil {
-		return nil
-	}
-	return s.File.Close()
-}
+func (s *Session) Close() error { return s.File.Close() }
 
-func (s *Session) Funcs() []disasm.Func {
-	if s == nil || s.File == nil {
-		return nil
-	}
-	return s.File.Funcs()
-}
+func (s *Session) Funcs() []disasm.Func { return s.File.Funcs() }
 
 func (s *Session) FindFunc(name string) disasm.Func {
 	for _, fn := range s.Funcs() {
