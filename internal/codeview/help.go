@@ -65,7 +65,7 @@ func (ui Style) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, perf i
 		if help.Explanation != "" {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				label := material.Body1(ui.Theme.Theme, help.Explanation)
-				label.Font.Typeface = "override-monospace,Go,monospace"
+				label.Font.Typeface = gui.Monospace
 				label.Color = ui.Syntax.Plain
 				label.TextSize = ui.TextHeight * 9 / 10
 				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)
@@ -76,7 +76,7 @@ func (ui Style) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, perf i
 			ports = perf.Ports
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				label := material.Body1(ui.Theme.Theme, perfLine(perf.Perf))
-				label.Font.Typeface = "override-monospace,Go,monospace"
+				label.Font.Typeface = gui.Monospace
 				label.Color = ui.Syntax.Comment
 				label.TextSize = ui.TextHeight * 8 / 10
 				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)
@@ -85,7 +85,7 @@ func (ui Style) layoutAssemblyHelp(gtx layout.Context, help asmhelp.Help, perf i
 		if ports != "" {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				label := material.Body1(ui.Theme.Theme, "ports: "+ports)
-				label.Font.Typeface = "override-monospace,Go,monospace"
+				label.Font.Typeface = gui.Monospace
 				label.Color = ui.Syntax.Comment
 				label.TextSize = ui.TextHeight * 8 / 10
 				return layout.Inset{Top: 5}.Layout(gtx, label.Layout)

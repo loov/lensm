@@ -275,7 +275,7 @@ func (ui Style) callTargetHit(gtx layout.Context, inst disasm.Inst, left int, x 
 	// A hovered call line is drawn bold and italic; measure with the
 	// same style, otherwise the hitbox drifts from the visible text
 	// whenever the fallback font is proportional.
-	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Black, Style: font.Italic}
+	f := font.Font{Typeface: gui.Monospace, Weight: font.Black, Style: font.Italic}
 	end := start + len(inst.Call)
 	targetLeft := left + ui.measureAsmTextWidth(gtx, f, inst.Text[:start])
 	targetRight := left + ui.measureAsmTextWidth(gtx, f, inst.Text[:end])

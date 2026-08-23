@@ -124,7 +124,7 @@ func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coo
 	gtx.Constraints = layout.Exact(image.Pt(editorWidth, lineHeight))
 	editor := material.Editor(ui.Theme.Theme, ui.CommentEditor, "comment")
 	editor.TextSize = ui.TextHeight
-	editor.Font.Typeface = "override-monospace,Go,monospace"
+	editor.Font.Typeface = gui.Monospace
 	editor.Color = ui.Theme.Colors.Text
 	editor.Layout(gtx)
 	stack.Pop()

@@ -76,7 +76,7 @@ func (line SourceLine) Layout(th *material.Theme, gtx layout.Context) {
 }
 
 func layoutSourceSpan(th *material.Theme, gtx layout.Context, line SourceLine, span syntax.Span, left int) layout.Dimensions {
-	f := font.Font{Typeface: "override-monospace,Go,monospace", Weight: font.Normal}
+	f := font.Font{Typeface: Monospace, Weight: font.Normal}
 	if line.Italic || span.Italic {
 		f.Style = font.Italic
 	}

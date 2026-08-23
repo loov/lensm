@@ -36,6 +36,10 @@ func (windows *Windows) Wait() {
 	windows.active.Wait()
 }
 
+// Monospace is the typeface stack for code: the user font registered by
+// LoadFonts when given, then Go Mono, then whatever the system has.
+const Monospace font.Typeface = "override-monospace,Go,monospace"
+
 func LoadFonts(userfont string) []font.FontFace {
 	collection := gofont.Collection()
 	if userfont == "" {
