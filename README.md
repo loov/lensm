@@ -83,7 +83,9 @@ with calls resolved to function names. Source comes from whichever line
 table the module carries. Go embeds a pclntab in its data segments, which
 records a position per resume point rather than per instruction, so a run
 of instructions between two resume points shares one line. TinyGo and
-clang emit DWARF instead, which is per statement.
+clang emit DWARF instead, which is per statement. TinyGo's `wasi`,
+`wasip1`, `wasm` and `wasm-unknown` targets all work; `wasip2` produces a
+component rather than a core module and is not supported.
 
 ## Why?
 

@@ -208,3 +208,16 @@ func TestInstructionOffsetsVerified(t *testing.T) {
 		t.Errorf("%d of %d functions failed the encoding check", missing, len(file.Funcs()))
 	}
 }
+
+// TestLoadComponent checks that a component — TinyGo's wasip2 output —
+// is refused by name instead of as a version number.
+func TestLoadComponent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "component.wasm")
+	if err := os.WriteFile(path, []byte("\x00asm\x0d\x00\x01\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "component") {
+		t.Fatalf("err = %v, want it to mention components", err)
+	}
+}

@@ -59,6 +59,12 @@ func Load(path string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A component — what TinyGo's wasip2 target and other component-model
+	// tools emit — shares the magic of a core module but carries a
+	// different version, and holds its core modules nested inside.
+	if len(data) >= 8 && data[4] == 0x0d && data[5] == 0x00 && data[6] == 0x01 && data[7] == 0x00 {
+		return nil, fmt.Errorf("%q: WebAssembly component, only core modules are supported", path)
+	}
 	module, err := watgo.DecodeWASM(data)
 	if err != nil {
 		return nil, fmt.Errorf("%q: %w", path, err)
