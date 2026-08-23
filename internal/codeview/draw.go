@@ -126,8 +126,8 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 			}.Op())
 		}
 		gui.SourceLine{
-			TopLeft:    image.Pt(c.goTextLeft, i*lineHeight+int(ui.asm.Offset)),
-			Width:      c.goInstructionWidth,
+			TopLeft:    image.Pt(c.goCol.textLeft, i*lineHeight+int(ui.asm.Offset)),
+			Width:      c.goCol.codeWidth,
 			Text:       ix.Text,
 			Spans:      hl.asm[i],
 			TextHeight: ui.TextHeight,
@@ -135,14 +135,14 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 			Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 			Color:      ui.Syntax.Plain,
 		}.Layout(ui.Theme.Theme, gtx)
-		if c.commentWidth > 0 && ix.Text != "" {
+		if c.goCol.commentWidth > 0 && ix.Text != "" {
 			comment := ui.Comments.Get(ui.asmCoord(ViewGoAsm, ix))
 			if ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.commentLeft, c.commentWidth, lineHeight)
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewGoAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.goCol.commentLeft, c.goCol.commentWidth, lineHeight)
 			} else if comment != "" {
 				gui.SourceLine{
-					TopLeft:    image.Pt(c.commentLeft, i*lineHeight+int(ui.asm.Offset)),
-					Width:      c.commentWidth,
+					TopLeft:    image.Pt(c.goCol.commentLeft, i*lineHeight+int(ui.asm.Offset)),
+					Width:      c.goCol.commentWidth,
 					Text:       "; " + comment,
 					TextHeight: ui.TextHeight,
 					Italic:     true,
@@ -152,12 +152,12 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		}
 		if ui.ShowNative {
 			nativeComment := ui.Comments.Get(ui.asmCoord(ViewNativeAsm, ix))
-			width := c.nativeTextWidth
-			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm)) && c.nativeCommentWidth > 0 {
-				width = c.nativeInstructionWidth
+			width := c.nativeCol.textWidth
+			if (nativeComment != "" || (ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm)) && c.nativeCol.commentWidth > 0 {
+				width = c.nativeCol.codeWidth
 			}
 			gui.SourceLine{
-				TopLeft:    image.Pt(c.nativeTextLeft, i*lineHeight+int(ui.asm.Offset)),
+				TopLeft:    image.Pt(c.nativeCol.textLeft, i*lineHeight+int(ui.asm.Offset)),
 				Width:      width,
 				Text:       hl.nativeText[i],
 				Spans:      hl.native[i],
@@ -165,12 +165,12 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
 				Color:      ui.Syntax.Plain,
 			}.Layout(ui.Theme.Theme, gtx)
-			if ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm && c.nativeCommentWidth > 0 {
-				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.nativeCommentLeft, c.nativeCommentWidth, lineHeight)
-			} else if nativeComment != "" && c.nativeCommentWidth > 0 {
+			if ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm && c.nativeCol.commentWidth > 0 {
+				ui.layoutInlineCommentEditor(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", i*lineHeight+int(ui.asm.Offset), c.nativeCol.commentLeft, c.nativeCol.commentWidth, lineHeight)
+			} else if nativeComment != "" && c.nativeCol.commentWidth > 0 {
 				gui.SourceLine{
-					TopLeft:    image.Pt(c.nativeCommentLeft, i*lineHeight+int(ui.asm.Offset)),
-					Width:      c.nativeCommentWidth,
+					TopLeft:    image.Pt(c.nativeCol.commentLeft, i*lineHeight+int(ui.asm.Offset)),
+					Width:      c.nativeCol.commentWidth,
 					Text:       "; " + nativeComment,
 					TextHeight: ui.TextHeight,
 					Italic:     true,
@@ -266,10 +266,10 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 				}
 			}
 			sourceComment := ui.Comments.Get(ui.sourceCoord(src.File, lineNo))
-			width := c.sourceTextWidth
+			width := c.sourceCol.textWidth
 			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
-			if (sourceComment != "" || selectedSource) && c.sourceCommentWidth > 0 {
-				width = c.sourceCodeWidth
+			if (sourceComment != "" || selectedSource) && c.sourceCol.commentWidth > 0 {
+				width = c.sourceCol.codeWidth
 			}
 			gui.SourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),
@@ -279,12 +279,12 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 				Bold:       highlight,
 				Color:      ui.Syntax.Plain,
 			}.Layout(ui.Theme.Theme, gtx)
-			if selectedSource && c.sourceCommentWidth > 0 {
-				ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", rowTop, c.sourceCommentLeft, c.sourceCommentWidth, lineHeight)
-			} else if sourceComment != "" && c.sourceCommentWidth > 0 {
+			if selectedSource && c.sourceCol.commentWidth > 0 {
+				ui.layoutInlineCommentEditor(gtx, ui.sourceCoord(src.File, lineNo), "//", rowTop, c.sourceCol.commentLeft, c.sourceCol.commentWidth, lineHeight)
+			} else if sourceComment != "" && c.sourceCol.commentWidth > 0 {
 				gui.SourceLine{
-					TopLeft:    image.Pt(c.sourceCommentLeft, rowTop),
-					Width:      c.sourceCommentWidth,
+					TopLeft:    image.Pt(c.sourceCol.commentLeft, rowTop),
+					Width:      c.sourceCol.commentWidth,
 					Text:       "// " + sourceComment,
 					TextHeight: ui.TextHeight,
 					Italic:     true,

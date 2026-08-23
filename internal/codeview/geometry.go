@@ -22,22 +22,32 @@ type codeColumns struct {
 	gutter gui.Bounds
 	source gui.Bounds
 
-	goTextLeft         int
-	goInstructionWidth int
-	commentLeft        int
-	commentWidth       int
+	// goCol, nativeCol and sourceCol split each column into text and
+	// comment regions.
+	goCol, nativeCol, sourceCol columnSplit
+}
 
-	nativeTextLeft         int
-	nativeTextWidth        int
-	nativeCommentLeft      int
-	nativeCommentWidth     int
-	nativeInstructionWidth int
+// columnSplit divides a column into a text region and, when there is room,
+// a comment region to its right. codeWidth is the text width to use when a
+// comment shares the row; commentWidth is 0 when the column is too narrow.
+type columnSplit struct {
+	textLeft, textWidth       int
+	codeWidth                 int
+	commentLeft, commentWidth int
+}
 
-	sourceTextLeft     int
-	sourceTextWidth    int
-	sourceCommentLeft  int
-	sourceCommentWidth int
-	sourceCodeWidth    int
+// splitColumn places the comment region at commentAt percent of the
+// column [left, right), keeping pad/2 between text and comment.
+func splitColumn(left, right, pad, minCommentWidth, commentAt int) columnSplit {
+	s := columnSplit{textLeft: left, textWidth: max(right-left, 0)}
+	s.commentLeft = max(left+s.textWidth*commentAt/100, left)
+	s.commentWidth = max(right-s.commentLeft, 0)
+	s.codeWidth = s.commentLeft - left - pad/2
+	if s.codeWidth < 0 || s.commentWidth < minCommentWidth {
+		s.codeWidth = s.textWidth
+		s.commentWidth = 0
+	}
+	return s
 }
 
 // codeHover is the transient pointer state for one frame: where the mouse
@@ -90,35 +100,9 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 		source:     source,
 	}
 	minimumCommentWidth := lineHeight * 4
-
-	c.sourceTextLeft = int(source.Min)
-	c.sourceTextWidth = max(int(source.Max)-c.sourceTextLeft, 0)
-	c.sourceCommentLeft = c.sourceTextLeft + c.sourceTextWidth*70/100
-	c.sourceCommentWidth = int(source.Max) - c.sourceCommentLeft
-	c.sourceCodeWidth = c.sourceCommentLeft - c.sourceTextLeft - pad/2
-	if c.sourceCodeWidth < 0 || c.sourceCommentWidth < minimumCommentWidth {
-		c.sourceCodeWidth = c.sourceTextWidth
-		c.sourceCommentWidth = 0
-	}
-
-	c.goTextLeft = int(asm.Min) + pad/2
-	goTextWidth := max(int(asm.Max)-c.goTextLeft, 0)
-	c.nativeTextLeft = int(native.Min)
-	c.nativeTextWidth = max(int(native.Max)-c.nativeTextLeft, 0)
-	c.nativeCommentLeft = c.nativeTextLeft + c.nativeTextWidth*62/100
-	c.nativeCommentWidth = int(native.Max) - c.nativeCommentLeft
-	c.nativeInstructionWidth = c.nativeCommentLeft - c.nativeTextLeft - pad/2
-	if c.nativeInstructionWidth < 0 || c.nativeCommentWidth < minimumCommentWidth {
-		c.nativeInstructionWidth = c.nativeTextWidth
-		c.nativeCommentWidth = 0
-	}
-	c.commentLeft = max(c.goTextLeft+goTextWidth*62/100, c.goTextLeft)
-	c.commentWidth = max(int(asm.Max)-c.commentLeft, 0)
-	c.goInstructionWidth = c.commentLeft - c.goTextLeft - pad/2
-	if c.goInstructionWidth < 0 || c.commentWidth < minimumCommentWidth {
-		c.goInstructionWidth = goTextWidth
-		c.commentWidth = 0
-	}
+	c.goCol = splitColumn(int(asm.Min)+pad/2, int(asm.Max), pad, minimumCommentWidth, 62)
+	c.nativeCol = splitColumn(int(native.Min), int(native.Max), pad, minimumCommentWidth, 62)
+	c.sourceCol = splitColumn(int(source.Min), int(source.Max), pad, minimumCommentWidth, 70)
 
 	return c
 }
