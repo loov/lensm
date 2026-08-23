@@ -70,7 +70,10 @@ By default comments are stored in a sidecar file named
 When the GUI and a separate `lensm mcp` process write the same sidecar,
 saves merge per comment: each process's additions, edits, and deletions
 survive, and only conflicting edits to the same comment resolve to the
-last writer.
+last writer. The merge is read-then-write without a file lock, so two
+saves landing in the same instant can still lose one side's changes.
+Comments are keyed by function name, not by binary: point `-comments` at
+one shared file only for builds of the same program.
 
 Note: The program requires a binary that is built on your computer, otherwise the source code for the functions cannot be loaded.
 
