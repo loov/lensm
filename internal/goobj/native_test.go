@@ -380,7 +380,7 @@ func TestLoadThumb(t *testing.T) {
 		if in.Call != "" {
 			calls++
 		}
-		if strings.HasPrefix(in.Text, ".word ") {
+		if strings.HasPrefix(in.Text, "WORD $") {
 			words++
 		}
 	}
@@ -388,7 +388,7 @@ func TestLoadThumb(t *testing.T) {
 		t.Error("no bl resolved to a callee name")
 	}
 	if words == 0 {
-		t.Error("literal pool not rendered as .word data")
+		t.Error("literal pool not rendered as WORD data")
 	}
 }
 
