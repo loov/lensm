@@ -489,7 +489,7 @@ func TestLoadXtensa(t *testing.T) {
 	}
 
 	// Across the binary, direct window calls (call4/call8) resolve to
-	// callee names, and the literal pools L32R reads show as .word data.
+	// callee names, and the literal pools L32R reads show as WORD data.
 	var calls, words int
 	for _, fn := range file.Funcs() {
 		code, err := fn.Load(disasm.Options{})
@@ -500,7 +500,7 @@ func TestLoadXtensa(t *testing.T) {
 			if in.Call != "" {
 				calls++
 			}
-			if strings.HasPrefix(in.Text, ".word ") {
+			if strings.HasPrefix(in.Text, "WORD $") {
 				words++
 			}
 		}
@@ -509,6 +509,6 @@ func TestLoadXtensa(t *testing.T) {
 		t.Error("no call resolved to a callee name")
 	}
 	if words == 0 {
-		t.Error("no literal pool rendered as .word data")
+		t.Error("no literal pool rendered as WORD data")
 	}
 }

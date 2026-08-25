@@ -5,7 +5,7 @@ go 1.27
 require (
 	gioui.org v0.10.2
 	gioui.org/x v0.10.2
-	github.com/loov/disasm v0.1.1
+	github.com/loov/disasm v0.1.2
 	golang.org/x/arch v0.30.0
 	golang.org/x/exp/shiny v0.0.0-20260820142414-ca536658362e
 )
