@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/loov/disasm/objfile"
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/objfile"
 )
 
 var _ disasm.File = (*File)(nil)
@@ -48,7 +48,13 @@ type Func struct {
 
 func (fn *Func) Name() string { return fn.fn.Name }
 
-func (file *File) Close() error { return nil }
+// Close releases the binary. It waits for a disassembly in flight, since
+// Func.Code aliases the file mapping that Close unmaps.
+func (file *File) Close() error {
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	return file.bin.Close()
+}
 
 func Load(path string) (*File, error) {
 	bin, err := objfile.Open(path)
@@ -61,10 +67,10 @@ func Load(path string) (*File, error) {
 		cache: make(map[cacheKey]cacheEntry),
 	}
 
-	for _, fn := range bin.Funcs {
+	for i := range bin.Funcs {
 		file.funcs = append(file.funcs, &Func{
 			obj: file,
-			fn:  fn,
+			fn:  &bin.Funcs[i],
 		})
 	}
 

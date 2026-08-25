@@ -1,19 +1,16 @@
-// Package wasmobj loads WebAssembly modules as disasm.Files. Function
-// bodies are rendered as WAT through watgo; there is no source mapping.
+// Package wasmobj loads WebAssembly modules as disasm.Files. Loading,
+// names, calls and source positions come from objfile; this package
+// renders the instructions with their block nesting for the viewer.
 package wasmobj
 
 import (
-	"debug/gosym"
-	"fmt"
-	"os"
 	"sort"
 	"strings"
+	"sync"
 
-	"github.com/eliben/watgo"
-	"github.com/eliben/watgo/wasmir"
+	"github.com/loov/disasm/objfile"
 
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/objfile"
 	"loov.dev/lensm/internal/source"
 )
 
@@ -23,75 +20,36 @@ var _ disasm.Func = (*Func)(nil)
 // File is a loaded wasm binary: one core module, or every core module
 // nested in a component.
 type File struct {
+	bin   *objfile.Binary
 	funcs []disasm.Func
+	// mu keeps Close from unmapping the file under a Load in flight.
+	mu sync.Mutex
 }
 
 func (file *File) Funcs() []disasm.Func { return file.funcs }
-func (file *File) Close() error         { return nil }
 
-// module is one core module and what it takes to read code out of it.
-type module struct {
-	// data is the module's bytes, which its own offsets index into.
-	data []byte
-	// names maps the function index space (imports first, then defined
-	// functions) to display names, for resolving call targets.
-	names []string
-	// pcln is the Go line table recovered from the module's data
-	// segments, addressed by wasm PC; nil for non-Go modules.
-	pcln *gosym.Table
-	// lines is the DWARF line table, addressed by module offset; what
-	// TinyGo and clang emit instead of a pclntab. nil when absent.
-	lines *objfile.Lines
+func (file *File) Close() error {
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	return file.bin.Close()
 }
 
 // Func is one module-defined function.
 type Func struct {
-	mod  *module
-	name string
-	fn   wasmir.Function
-	// index is the function's position in the module's function index
-	// space, the PC_F half of every PC inside it.
-	index int
-	// body is where this function's instructions start in the module and
-	// how many bytes they span, for looking up DWARF rows.
-	body codeRange
+	file *File
+	fn   *objfile.Func
 }
 
-func (fn *Func) Name() string { return fn.name }
+func (fn *Func) Name() string { return fn.fn.Name }
 
 func Load(path string) (*File, error) {
-	data, err := os.ReadFile(path)
+	bin, err := objfile.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	// A component — what TinyGo's wasip2 target and other component-model
-	// tools emit — shares the magic of a core module but carries its core
-	// modules nested inside, so its code is theirs.
-	modules := [][]byte{data}
-	if isComponent(data) {
-		if modules = coreModules(data); len(modules) == 0 {
-			return nil, fmt.Errorf("%q: component holds no core module", path)
-		}
-	}
-
-	file := &File{}
-	for i, data := range modules {
-		// A component pairs the program with adapter modules that have
-		// function names of their own, so each module's functions are
-		// qualified by the module they live in.
-		funcs, err := loadModule(data, i, len(modules) > 1)
-		if err != nil {
-			if len(modules) == 1 {
-				return nil, fmt.Errorf("%q: %w", path, err)
-			}
-			// One unreadable adapter should not hide the program.
-			fmt.Fprintf(os.Stderr, "unable to load core module %d of %q: %v\n", i, path, err)
-			continue
-		}
-		file.funcs = append(file.funcs, funcs...)
-	}
-	if len(file.funcs) == 0 {
-		return nil, fmt.Errorf("%q: no readable core module", path)
+	file := &File{bin: bin}
+	for i := range bin.Funcs {
+		file.funcs = append(file.funcs, &Func{file: file, fn: &bin.Funcs[i]})
 	}
 	sort.SliceStable(file.funcs, func(i, k int) bool {
 		return strings.ToLower(file.funcs[i].Name()) < strings.ToLower(file.funcs[k].Name())
@@ -99,259 +57,40 @@ func Load(path string) (*File, error) {
 	return file, nil
 }
 
-// loadModule decodes one core module and returns its functions. When
-// qualify is set the names are prefixed with the module they belong to,
-// which the module usually names itself ("main", "wit-component:shim").
-func loadModule(data []byte, index int, qualify bool) ([]disasm.Func, error) {
-	decoded, err := watgo.DecodeWASM(data)
-	if err != nil {
-		return nil, err
-	}
-
-	prefix := ""
-	if qualify {
-		if decoded.Name != "" {
-			prefix = decoded.Name + "/"
-		} else {
-			prefix = fmt.Sprintf("module%d/", index)
-		}
-	}
-	mod := &module{data: data}
-	for _, imp := range decoded.Imports {
-		if imp.Kind == wasmir.ExternalKindFunction {
-			mod.names = append(mod.names, prefix+imp.Module+"."+imp.Name)
-		}
-	}
-	codeStart, bodies := codeSection(data)
-	var funcs []disasm.Func
-	for i, fn := range decoded.Funcs {
-		name := objfile.Demangle(fn.Name)
-		if name == "" {
-			name = fmt.Sprintf("func%d", len(mod.names))
-		}
-		name = prefix + name
-		entry := codeRange{}
-		if i < len(bodies) {
-			entry = bodies[i]
-		}
-		funcs = append(funcs, &Func{mod: mod, name: name, fn: decoded.Funcs[i], index: i, body: entry})
-		mod.names = append(mod.names, name)
-	}
-	mod.pcln = objfile.FindWasmLineTable(linearMemory(decoded))
-	if mod.pcln == nil {
-		mod.lines = dwarfLines(decoded, codeStart, bodies)
-	}
-	return funcs, nil
-}
-
-// wasmPCBase is the first PC_F value the Go linker assigns to a
-// function (funcValueOffset in cmd/link/internal/wasm).
-const wasmPCBase = 0x1000
-
-// linearMemory reconstructs the module's initialized memory from its
-// active data segments, where a Go module's pclntab lives. It gives up
-// on a segment placed implausibly far past the data actually present:
-// a module can name a huge offset with a few bytes of payload.
-func linearMemory(module *wasmir.Module) []byte {
-	const maxImage = 1 << 31
-	var end, total int64
-	for _, seg := range module.Data {
-		off, ok := segmentOffset(seg)
-		if !ok {
-			continue
-		}
-		if e := off + int64(len(seg.Init)); e > end {
-			end = e
-		}
-		total += int64(len(seg.Init))
-	}
-	if end <= 0 || end > maxImage || end > total+1<<20 {
-		return nil
-	}
-	image := make([]byte, end)
-	for _, seg := range module.Data {
-		if off, ok := segmentOffset(seg); ok {
-			copy(image[off:], seg.Init)
-		}
-	}
-	return image
-}
-
-// segmentOffset returns the linear-memory offset of an active data
-// segment with a constant offset; ok is false for passive segments and
-// for offsets that are not a plain constant.
-func segmentOffset(seg wasmir.DataSegment) (int64, bool) {
-	if seg.Mode != wasmir.DataSegmentModeActive {
-		return 0, false
-	}
-	if len(seg.OffsetExpr) > 0 {
-		switch in := seg.OffsetExpr[0]; in.Kind {
-		case wasmir.InstrI32Const:
-			return int64(in.I32Const), in.I32Const >= 0
-		case wasmir.InstrI64Const:
-			return in.I64Const, in.I64Const >= 0
-		default:
-			return 0, false
-		}
-	}
-	return seg.OffsetI64, seg.OffsetI64 >= 0
-}
-
-// resumeBlocks returns, for each instruction of body, the index of the
-// resume point it belongs to — the PC_B half of its PC. The compiler
-// wraps a function's body in one block per resume point and dispatches
-// on PC_B through a br_table, so after that dispatch each block that
-// ends moves execution into the next resume point.
-func resumeBlocks(body []wasmir.Instruction) []int {
-	blocks := make([]int, len(body))
-	depth, block := 0, 0
-	// dispatched turns on at the end that closes the br_table's block;
-	// resumeDepth is then the depth of the innermost resume block.
-	dispatched, sawTable, resumeDepth := false, false, 0
-	for i, in := range body {
-		if in.Kind == wasmir.InstrEnd {
-			depth--
-			switch {
-			case !dispatched && sawTable:
-				dispatched, resumeDepth = true, depth
-			case dispatched && depth == resumeDepth-1:
-				block++
-				resumeDepth--
-			}
-		}
-		blocks[i] = block
-		switch in.Kind {
-		case wasmir.InstrBlock, wasmir.InstrLoop, wasmir.InstrIf:
-			depth++
-		case wasmir.InstrBrTable:
-			sawTable = true
-		}
-	}
-	return blocks
-}
-
-// pcToLine maps the resume point block of this function to a source
-// position; zero values when the module carries no Go line table.
-func (fn *Func) pcToLine(block int) (string, int) {
-	if fn.mod.pcln == nil {
-		return "", 0
-	}
-	file, line, _ := fn.mod.pcln.PCToLine(uint64(wasmPCBase+fn.index)<<16 | uint64(block))
-	if line < 0 {
-		return "", 0
-	}
-	return file, line
-}
-
-// instructionOffsets returns the file offset of every instruction in the
-// body, for looking up DWARF rows. Lengths come from re-encoding each
-// instruction, and the total is checked against the bytes the function
-// actually occupies: a module whose encoding differs from watgo's — a
-// non-canonical integer, an instruction it round-trips differently —
-// would otherwise shift every later offset silently. nil when the module
-// carries no DWARF, the body is unreadable, or the check fails.
-func (fn *Func) instructionOffsets() []uint64 {
-	if fn.mod.lines == nil || fn.body.size == 0 {
-		return nil
-	}
-	body := fn.mod.data[fn.body.start : fn.body.start+fn.body.size]
-	locals := localsSize(body)
-	if locals < 0 {
-		return nil
-	}
-
-	// Encoding a body of just "end" gives the fixed cost of the wrapper
-	// module, so each instruction's length is what it adds to that.
-	empty, ok := encodedSize(fn.fn.Locals, []wasmir.Instruction{{Kind: wasmir.InstrEnd}})
-	if !ok {
-		return nil
-	}
-	offsets := make([]uint64, len(fn.fn.Body))
-	next := fn.body.start + uint64(locals)
-	for i, instruction := range fn.fn.Body {
-		size, ok := encodedSize(fn.fn.Locals, []wasmir.Instruction{instruction, {Kind: wasmir.InstrEnd}})
-		if !ok {
-			return nil
-		}
-		offsets[i] = next
-		next += uint64(size - empty)
-	}
-	if next != fn.body.start+fn.body.size {
-		return nil
-	}
-	return offsets
-}
-
-// encodedSize is the size of a module holding one function with this
-// body; only differences between calls are meaningful.
-func encodedSize(locals []wasmir.ValueType, body []wasmir.Instruction) (int, bool) {
-	encoded, err := watgo.EncodeWASM(&wasmir.Module{
-		Types: []wasmir.TypeDef{{Kind: wasmir.TypeDefKindFunc}},
-		Funcs: []wasmir.Function{{Locals: locals, Body: body}},
-	})
-	if err != nil {
-		return 0, false
-	}
-	return len(encoded), true
-}
-
 func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
-	// watgo prints whole modules only, so the body goes into a synthetic
-	// single-function module under a void signature; the real signature
-	// is not needed to render the instructions.
-	wat, err := watgo.PrintWAT(&wasmir.Module{
-		Types: []wasmir.TypeDef{{Kind: wasmir.TypeDefKindFunc}},
-		Funcs: []wasmir.Function{{Locals: fn.fn.Locals, Body: fn.fn.Body}},
-	})
+	fn.file.mu.Lock()
+	defer fn.file.mu.Unlock()
+	bin := fn.file.bin
+	decoded, err := bin.Disassemble(fn.fn)
 	if err != nil {
 		return nil, err
 	}
 
-	blocks := resumeBlocks(fn.fn.Body)
-	offsets := fn.instructionOffsets()
-	position := func(i int) (string, int) {
-		if offsets != nil {
-			return fn.mod.lines.At(offsets[i])
-		}
-		return fn.pcToLine(blocks[i])
-	}
-
-	code := &disasm.Code{Name: fn.name, Arch: "wasm"}
+	code := &disasm.Code{Name: fn.fn.Name, Arch: bin.Arch}
 	refs := source.Refs{}
-	// The body prints one instruction per line between "(func" and its
-	// closing ")", in Body order; the final InstrEnd becomes the ")".
 	// Block nesting is kept as one space per level: Go's function
 	// prologue opens one block per resume point, so two would run wide.
-	inBody := false
-	for line := range strings.Lines(string(wat)) {
-		text := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(text, "(func"):
-			inBody = true
-			continue
-		case !inBody || text == "" || text == ")":
-			continue
+	level := 0
+	for i, in := range decoded {
+		if in.Op == "end" || in.Op == "else" {
+			level = max(level-1, 0)
 		}
-		i := len(code.Insts)
-		if i >= len(fn.fn.Body) {
-			break
+		inst := disasm.Inst{PC: uint64(i), Text: strings.Repeat(" ", level) + in.Text}
+		switch in.Op {
+		case "block", "loop", "if", "else":
+			level++
 		}
-		if in := fn.fn.Body[i]; in.Kind == wasmir.InstrCall {
-			if idx := int(in.FuncIndex); idx < len(fn.mod.names) {
-				text = "call " + fn.mod.names[idx]
-			}
-		}
-		level := (len(line) - len(strings.TrimLeft(line, " ")) - 4) / 2
-		inst := disasm.Inst{PC: uint64(i), Text: strings.Repeat(" ", max(level, 0)) + text}
-		inst.File, inst.Line = position(i)
+		inst.File, inst.Line = bin.PCToLine(in.Addr)
 		if code.File == "" {
 			// The function's own file: the prologue can precede the first
 			// line-table row, so take it from the first instruction that
 			// has one rather than from the entry.
 			code.File = inst.File
 		}
-		if strings.HasPrefix(text, "call ") {
-			inst.Call = strings.TrimPrefix(text, "call ")
+		if in.Call {
+			if name, base := bin.Lookup(in.Ref); name != "" && base == in.Ref {
+				inst.Call = name
+			}
 		}
 		refs.Add(inst.File, inst.Line, i)
 		code.Insts = append(code.Insts, inst)

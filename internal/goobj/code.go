@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/loov/disasm/objfile"
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/objfile"
 	"loov.dev/lensm/internal/source"
 )
 

@@ -149,13 +149,6 @@ func TestLoadTinyGo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mod := file.funcs[0].(*Func).mod
-	if mod.pcln != nil {
-		t.Error("TinyGo module should have no Go line table")
-	}
-	if mod.lines == nil {
-		t.Fatal("no DWARF line table")
-	}
 	for _, fn := range file.Funcs() {
 		if fn.Name() != "main.sumInts" {
 			continue
@@ -200,28 +193,6 @@ func TestLoadTinyGo(t *testing.T) {
 	t.Fatal("main.sumInts not found")
 }
 
-// TestInstructionOffsetsVerified checks the self-check in
-// instructionOffsets: every function's re-encoded instruction lengths
-// must add up to the bytes it occupies, or it reports no offsets.
-func TestInstructionOffsetsVerified(t *testing.T) {
-	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "example.wasm"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	missing := 0
-	for _, f := range file.Funcs() {
-		fn := f.(*Func)
-		if offsets := fn.instructionOffsets(); offsets == nil {
-			missing++
-		} else if len(offsets) != len(fn.fn.Body) {
-			t.Fatalf("%s: %d offsets for %d instructions", fn.Name(), len(offsets), len(fn.fn.Body))
-		}
-	}
-	if missing > 0 {
-		t.Errorf("%d of %d functions failed the encoding check", missing, len(file.Funcs()))
-	}
-}
-
 // TestLoadComponent checks TinyGo's wasip2 output: a component, whose
 // code lives in the core modules nested inside it.
 func TestLoadComponent(t *testing.T) {
@@ -229,16 +200,11 @@ func TestLoadComponent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	modules := map[*module]bool{}
 	var sumInts disasm.Func
 	for _, fn := range file.Funcs() {
-		modules[fn.(*Func).mod] = true
 		if fn.Name() == "main/main.sumInts" {
 			sumInts = fn
 		}
-	}
-	if len(modules) < 2 {
-		t.Errorf("functions come from %d core modules, want the program and its adapters", len(modules))
 	}
 	if sumInts == nil {
 		t.Fatal("main/main.sumInts not found; names should be qualified by module")
