@@ -99,7 +99,7 @@ func Load(files Files, refs Refs, symbolFile string, context int) []disasm.Sourc
 	return sources
 }
 
-var rxEnvVariable = regexp.MustCompile(`\$[a-zA-Z_]+[a-zA-Z0-9_]+\b`)
+var rxEnvVariable = regexp.MustCompile(`\$[a-zA-Z_][a-zA-Z0-9_]*`)
 
 func replaceEnvironmentVariables(s string) string {
 	return rxEnvVariable.ReplaceAllStringFunc(s, func(env string) string {

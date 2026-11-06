@@ -72,3 +72,18 @@ func TestLoad_ClampsRangeToFile(t *testing.T) {
 		t.Fatalf("range %d-%d holds %d lines", block.From, block.To, len(block.Lines))
 	}
 }
+
+func TestReplaceEnvironmentVariables(t *testing.T) {
+	t.Setenv("X", "/x")
+	t.Setenv("GOROOT_TEST", "/goroot")
+	for in, want := range map[string]string{
+		"$X/a.go":                "/x/a.go",
+		"$GOROOT_TEST/src/os.go": "/goroot/src/os.go",
+		"$UNSET_LENSM/a.go":      "$UNSET_LENSM/a.go",
+		"/plain/a.go":            "/plain/a.go",
+	} {
+		if got := replaceEnvironmentVariables(in); got != want {
+			t.Errorf("replaceEnvironmentVariables(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
