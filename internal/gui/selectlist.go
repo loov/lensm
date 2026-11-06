@@ -131,7 +131,7 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 			// TODO: make this independent of fixed item height
 			clientClickY := list.Position.First*itemHeight + list.Position.Offset + int(pointerPosition.Y)
 			target := clientClickY / itemHeight
-			if 0 <= target && target <= length {
+			if 0 <= target && target < length {
 				if pointerClicked && list.Selected != target {
 					list.Selected = target
 				}
