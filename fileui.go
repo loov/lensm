@@ -299,7 +299,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	ui.Funcs.SetItems(file.Funcs())
 
 	if activeName != "" {
-		ui.selectFuncByName(activeName)
+		ui.Funcs.Select(activeName)
 	}
 	for _, name := range openNames {
 		fn := ui.findFunc(name)
@@ -309,7 +309,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		tab := ui.appendCodeTab(fn)
 		if name == activeName {
 			ui.ActiveTab = len(ui.CodeTabs) - 1
-			ui.selectFuncByName(tab.Name)
+			ui.Funcs.Select(tab.Name)
 		}
 	}
 
@@ -323,7 +323,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	}
 	if ui.ActiveTab < 0 || ui.ActiveTab >= len(ui.CodeTabs) {
 		ui.ActiveTab = 0
-		ui.selectFuncByName(ui.CodeTabs[ui.ActiveTab].Name)
+		ui.Funcs.Select(ui.CodeTabs[ui.ActiveTab].Name)
 	}
 	ui.afterFileLoaded()
 }
@@ -336,33 +336,7 @@ func (ui *FileUI) findFunc(name string) disasm.Func {
 	if ui.File == nil {
 		return nil
 	}
-	for _, fn := range ui.File.Funcs() {
-		if fn.Name() == name {
-			return fn
-		}
-	}
-	return nil
-}
-
-func (ui *FileUI) selectFuncByName(name string) {
-	ui.Funcs.Selected = name
-	ui.Funcs.List.Selected = -1
-	var zero disasm.Func
-	ui.Funcs.SelectedItem = zero
-
-	for i, fn := range ui.Funcs.Filtered {
-		if fn.Name() == name {
-			ui.Funcs.List.Selected = i
-			ui.Funcs.SelectedItem = fn
-			return
-		}
-	}
-	for _, fn := range ui.Funcs.All {
-		if fn.Name() == name {
-			ui.Funcs.SelectedItem = fn
-			return
-		}
-	}
+	return disasm.FindFunc(ui.File, name)
 }
 
 func (ui *FileUI) Layout(gtx layout.Context) {

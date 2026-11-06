@@ -8,6 +8,18 @@ type File interface {
 	Funcs() []Func
 }
 
+// FindFunc returns the first function in file called name, or nil.
+// Names need not be unique, a Go ABI wrapper can share its function's,
+// so tabs, history and comments that refer to a name get the first.
+func FindFunc(file File, name string) Func {
+	for _, fn := range file.Funcs() {
+		if fn.Name() == name {
+			return fn
+		}
+	}
+	return nil
+}
+
 // Func represents a function or method that can be independently rendered.
 type Func interface {
 	// Name is the name of the func.

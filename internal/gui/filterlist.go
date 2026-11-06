@@ -52,6 +52,28 @@ func (ui *FilterList[T]) SelectIndex(index int) {
 	ui.SelectedItem = ui.Filtered[index]
 }
 
+// Select selects the item called name. It stays selected while the
+// filter hides it, but has no row in the list then.
+func (ui *FilterList[T]) Select(name string) {
+	ui.Selected = name
+	ui.List.Selected = -1
+	var zero T
+	ui.SelectedItem = zero
+	for i, item := range ui.Filtered {
+		if item.Name() == name {
+			ui.List.Selected = i
+			ui.SelectedItem = item
+			return
+		}
+	}
+	for _, item := range ui.All {
+		if item.Name() == name {
+			ui.SelectedItem = item
+			return
+		}
+	}
+}
+
 // SetItems updates the full list.
 func (ui *FilterList[T]) SetItems(all []T) {
 	ui.All = all
@@ -73,19 +95,7 @@ func (ui *FilterList[T]) SetFilter(filter string) {
 
 // updateFiltered updates the filtered list from the unfiltered content.
 func (ui *FilterList[T]) updateFiltered() {
-	defer func() {
-		ui.List.Selected = -1
-		var zero T
-		ui.SelectedItem = zero
-		for i, item := range ui.Filtered {
-			if item.Name() == ui.Selected {
-				ui.List.Selected = i
-				ui.SelectedItem = item
-				// TODO, maybe scroll into view?
-				break
-			}
-		}
-	}()
+	defer ui.Select(ui.Selected)
 
 	filter := ui.Filter.Text()
 	ui.FilterError = ""

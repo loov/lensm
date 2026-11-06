@@ -37,17 +37,8 @@ func (s *Session) Close() error { return s.File.Close() }
 
 func (s *Session) Funcs() []disasm.Func { return s.File.Funcs() }
 
-func (s *Session) FindFunc(name string) disasm.Func {
-	for _, fn := range s.Funcs() {
-		if fn.Name() == name {
-			return fn
-		}
-	}
-	return nil
-}
-
 func (s *Session) LoadCode(name string, context int) (*disasm.Code, error) {
-	fn := s.FindFunc(name)
+	fn := disasm.FindFunc(s.File, name)
 	if fn == nil {
 		return nil, fmt.Errorf("function %q not found", name)
 	}
