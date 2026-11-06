@@ -14,18 +14,17 @@ type Session struct {
 	Comments *comments.Store
 }
 
-func NewSessionWithComments(path string, commentsPath string, store *comments.Store) (*Session, error) {
+// OpenSession loads the binary at path with the comments sidecar at
+// commentsPath, or the default one beside the binary.
+func OpenSession(path string, commentsPath string) (*Session, error) {
 	file, err := goobj.Load(path)
 	if err != nil {
 		return nil, err
 	}
-	if store == nil {
-		var err error
-		store, err = comments.Open(commentsPath, path)
-		if err != nil {
-			_ = file.Close()
-			return nil, err
-		}
+	store, err := comments.Open(commentsPath, path)
+	if err != nil {
+		_ = file.Close()
+		return nil, err
 	}
 	return &Session{
 		Path:     comments.CleanPath(path),

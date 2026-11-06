@@ -2,48 +2,45 @@ package mcp
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"loov.dev/lensm/internal/disasm"
 )
 
-func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
-	server := &AppServer{
-		session: &Session{Path: "old", File: emptyFile{}},
+// TestAppServerSetFileClosesReplacedFile checks that SetFile serves the
+// new file and closes the old one once no request holds it.
+func TestAppServerSetFileClosesReplacedFile(t *testing.T) {
+	server := &AppServer{}
+	old := &closeCounter{}
+	server.SetFile("old", old, nil)
+
+	session, release := server.acquireSession()
+	server.SetFile("new", emptyFile{}, nil)
+	if session.File != old {
+		t.Fatal("request lost its session")
+	}
+	time.Sleep(10 * time.Millisecond)
+	if old.closed.Load() != 0 {
+		t.Fatal("old file closed while a request used it")
+	}
+	release()
+	deadline := time.Now().Add(2 * time.Second)
+	for old.closed.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("old file never closed")
+		}
+		time.Sleep(time.Millisecond)
 	}
 
-	server.SetPath(filepath.Join(t.TempDir(), "missing-binary"), nil)
-
-	server.mu.Lock()
-	if server.session != nil {
-		t.Fatal("old MCP session was not cleared immediately")
-	}
-	server.mu.Unlock()
-
-	deadline := time.After(2 * time.Second)
-	tick := time.NewTicker(10 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		server.mu.Lock()
-		loadErr := server.loadError
-		session := server.session
-		server.mu.Unlock()
-		if loadErr != nil {
-			if session != nil {
-				t.Fatal("MCP session was set after load failure")
-			}
-			return
-		}
-		select {
-		case <-deadline:
-			t.Fatal("timed out waiting for MCP load failure")
-		case <-tick.C:
-		}
+	server.SetFile("", nil, nil)
+	if session, release := server.acquireSession(); session != nil {
+		t.Fatal("SetFile(nil) kept a session")
+	} else {
+		release()
 	}
 }
 
@@ -92,8 +89,8 @@ func TestMCPHandleHTTPParseErrorHasNullID(t *testing.T) {
 	}
 }
 
-func TestMCPToolCallReportsLoadError(t *testing.T) {
-	server := &mcpServer{loadErr: errors.New("load failed")}
+func TestMCPToolCallWithoutFile(t *testing.T) {
+	server := &mcpServer{}
 	result, rpcErr := server.handleToolCall(json.RawMessage(`{"name":"list_functions"}`))
 	if rpcErr != nil {
 		t.Fatal(rpcErr.Message)
@@ -105,9 +102,6 @@ func TestMCPToolCallReportsLoadError(t *testing.T) {
 	if !toolResult.IsError {
 		t.Fatal("tool result is not marked as error")
 	}
-	if len(toolResult.Content) != 1 || !strings.Contains(toolResult.Content[0].Text, "load failed") {
-		t.Fatalf("tool error content = %#v", toolResult.Content)
-	}
 }
 
 // emptyFile is a disasm.File with no functions, for tests that need a
@@ -116,3 +110,13 @@ type emptyFile struct{}
 
 func (emptyFile) Close() error         { return nil }
 func (emptyFile) Funcs() []disasm.Func { return nil }
+
+type closeCounter struct {
+	emptyFile
+	closed atomic.Int32
+}
+
+func (f *closeCounter) Close() error {
+	f.closed.Add(1)
+	return nil
+}

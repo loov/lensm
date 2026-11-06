@@ -14,24 +14,22 @@ import (
 	"time"
 
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/disasm"
 )
 
 type AppServer struct {
-	httpServer   *http.Server
-	url          string
-	commentsPath string
+	httpServer *http.Server
+	url        string
 
 	// mu guards the fields below.
-	mu         sync.Mutex
-	session    *Session
-	loadError  error
-	generation uint64
+	mu      sync.Mutex
+	session *Session
 	// active counts in-flight requests using session; a replaced
 	// session is closed only once they have finished.
 	active *sync.WaitGroup
 }
 
-func StartAppServer(commentsPath string) (*AppServer, error) {
+func StartAppServer() (*AppServer, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:7077")
 	if err != nil {
 		listener, err = net.Listen("tcp", "127.0.0.1:0")
@@ -41,9 +39,8 @@ func StartAppServer(commentsPath string) (*AppServer, error) {
 	}
 
 	server := &AppServer{
-		url:          "http://" + listener.Addr().String() + "/mcp",
-		commentsPath: commentsPath,
-		active:       &sync.WaitGroup{},
+		url:    "http://" + listener.Addr().String() + "/mcp",
+		active: &sync.WaitGroup{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", server.handleHTTP)
@@ -71,34 +68,25 @@ func (server *AppServer) URL() string {
 	return server.url
 }
 
-func (server *AppServer) SetPath(path string, store *comments.Store) {
+// SetFile serves file, the binary at path, with comments in store. The
+// server takes over the caller's reference to file and closes it once
+// it is replaced and no request uses it. A nil file stops serving.
+// SetFile doesn't block on requests in flight.
+func (server *AppServer) SetFile(path string, file disasm.File, store *comments.Store) {
 	if server == nil {
-		return
-	}
-	path = comments.CleanPath(path)
-
-	server.mu.Lock()
-	server.generation++
-	generation := server.generation
-	commentsPath := server.commentsPath
-	old, oldActive := server.swapSessionLocked(nil, nil)
-	server.mu.Unlock()
-	// SetPath runs on the UI event loop: don't block on in-flight requests.
-	closeSessionWhenIdle(old, oldActive)
-
-	if path == "" {
-		return
-	}
-
-	go func() {
-		session, err := NewSessionWithComments(path, commentsPath, store)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "unable to load MCP session for %q: %v\n", path, err)
-			server.replaceSession(generation, nil, err)
-			return
+		if file != nil {
+			_ = file.Close()
 		}
-		server.replaceSession(generation, session, nil)
-	}()
+		return
+	}
+	var session *Session
+	if file != nil {
+		session = &Session{Path: comments.CleanPath(path), File: file, Comments: store}
+	}
+	server.mu.Lock()
+	old, oldActive := server.swapSessionLocked(session)
+	server.mu.Unlock()
+	closeSessionWhenIdle(old, oldActive)
 }
 
 func (server *AppServer) Close() error {
@@ -106,8 +94,7 @@ func (server *AppServer) Close() error {
 		return nil
 	}
 	server.mu.Lock()
-	server.generation++
-	old, oldActive := server.swapSessionLocked(nil, nil)
+	old, oldActive := server.swapSessionLocked(nil)
 	server.mu.Unlock()
 	if old != nil {
 		if oldActive != nil {
@@ -121,27 +108,12 @@ func (server *AppServer) Close() error {
 	return server.httpServer.Close()
 }
 
-func (server *AppServer) replaceSession(generation uint64, session *Session, loadErr error) {
-	server.mu.Lock()
-	if generation != server.generation {
-		server.mu.Unlock()
-		if session != nil {
-			_ = session.Close()
-		}
-		return
-	}
-	old, oldActive := server.swapSessionLocked(session, loadErr)
-	server.mu.Unlock()
-	closeSessionWhenIdle(old, oldActive)
-}
-
-// swapSessionLocked installs session (or a load error) and returns the
+// swapSessionLocked installs session and returns the
 // previous session with the WaitGroup of requests still using it, for
 // the caller to close once idle. Caller holds server.mu.
-func (server *AppServer) swapSessionLocked(session *Session, loadErr error) (old *Session, oldActive *sync.WaitGroup) {
+func (server *AppServer) swapSessionLocked(session *Session) (old *Session, oldActive *sync.WaitGroup) {
 	old, oldActive = server.session, server.active
 	server.session = session
-	server.loadError = loadErr
 	server.active = &sync.WaitGroup{}
 	return old, oldActive
 }
@@ -227,15 +199,15 @@ func (server *AppServer) handleHTTPPost(w http.ResponseWriter, req *http.Request
 }
 
 func (server *AppServer) handleHTTPMessage(msg rpcMessage) (rpcMessage, bool) {
-	session, loadErr, release := server.acquireSession()
+	session, release := server.acquireSession()
 	defer release()
-	return (&mcpServer{session: session, loadErr: loadErr}).handle(msg)
+	return (&mcpServer{session: session}).handle(msg)
 }
 
 // acquireSession snapshots the current session and keeps it open until
 // release is called. The server lock is not held while a request is
-// handled, so concurrent requests and SetPath never wait on a handler.
-func (server *AppServer) acquireSession() (session *Session, loadErr error, release func()) {
+// handled, so concurrent requests and SetFile never wait on a handler.
+func (server *AppServer) acquireSession() (session *Session, release func()) {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	if server.active == nil {
@@ -243,7 +215,7 @@ func (server *AppServer) acquireSession() (session *Session, loadErr error, rele
 	}
 	active := server.active
 	active.Add(1)
-	return server.session, server.loadError, active.Done
+	return server.session, active.Done
 }
 
 // isLoopbackHost reports whether a Host header (optionally host:port)

@@ -52,7 +52,8 @@ type FileUI struct {
 	LoadError error
 
 	// Currently loaded executable.
-	File  disasm.File
+	// File is shared with the MCP server, which holds its own reference.
+	File  *disasm.Shared
 	Funcs *gui.FilterList[disasm.Func]
 
 	// Active code view.
@@ -200,10 +201,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 				continue
 			}
 			if result.err != nil {
+				// The previous file, if any, stays open for the GUI and
+				// MCP alike until a reload succeeds.
 				ui.LoadError = result.err
-				if ui.MCP != nil {
-					ui.MCP.SetPath("", ui.Comments)
-				}
 				w.Invalidate()
 				continue
 			}
@@ -290,7 +290,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		}
 	}
 
-	ui.File = file
+	ui.File = disasm.Share(file)
 	ui.LoadError = nil
 	ui.loadCommentsForPath(ui.Config.Path)
 	ui.CodeTabs = nil
@@ -695,7 +695,7 @@ func (ui *FileUI) requestLoad(path string) {
 func (ui *FileUI) afterFileLoaded() {
 	ui.saveSessionState()
 	if ui.MCP != nil {
-		ui.MCP.SetPath(ui.Config.Path, ui.Comments)
+		ui.MCP.SetFile(ui.Config.Path, ui.File.Acquire(), ui.Comments)
 	}
 }
 
@@ -762,7 +762,7 @@ func (ui *FileUI) startMCP() {
 	if ui.MCP != nil {
 		return
 	}
-	server, err := mcp.StartAppServer(ui.Config.CommentsPath)
+	server, err := mcp.StartAppServer()
 	if err != nil {
 		ui.LoadError = fmt.Errorf("unable to start MCP server: %w", err)
 		ui.invalidateMain()
@@ -770,7 +770,7 @@ func (ui *FileUI) startMCP() {
 	}
 	ui.MCP = server
 	if ui.File != nil {
-		ui.MCP.SetPath(ui.Config.Path, ui.Comments)
+		ui.MCP.SetFile(ui.Config.Path, ui.File.Acquire(), ui.Comments)
 	}
 	fmt.Fprintf(os.Stderr, "lensm MCP server listening at %s\n", server.URL())
 	ui.invalidateMain()

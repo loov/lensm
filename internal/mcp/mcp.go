@@ -59,7 +59,6 @@ type mcpTextContent struct {
 
 type mcpServer struct {
 	session *Session
-	loadErr error
 	out     *bufio.Writer
 }
 
@@ -75,7 +74,7 @@ func RunCommand(args []string) int {
 		return 2
 	}
 
-	session, err := NewSessionWithComments(fs.Arg(0), *commentsPath, nil)
+	session, err := OpenSession(fs.Arg(0), *commentsPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -189,9 +188,6 @@ func (server *mcpServer) handleToolCall(params json.RawMessage) (any, *rpcError)
 		req.Arguments = []byte("{}")
 	}
 	if server.session == nil {
-		if server.loadErr != nil {
-			return toolError(server.loadErr), nil
-		}
 		return toolError(errors.New("no executable loaded")), nil
 	}
 
