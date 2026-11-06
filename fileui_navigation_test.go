@@ -31,7 +31,7 @@ func TestFileUINavigationBackAndForward(t *testing.T) {
 	ui := &FileUI{
 		Theme:     theme,
 		File:      disasm.Share(navigationTestFile{funcs: functions}),
-		Funcs:     gui.NewFilterList[disasm.Func](theme),
+		Funcs:     gui.NewFilterList[disasm.Func](),
 		ActiveTab: -1,
 	}
 	ui.Navigation.Reset()
@@ -64,7 +64,7 @@ func TestFileUIPreviewTab(t *testing.T) {
 	ui := &FileUI{
 		Theme:     theme,
 		File:      disasm.Share(navigationTestFile{funcs: functions}),
-		Funcs:     gui.NewFilterList[disasm.Func](theme),
+		Funcs:     gui.NewFilterList[disasm.Func](),
 		ActiveTab: -1,
 	}
 	ui.Navigation.Reset()
@@ -108,7 +108,7 @@ func TestFileUIReloadKeepsView(t *testing.T) {
 	theme := gui.NewTheme(material.NewTheme(), false)
 	ui := &FileUI{
 		Theme:     theme,
-		Funcs:     gui.NewFilterList[disasm.Func](theme),
+		Funcs:     gui.NewFilterList[disasm.Func](),
 		ActiveTab: -1,
 	}
 	ui.Navigation.Reset()

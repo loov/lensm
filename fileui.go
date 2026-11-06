@@ -120,7 +120,7 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.Theme = gui.NewTheme(theme, settings.Dark)
 	ui.SyntaxStyle.Value = settings.SyntaxStyle
 	ui.Dark.Value = settings.Dark
-	ui.Funcs = gui.NewFilterList[disasm.Func](ui.Theme)
+	ui.Funcs = gui.NewFilterList[disasm.Func]()
 	ui.ActiveTab = -1
 	ui.Navigation.Reset()
 	ui.Tabs.List.Axis = layout.Horizontal

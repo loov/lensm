@@ -33,8 +33,8 @@ type FilterList[T FilterListItem] struct {
 	List SelectList
 }
 
-// NewFilterList creates a new list with the specified theme.
-func NewFilterList[T FilterListItem](theme *Theme) *FilterList[T] {
+// NewFilterList creates an empty list.
+func NewFilterList[T FilterListItem]() *FilterList[T] {
 	ui := &FilterList[T]{}
 	ui.Filter.SingleLine = true
 	ui.Filter.Submit = true
