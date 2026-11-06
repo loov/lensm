@@ -20,12 +20,19 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, arch := range []string{"amd64", "arm64"} {
-		t.Run(arch, func(t *testing.T) {
+	// ELF, PE and Mach-O.
+	for _, target := range []struct{ os, arch string }{
+		{"linux", "amd64"},
+		{"linux", "arm64"},
+		{"windows", "amd64"},
+		{"darwin", "arm64"},
+	} {
+		arch := target.arch
+		t.Run(target.os+"/"+arch, func(t *testing.T) {
 			bin := filepath.Join(t.TempDir(), "testprog_"+arch+".exe")
 			cmd := exec.Command("go", "build", "-o", bin, "./testdata/testprog")
 			cmd.Dir = root
-			cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+arch, "CGO_ENABLED=0")
+			cmd.Env = append(os.Environ(), "GOOS="+target.os, "GOARCH="+arch, "CGO_ENABLED=0")
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("go build: %v\n%s", err, out)
 			}
