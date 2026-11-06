@@ -14,15 +14,18 @@ import (
 )
 
 type AppSettings struct {
-	SyntaxStyle   string   `json:"syntax_style"`
-	Dark          bool     `json:"dark,omitempty"`
-	ShowNativeAsm bool     `json:"show_native_asm"`
-	ShowAsmHelp   bool     `json:"show_asm_help"`
-	TextSize      int      `json:"text_size,omitempty"`
-	SidebarRatio  float32  `json:"sidebar_ratio,omitempty"`
-	LastPath      string   `json:"last_path,omitempty"`
-	OpenTabs      []string `json:"open_tabs,omitempty"`
-	ActiveTab     string   `json:"active_tab,omitempty"`
+	SyntaxStyle   string `json:"syntax_style"`
+	Dark          bool   `json:"dark,omitempty"`
+	ShowNativeAsm bool   `json:"show_native_asm"`
+	ShowAsmHelp   bool   `json:"show_asm_help"`
+	// HoverLinksOnly draws only the hovered line's source-to-assembly
+	// link instead of all of them.
+	HoverLinksOnly bool     `json:"hover_links_only,omitempty"`
+	TextSize       int      `json:"text_size,omitempty"`
+	SidebarRatio   float32  `json:"sidebar_ratio,omitempty"`
+	LastPath       string   `json:"last_path,omitempty"`
+	OpenTabs       []string `json:"open_tabs,omitempty"`
+	ActiveTab      string   `json:"active_tab,omitempty"`
 }
 
 func DefaultAppSettings() AppSettings {

@@ -80,6 +80,10 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 						return check.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						check := material.CheckBox(ui.Theme.Theme, &ui.HoverLinksOnly, "Link only the hovered line")
+						return check.Layout(gtx)
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return ui.layoutSyntaxSelector(gtx, colors)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -162,6 +166,9 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 	for ui.ShowAsmHelp.Update(gtx) {
 		changedVisual = true
 	}
+	for ui.HoverLinksOnly.Update(gtx) {
+		changedVisual = true
+	}
 	for ui.SyntaxStyle.Update(gtx) {
 		ui.SyntaxStyle.Value = syntax.NormalizeStyle(ui.SyntaxStyle.Value)
 		changedVisual = true
@@ -227,6 +234,7 @@ func (ui *FileUI) saveVisualSettings() {
 	settings.Dark = ui.Dark.Value
 	settings.ShowNativeAsm = ui.ShowNativeAsm.Value
 	settings.ShowAsmHelp = ui.ShowAsmHelp.Value
+	settings.HoverLinksOnly = ui.HoverLinksOnly.Value
 	settings.SyntaxStyle = syntax.NormalizeStyle(ui.SyntaxStyle.Value)
 	ui.saveSettings(settings)
 }

@@ -55,7 +55,7 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 			}
 			minY, maxY = min(minY, from), max(maxY, to)
 		}
-		if maxY < 0 || minY > viewHeight {
+		if maxY < 0 || minY > viewHeight || ui.HoverLinksOnly && !highlight {
 			continue
 		}
 

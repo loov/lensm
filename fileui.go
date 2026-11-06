@@ -71,6 +71,7 @@ type FileUI struct {
 	SyntaxStyle    widget.Enum
 	ShowNativeAsm  widget.Bool
 	ShowAsmHelp    widget.Bool
+	HoverLinksOnly widget.Bool
 	Comment        codeview.CommentEditor
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
@@ -132,6 +133,7 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.Tabs.List.Axis = layout.Horizontal
 	ui.ShowNativeAsm.Value = settings.ShowNativeAsm
 	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
+	ui.HoverLinksOnly.Value = settings.HoverLinksOnly
 	ui.split.Axis = layout.Horizontal
 	ui.split.Ratio = settings.SidebarRatio
 	ui.Comment.SingleLine = true
@@ -707,11 +709,12 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								SetComment:    ui.setBufferedComment,
 								CommentEditor: &ui.Comment,
 
-								Theme:      ui.Theme,
-								Syntax:     syntax.PaletteFor(ui.Settings.SyntaxStyle, codeview.SyntaxColors(colors)),
-								ShowNative: ui.ShowNativeAsm.Value,
-								ShowHelp:   ui.ShowAsmHelp.Value,
-								TextHeight: ui.Theme.TextSize,
+								Theme:          ui.Theme,
+								Syntax:         syntax.PaletteFor(ui.Settings.SyntaxStyle, codeview.SyntaxColors(colors)),
+								ShowNative:     ui.ShowNativeAsm.Value,
+								ShowHelp:       ui.ShowAsmHelp.Value,
+								HoverLinksOnly: ui.HoverLinksOnly.Value,
+								TextHeight:     ui.Theme.TextSize,
 							}.Layout(gtx)
 						}),
 					)

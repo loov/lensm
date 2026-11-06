@@ -143,7 +143,10 @@ type Style struct {
 
 	ShowNative bool
 	ShowHelp   bool
-	TextHeight unit.Sp
+	// HoverLinksOnly draws only the hovered line's band between source
+	// and assembly.
+	HoverLinksOnly bool
+	TextHeight     unit.Sp
 }
 
 func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
