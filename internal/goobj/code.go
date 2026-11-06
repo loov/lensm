@@ -18,15 +18,17 @@ var rxCallOrJump = regexp.MustCompile(`^(?:CALL|JMP)\s+(.+?)\(SB\)`)
 // entryFile is the file a function belongs to: its entry's, or the first
 // position inside it that has one. A line table need not have a row at
 // the entry itself, and the file decides which source block sorts first.
-func entryFile(bin *objfile.Binary, sym *Func) string {
+func entryFile(bin *objfile.Binary, sym *Func, decoded []objfile.Inst) string {
 	// What the debug info says the function was written in, which beats
 	// guessing from positions: with inlining the first instruction can
 	// belong to a callee in another file.
 	if file := bin.FuncFile(sym.fn.Addr); file != "" {
 		return file
 	}
-	for pc := sym.fn.Addr; pc < sym.fn.Addr+sym.fn.Size; pc++ {
-		if file, _ := bin.PCToLine(pc); file != "" {
+	// Walk the instructions, not every byte of Size: the size comes from
+	// the symbol table and a corrupt one can be near 2^64.
+	for _, in := range decoded {
+		if file, _ := bin.PCToLine(in.Addr); file != "" {
 			return file
 		}
 	}
@@ -37,14 +39,14 @@ func entryFile(bin *objfile.Binary, sym *Func) string {
 func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.Code, error) {
 	needRefPCs := map[uint64]struct{}{}
 
-	code := &disasm.Code{
-		Name: sym.Name(),
-		File: entryFile(bin, sym),
-		Arch: bin.Arch,
-	}
 	decoded, err := bin.Disassemble(sym.fn)
 	if err != nil {
 		return nil, err
+	}
+	code := &disasm.Code{
+		Name: sym.Name(),
+		File: entryFile(bin, sym, decoded),
+		Arch: bin.Arch,
 	}
 	var instructions []disasm.Inst
 	for _, in := range decoded {
