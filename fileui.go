@@ -639,6 +639,11 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					if ui.LoadError != nil && ui.File == nil {
 						return layout.Dimensions{}
 					}
+					if ui.File == nil && ui.Config.Path == "" {
+						txt := ui.Theme.Muted("Choose a binary to disassemble: a Go, C, C++, Rust or TinyGo executable, an object file or a wasm module. "+
+							"It can also be given on the command line, lensm <path>.", 1)
+						return layout.UniformInset(12).Layout(gtx, txt.Layout)
+					}
 					if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
 						txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)
 						return layout.UniformInset(6).Layout(gtx, txt.Layout)
