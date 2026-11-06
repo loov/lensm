@@ -29,6 +29,9 @@ type File struct {
 	cache map[cacheKey]cacheEntry
 }
 
+// maxCached bounds the code cache, which holds source lines as well.
+const maxCached = 256
+
 // cacheKey includes the options: MCP callers choose the source context
 // per call, and a cache keyed by function alone would silently serve
 // whichever context happened to load first.
@@ -108,6 +111,13 @@ func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 	entry, ok := file.cache[key]
 	if !ok {
 		entry.code, entry.err = file.disassemble(fn, opts)
+		// Clear rather than evict one by one: MCP callers can ask for
+		// every function at every context, and the cache only has to
+		// carry the GUI's back-and-forth browsing. Use an LRU if
+		// clearing ever shows up as reloads.
+		if len(file.cache) >= maxCached {
+			clear(file.cache)
+		}
 		file.cache[key] = entry
 	}
 	return entry.code, entry.err
