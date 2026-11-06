@@ -282,3 +282,43 @@ func TestUnreadableFileIsNotOverwritten(t *testing.T) {
 		})
 	}
 }
+
+// TestSetBufferedWritesOnFlush checks that buffered edits reach the file
+// only on Flush, and that a buffered delete doesn't come back from disk.
+func TestSetBufferedWritesOnFlush(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "comments.json")
+	store, err := Open(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	coord := Coord{Function: "main.main", View: ViewGoAsm, PC: 0x10}
+	if err := store.SetBuffered(coord, "note"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("SetBuffered wrote the file: %v", err)
+	}
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, "/tmp/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.Get(coord); got != "note" {
+		t.Fatalf("after Flush, Get = %q", got)
+	}
+
+	if err := store.SetBuffered(coord, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Get(coord); got != "" {
+		t.Fatalf("deleted comment came back as %q", got)
+	}
+	if reopened, _ := Open(path, "/tmp/app"); reopened.Get(coord) != "" {
+		t.Fatal("deleted comment still on disk")
+	}
+}
