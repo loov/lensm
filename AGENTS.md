@@ -5,19 +5,21 @@
 Follow the Go project style.
 
 ```
-graph: draw merge edges with the parent's colour
+goobj: link tail calls to their target
 
-The edge took the child's colour, so two branches merging into one
-looked like a single line. gitk colours by parent, do the same.
+A JMP to another function's entry got no link, so clicking a tail
+call in Go, C or Rust code did nothing. Treat a reference to a
+function's start as a call whatever the instruction.
 
 Fixes #12
 ```
 
-- First line is `area: what changed`. The area is the file or part of the
-  app the change touches (`graph`, `diff`, `find`, `ui`, `core`). Use
-  `all:` for repo-wide changes.
+- First line is `area: what changed`. The area is the package or part of
+  the app the change touches (`goobj`, `codeview`, `gui`, `mcp`,
+  `comments`, `source`, `asmref`, `ui` for the root package's window
+  code). Use `all:` for repo-wide changes.
 - The summary after the colon is lowercase and has no trailing period. It
-  completes the sentence "This change modifies gr to ...". Keep the whole
+  completes the sentence "This change modifies lensm to ...". Keep the whole
   line under about 70 characters.
 - Leave a blank line, then the body. Wrap it at 72 columns.
 - The body explains why: what was wrong, what the change does about it,
@@ -57,3 +59,11 @@ it says nothing about this one. Rewrite or cut it.
 
 Commit each change as soon as it is implemented and builds, one commit
 per logical change.
+
+## Testing
+
+Run `go test ./...`. The C, C++ and Rust tests in
+`internal/goobj/native_test.go` build programs with `cc`, `c++` and
+`rustc`. They skip when a compiler is missing, except in CI (`CI` set),
+where a missing compiler fails them. `go test -short ./...` skips every
+test that builds a program.
