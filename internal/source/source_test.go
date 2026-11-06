@@ -59,3 +59,16 @@ func TestLoad_IgnoresLineZero(t *testing.T) {
 		t.Fatalf("want one block around line 8, got %+v", sources)
 	}
 }
+
+func TestLoad_ClampsRangeToFile(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "a.go")
+	if err := os.WriteFile(src, []byte("1\n2\n3"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refs := Refs{}
+	refs.Add(src, 3, 0)
+	block := Load(refs, src, 2)[0].Blocks[0]
+	if block.To != block.From+len(block.Lines) {
+		t.Fatalf("range %d-%d holds %d lines", block.From, block.To, len(block.Lines))
+	}
+}

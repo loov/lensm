@@ -131,7 +131,7 @@ func loadLines(needed map[string]*disasm.LineSet, symbolFile string, context int
 			}
 
 			source.Blocks = append(source.Blocks, disasm.SourceBlock{
-				LineRange: r,
+				LineRange: disasm.LineRange{From: r.From, To: r.From + len(lineBlock)},
 				Lines:     lineBlock,
 			})
 		}
