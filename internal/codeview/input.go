@@ -27,21 +27,18 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 	lineHeight := c.lineHeight
 	event.Op(gtx.Ops, ui.UI)
 	selectionAt := func(position f32.Point) (View, int, bool) {
-		if c.asm.Contains(position.X) {
+		inGo := c.asm.Contains(position.X)
+		if inGo || ui.ShowNative && c.native.Contains(position.X) {
+			view := ViewNativeAsm
+			if inGo {
+				view = ViewGoAsm
+			}
 			relative := position.Y - ui.asm.Offset
 			if relative < 0 {
 				return ViewNone, -1, false
 			}
 			line := int(relative) / lineHeight
-			return ViewGoAsm, line, 0 <= line && line < len(ui.Code.Insts)
-		}
-		if ui.ShowNative && c.native.Contains(position.X) {
-			relative := position.Y - ui.asm.Offset
-			if relative < 0 {
-				return ViewNone, -1, false
-			}
-			line := int(relative) / lineHeight
-			return ViewNativeAsm, line, 0 <= line && line < len(ui.Code.Insts)
+			return view, line, line < len(ui.Code.Insts)
 		}
 		if c.source.Contains(position.X) {
 			line := sourceRowAtY(ui.Code, ui.src.Offset, lineHeight, position.Y)
