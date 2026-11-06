@@ -244,3 +244,41 @@ func TestCommentStoreRollsBackFailedSave(t *testing.T) {
 		t.Fatalf("comment after failed delete = %q, want old", got)
 	}
 }
+
+// TestUnreadableFileIsNotOverwritten checks that a sidecar lensm can't
+// parse, damaged or from a newer version, survives a save.
+func TestUnreadableFileIsNotOverwritten(t *testing.T) {
+	for name, content := range map[string]string{
+		"invalid": `{"version": 1, "comments": [`,
+		"newer":   `{"version": 99, "comments": []}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "comments.json")
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			store, err := Open(path, "/tmp/app")
+			if err == nil {
+				t.Fatal("Open succeeded on an unreadable file")
+			}
+			if err := store.SetSource("main.main", "/tmp/main.go", 3, "note"); err == nil {
+				t.Error("Set succeeded on an unreadable file")
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != content {
+				t.Errorf("file overwritten with %s", data)
+			}
+
+			// Once the file is fixed, saving works again.
+			if err := os.WriteFile(path, []byte(`{"version": 1, "comments": []}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.SetSource("main.main", "/tmp/main.go", 3, "note"); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

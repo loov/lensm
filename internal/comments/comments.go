@@ -74,6 +74,11 @@ func DefaultPath(binaryPath string) string {
 
 // Open loads the sidecar at path for binaryPath; an empty path means the
 // default sidecar next to the binary.
+//
+// When the sidecar can't be loaded, Open returns the error together with
+// an empty store that keeps the path. Saving to it fails for as long as
+// the file stays unreadable, so the file isn't overwritten, and succeeds
+// once the file is fixed.
 func Open(path, binaryPath string) (*Store, error) {
 	if path == "" {
 		path = DefaultPath(binaryPath)
@@ -83,10 +88,7 @@ func Open(path, binaryPath string) (*Store, error) {
 	if path == "" {
 		return store, nil
 	}
-	if err := store.load(); err != nil {
-		return nil, err
-	}
-	return store, nil
+	return store, store.load()
 }
 
 // NewMemory returns a store for binaryPath that never touches disk.
@@ -324,7 +326,9 @@ func (store *Store) saveLocked() error {
 	if store.path == "" {
 		return nil
 	}
-	store.mergeExternalLocked()
+	if err := store.mergeExternalLocked(); err != nil {
+		return err
+	}
 	records := make([]Record, 0, len(store.records))
 	for _, rec := range store.records {
 		records = append(records, rec)
@@ -377,17 +381,23 @@ func (store *Store) saveLocked() error {
 // edits, and deletions from the other process — is adopted, so two
 // processes sharing a sidecar lose at most conflicting edits to the
 // same record instead of each other's whole comment sets.
-func (store *Store) mergeExternalLocked() {
+//
+// A file it can't parse, or one from a newer lensm, is an error: the
+// save would replace it with only this process's records.
+func (store *Store) mergeExternalLocked() error {
 	data, err := os.ReadFile(store.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return // nothing on disk to merge
+		return err
 	}
 	var disk commentsDiskFile
 	if err := json.Unmarshal(data, &disk); err != nil {
-		return
+		return fmt.Errorf("not overwriting %q: %w", store.path, err)
 	}
 	if disk.Version != 0 && disk.Version != commentsFileVersion {
-		return
+		return fmt.Errorf("not overwriting %q: unsupported version %d", store.path, disk.Version)
 	}
 
 	merged := make(map[string]Record, len(store.records))
@@ -403,6 +413,7 @@ func (store *Store) mergeExternalLocked() {
 		}
 	}
 	store.records = merged
+	return nil
 }
 
 func (store *Store) Normalize(coord Coord) Coord {
