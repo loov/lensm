@@ -133,3 +133,14 @@ func TestMCPIgnoresResponses(t *testing.T) {
 		t.Fatal("no reply to ping")
 	}
 }
+
+func TestMCPRejectsUnknownArguments(t *testing.T) {
+	server := &mcpServer{session: &Session{File: emptyFile{}}}
+	result, rpcErr := server.handleToolCall(json.RawMessage(`{"name":"get_function","arguments":{"name":"f","contxt":5}}`))
+	if rpcErr != nil {
+		t.Fatal(rpcErr.Message)
+	}
+	if r := result.(mcpToolResult); !r.IsError || !strings.Contains(r.Content[0].Text, "contxt") {
+		t.Fatalf("want an error naming contxt, got %+v", r)
+	}
+}

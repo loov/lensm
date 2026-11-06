@@ -221,7 +221,7 @@ func (server *mcpServer) toolListFunctions(args json.RawMessage) (any, error) {
 		Limit  int    `json:"limit"`
 		Offset int    `json:"offset"`
 	}
-	if err := decodeJSON(args, &req); err != nil {
+	if err := decodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	if req.Limit <= 0 {
@@ -274,7 +274,7 @@ func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 		Name    string `json:"name"`
 		Context *int   `json:"context"`
 	}
-	if err := decodeJSON(args, &req); err != nil {
+	if err := decodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	if req.Name == "" {
@@ -306,7 +306,7 @@ func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
 		PC   json.RawMessage `json:"pc"`
 		Text string          `json:"text"`
 	}
-	if err := decodeJSON(args, &req); err != nil {
+	if err := decodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	if req.Name == "" {
@@ -368,7 +368,7 @@ func (server *mcpServer) toolGetComments(args json.RawMessage) (any, error) {
 		Name string        `json:"name"`
 		View comments.View `json:"view"`
 	}
-	if err := decodeJSON(args, &req); err != nil {
+	if err := decodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	if req.View != "" {
@@ -391,6 +391,19 @@ func decodeJSON(data []byte, dst any) error {
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
+	return dec.Decode(dst)
+}
+
+// decodeArgs decodes tool arguments, rejecting names the schema doesn't
+// list: every schema sets additionalProperties false, and a misspelled
+// "contxt" should fail rather than quietly use the default.
+func decodeArgs(data []byte, dst any) error {
+	if len(bytes.TrimSpace(data)) == 0 {
+		data = []byte("{}")
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	dec.DisallowUnknownFields()
 	return dec.Decode(dst)
 }
 
