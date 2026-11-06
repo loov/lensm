@@ -1,14 +1,12 @@
 package main
 
 import (
-	"io"
 	"os"
 	"strings"
 	"time"
 
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/goobj"
-	"loov.dev/lensm/internal/wasmobj"
 )
 
 type fileLoadRequest struct {
@@ -20,20 +18,6 @@ type fileLoadResult struct {
 	generation uint64
 	file       disasm.File
 	err        error
-}
-
-func loadDisasmFile(path string) (disasm.File, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	var magic [4]byte
-	_, _ = io.ReadFull(f, magic[:])
-	_ = f.Close()
-	if string(magic[:]) == "\x00asm" {
-		return wasmobj.Load(path)
-	}
-	return goobj.Load(path)
 }
 
 // loader loads disassembly files on its own goroutine and, when watch
@@ -141,4 +125,14 @@ func (l *loader) run() {
 			return
 		}
 	}
+}
+
+// loadFile opens path, returning a nil interface on failure rather than
+// a nil *goobj.File that would compare non-nil.
+func loadFile(path string) (disasm.File, error) {
+	file, err := goobj.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }

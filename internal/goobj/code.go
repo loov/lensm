@@ -33,8 +33,8 @@ func entryFile(bin *objfile.Binary, sym *Func) string {
 	return ""
 }
 
-// Disassemble disassembles the specified symbol.
-func Disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.Code, error) {
+// disassemble disassembles a native function.
+func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.Code, error) {
 	needRefPCs := map[uint64]struct{}{}
 
 	code := &disasm.Code{

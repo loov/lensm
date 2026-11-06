@@ -1,3 +1,6 @@
+// Package goobj loads executables, object files and wasm modules as
+// disasm.Files. Parsing and decoding come from objfile; this package
+// lays out jumps, resolves calls and attaches the source.
 package goobj
 
 import (
@@ -7,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/loov/disasm/objfile"
+
 	"loov.dev/lensm/internal/disasm"
 )
 
@@ -18,7 +22,7 @@ type File struct {
 	bin   *objfile.Binary
 	funcs []disasm.Func
 
-	// mu guards cache.
+	// mu guards cache and serializes access to bin.
 	mu    sync.Mutex
 	cache map[cacheKey]cacheEntry
 }
@@ -31,8 +35,8 @@ type cacheKey struct {
 	context int
 }
 
-// cacheEntry also caches failures, so an erroring function isn't
-// re-disassembled on every frame.
+// cacheEntry also caches failures, so browsing back to an erroring
+// function doesn't disassemble it again.
 type cacheEntry struct {
 	code *disasm.Code
 	err  error
@@ -40,10 +44,10 @@ type cacheEntry struct {
 
 func (file *File) Funcs() []disasm.Func { return file.funcs }
 
-// Function contains information about the executable.
+// Func is one function in the file.
 type Func struct {
-	obj *File
-	fn  *objfile.Func
+	file *File
+	fn   *objfile.Func
 }
 
 func (fn *Func) Name() string { return fn.fn.Name }
@@ -56,6 +60,7 @@ func (file *File) Close() error {
 	return file.bin.Close()
 }
 
+// Load opens the binary at path. objfile detects the format.
 func Load(path string) (*File, error) {
 	bin, err := objfile.Open(path)
 	if err != nil {
@@ -69,8 +74,8 @@ func Load(path string) (*File, error) {
 
 	for i := range bin.Funcs {
 		file.funcs = append(file.funcs, &Func{
-			obj: file,
-			fn:  &bin.Funcs[i],
+			file: file,
+			fn:   &bin.Funcs[i],
 		})
 	}
 
@@ -82,16 +87,17 @@ func Load(path string) (*File, error) {
 }
 
 func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
-	return fn.obj.LoadCode(fn, opts)
-}
-
-func (file *File) LoadCode(fn *Func, opts disasm.Options) (*disasm.Code, error) {
+	file := fn.file
 	file.mu.Lock()
 	defer file.mu.Unlock()
 	key := cacheKey{fn: fn, context: opts.Context}
 	entry, ok := file.cache[key]
 	if !ok {
-		entry.code, entry.err = Disassemble(fn.obj.bin, fn, opts)
+		if file.bin.Arch == "wasm" {
+			entry.code, entry.err = disassembleWasm(file.bin, fn, opts)
+		} else {
+			entry.code, entry.err = disassemble(file.bin, fn, opts)
+		}
 		file.cache[key] = entry
 	}
 	return entry.code, entry.err

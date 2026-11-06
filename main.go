@@ -19,7 +19,7 @@ import (
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
-		os.Exit(mcp.RunCommand(loadDisasmFile, os.Args[2:]))
+		os.Exit(mcp.RunCommand(os.Args[2:]))
 	}
 
 	cpuprofile := flag.String("cpuprofile", "", "enable cpu profiling")

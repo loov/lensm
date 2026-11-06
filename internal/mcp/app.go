@@ -19,7 +19,6 @@ import (
 type AppServer struct {
 	httpServer   *http.Server
 	url          string
-	load         LoadFile
 	commentsPath string
 
 	// mu guards the fields below.
@@ -32,7 +31,7 @@ type AppServer struct {
 	active *sync.WaitGroup
 }
 
-func StartAppServer(load LoadFile, commentsPath string) (*AppServer, error) {
+func StartAppServer(commentsPath string) (*AppServer, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:7077")
 	if err != nil {
 		listener, err = net.Listen("tcp", "127.0.0.1:0")
@@ -43,7 +42,6 @@ func StartAppServer(load LoadFile, commentsPath string) (*AppServer, error) {
 
 	server := &AppServer{
 		url:          "http://" + listener.Addr().String() + "/mcp",
-		load:         load,
 		commentsPath: commentsPath,
 		active:       &sync.WaitGroup{},
 	}
@@ -93,7 +91,7 @@ func (server *AppServer) SetPath(path string, store *comments.Store) {
 	}
 
 	go func() {
-		session, err := NewSessionWithComments(server.load, path, commentsPath, store)
+		session, err := NewSessionWithComments(path, commentsPath, store)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to load MCP session for %q: %v\n", path, err)
 			server.replaceSession(generation, nil, err)

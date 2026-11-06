@@ -1,4 +1,4 @@
-package wasmobj
+package goobj
 
 import (
 	"os"

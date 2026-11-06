@@ -5,6 +5,7 @@ import (
 
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/goobj"
 )
 
 type Session struct {
@@ -13,12 +14,8 @@ type Session struct {
 	Comments *comments.Store
 }
 
-// LoadFile opens a binary for disassembly. The caller injects an
-// implementation so sessions stay independent of the object-file formats.
-type LoadFile func(path string) (disasm.File, error)
-
-func NewSessionWithComments(load LoadFile, path string, commentsPath string, store *comments.Store) (*Session, error) {
-	file, err := load(path)
+func NewSessionWithComments(path string, commentsPath string, store *comments.Store) (*Session, error) {
+	file, err := goobj.Load(path)
 	if err != nil {
 		return nil, err
 	}

@@ -63,7 +63,7 @@ type mcpServer struct {
 	out     *bufio.Writer
 }
 
-func RunCommand(load LoadFile, args []string) int {
+func RunCommand(args []string) int {
 	fs := flag.NewFlagSet("lensm mcp", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	commentsPath := fs.String("comments", "", "comments sidecar path")
@@ -75,7 +75,7 @@ func RunCommand(load LoadFile, args []string) int {
 		return 2
 	}
 
-	session, err := NewSessionWithComments(load, fs.Arg(0), *commentsPath, nil)
+	session, err := NewSessionWithComments(fs.Arg(0), *commentsPath, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

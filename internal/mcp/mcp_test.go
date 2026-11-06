@@ -10,12 +10,10 @@ import (
 	"time"
 
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/goobj"
 )
 
 func TestAppMCPServerSetPathClearsStaleSessionOnLoadFailure(t *testing.T) {
 	server := &AppServer{
-		load:    func(path string) (disasm.File, error) { return goobj.Load(path) },
 		session: &Session{Path: "old", File: emptyFile{}},
 	}
 

@@ -29,6 +29,7 @@ import (
 	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
+
 	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/mcp"
 	"loov.dev/lensm/internal/syntax"
@@ -141,7 +142,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 		}
 	}()
 
-	loader := newLoader(loadDisasmFile, ui.Config.Watch)
+	loader := newLoader(loadFile, ui.Config.Watch)
 	ui.loader = loader
 	defer loader.Close()
 	picker := explorer.NewExplorer(w)
@@ -757,7 +758,7 @@ func (ui *FileUI) startMCP() {
 	if ui.MCP != nil {
 		return
 	}
-	server, err := mcp.StartAppServer(loadDisasmFile, ui.Config.CommentsPath)
+	server, err := mcp.StartAppServer(ui.Config.CommentsPath)
 	if err != nil {
 		ui.LoadError = fmt.Errorf("unable to start MCP server: %w", err)
 		ui.invalidateMain()
