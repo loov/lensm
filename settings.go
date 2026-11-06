@@ -35,13 +35,10 @@ func DefaultAppSettings() AppSettings {
 	}
 }
 
-func LoadAppSettings() (AppSettings, error) {
+// LoadAppSettings reads the settings at path, or returns the defaults
+// when there is no file yet.
+func LoadAppSettings(path string) (AppSettings, error) {
 	settings := DefaultAppSettings()
-	path, err := appSettingsPath()
-	if err != nil {
-		return settings, err
-	}
-
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -82,12 +79,9 @@ func (settings AppSettings) normalized() AppSettings {
 	return settings
 }
 
-func SaveAppSettings(settings AppSettings) error {
+// SaveAppSettings writes settings to path.
+func SaveAppSettings(path string, settings AppSettings) error {
 	settings = settings.normalized()
-	path, err := appSettingsPath()
-	if err != nil {
-		return err
-	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -99,7 +93,8 @@ func SaveAppSettings(settings AppSettings) error {
 	return atomicfile.Write(path, data, 0o644)
 }
 
-func appSettingsPath() (string, error) {
+// AppSettingsPath is where settings live for the current user.
+func AppSettingsPath() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err

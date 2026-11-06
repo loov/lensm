@@ -75,8 +75,10 @@ type FileUI struct {
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
-	StartMCP       widget.Clickable
-	StopMCP        widget.Clickable
+	// settingsPath is where Settings are saved, empty for none.
+	settingsPath string
+	StartMCP     widget.Clickable
+	StopMCP      widget.Clickable
 
 	Comments *comments.Store
 	MCP      *mcp.AppServer
@@ -111,7 +113,12 @@ type pickerResult struct {
 func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui := &FileUI{}
 	ui.Windows = windows
-	settings, err := LoadAppSettings()
+	settings := DefaultAppSettings()
+	path, err := AppSettingsPath()
+	if err == nil {
+		ui.settingsPath = path
+		settings, err = LoadAppSettings(path)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "unable to load settings: %v\n", err)
 	}
@@ -542,8 +549,9 @@ func (ui *FileUI) scheduleFlush() {
 
 func (ui *FileUI) flushPending() {
 	ui.saveError = ""
-	if ui.sessionDirty {
-		if err := SaveAppSettings(ui.Settings); err != nil {
+	// A FileUI without a settings path, as in tests, doesn't save.
+	if ui.sessionDirty && ui.settingsPath != "" {
+		if err := SaveAppSettings(ui.settingsPath, ui.Settings); err != nil {
 			ui.saveError = "settings not saved: " + err.Error()
 			fmt.Fprintf(os.Stderr, "unable to save settings: %v\n", err)
 		} else {
