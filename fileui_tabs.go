@@ -23,8 +23,10 @@ type CodeTab struct {
 	// LoadError is why the function failed to disassemble. It is kept
 	// apart from FileUI.LoadError, which is about the file.
 	LoadError error
-	Tab       widget.Clickable
-	Close     widget.Clickable
+	// loading is set while the code is disassembled in the background.
+	loading bool
+	Tab     widget.Clickable
+	Close   widget.Clickable
 }
 
 func (ui *FileUI) activeTab() *CodeTab {
@@ -42,14 +44,54 @@ func (ui *FileUI) activeCode() *codeview.UI {
 	return &tab.Code
 }
 
+// codeResult is a function disassembled for a tab off the UI thread.
+type codeResult struct {
+	tab  *CodeTab
+	fn   disasm.Func
+	code *disasm.Code
+	err  error
+}
+
+// loadTabCode shows fn in tab. A large function takes a good part of a
+// second to disassemble, so with an event loop running the work happens
+// on a goroutine and setTabCode installs the result.
 func (ui *FileUI) loadTabCode(tab *CodeTab, fn disasm.Func) {
 	tab.Name = fn.Name()
 	tab.Func = fn
 	tab.Code = codeview.UI{}
-	tab.Code.Code, tab.LoadError = fn.Load(ui.loadOptions())
+	tab.LoadError = nil
 	tab.Code.SelectedAsm = -1
 	tab.Code.SelectedView = codeview.ViewGoAsm
 	tab.Code.ResetScroll()
+
+	opts := ui.loadOptions()
+	if ui.codeResults == nil || ui.File == nil {
+		code, err := fn.Load(opts)
+		ui.setTabCode(codeResult{tab, fn, code, err})
+		return
+	}
+	tab.loading = true
+	// Hold the file open: a reload may close it while this runs.
+	file := ui.File.Acquire()
+	results, exited := ui.codeResults, ui.exited
+	go func() {
+		defer file.Close()
+		code, err := fn.Load(opts)
+		select {
+		case results <- codeResult{tab, fn, code, err}:
+		case <-exited:
+		}
+	}()
+}
+
+// setTabCode installs a load result unless the tab has moved on to
+// another function since.
+func (ui *FileUI) setTabCode(res codeResult) {
+	if res.tab.Func != res.fn {
+		return
+	}
+	res.tab.loading = false
+	res.tab.Code.Code, res.tab.LoadError = res.code, res.err
 }
 
 func (ui *FileUI) appendCodeTab(fn disasm.Func) *CodeTab {

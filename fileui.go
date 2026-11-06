@@ -85,6 +85,7 @@ type FileUI struct {
 	settingsEvents     chan event.Event
 	settingsAcks       chan struct{}
 	pickerResults      chan pickerResult
+	codeResults        chan codeResult
 	exited             chan struct{}
 	flushTimer         *time.Timer
 	sessionDirty       bool
@@ -156,6 +157,8 @@ func (ui *FileUI) Run(w *app.Window) error {
 	ui.settingsAcks = settingsAcks
 	pickerResults := make(chan pickerResult, 1)
 	ui.pickerResults = pickerResults
+	codeResults := make(chan codeResult)
+	ui.codeResults = codeResults
 	ui.exited = exited
 	flushTimer := time.NewTimer(time.Hour)
 	flushTimer.Stop()
@@ -169,6 +172,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 		ui.settingsEvents = nil
 		ui.settingsAcks = nil
 		ui.pickerResults = nil
+		ui.codeResults = nil
 		ui.exited = nil
 		ui.flushTimer = nil
 	}()
@@ -210,6 +214,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 			ui.SetFile(result.file)
 			w.Invalidate()
 		case <-invalidate:
+			w.Invalidate()
+		case res := <-codeResults:
+			ui.setTabCode(res)
 			w.Invalidate()
 		case <-flushTimer.C:
 			ui.flushPending()
@@ -545,8 +552,8 @@ func (ui *FileUI) chooseFile() {
 }
 
 func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
-	active := ui.activeCode()
-	if active == nil || !active.Loaded() || active.Name != ui.Funcs.Selected {
+	active := ui.activeTab()
+	if active == nil || (!active.Code.Loaded() && !active.loading) || active.Name != ui.Funcs.Selected {
 		selected := ui.Funcs.SelectedItem
 		if selected != nil {
 			ui.previewTab(selected)
@@ -610,6 +617,10 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					}
 					if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
 						txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)
+						return layout.UniformInset(6).Layout(gtx, txt.Layout)
+					}
+					if tab := ui.activeTab(); tab != nil && tab.loading {
+						txt := ui.Theme.Muted("Disassembling "+tab.Name+"...", 1)
 						return layout.UniformInset(6).Layout(gtx, txt.Layout)
 					}
 					code := ui.activeCode()
