@@ -34,6 +34,17 @@ type SelectList struct {
 
 	Selected int
 	Hovered  int
+
+	// activated is set by Enter on the selected row, see Activated.
+	activated bool
+}
+
+// Activated reports whether Enter was pressed on the selected row since
+// the last call.
+func (list *SelectList) Activated() bool {
+	activated := list.activated
+	list.activated = false
+	return activated
 }
 
 // Layout draws the list.
@@ -55,8 +66,8 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 		pointerHovered := false
 		pointerPosition := f32.Point{}
 		for {
-			// TODO: fix navigation when in filter.
 			ev, ok := gtx.Event(
+				key.Filter{Focus: list, Name: key.NameReturn},
 				key.FocusFilter{Target: list},
 				key.Filter{Focus: list, Name: key.NameUpArrow},
 				key.Filter{Focus: list, Name: key.NameDownArrow},
@@ -90,6 +101,8 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 						offset = -list.List.Position.Count
 					case key.NamePageDown:
 						offset = list.List.Position.Count
+					case key.NameReturn:
+						list.activated = list.Selected >= 0
 					}
 
 					if offset != 0 {

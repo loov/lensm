@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -36,6 +37,7 @@ type FilterList[T FilterListItem] struct {
 func NewFilterList[T FilterListItem](theme *Theme) *FilterList[T] {
 	ui := &FilterList[T]{}
 	ui.Filter.SingleLine = true
+	ui.Filter.Submit = true
 	ui.List = NewVerticalSelectList()
 	return ui
 }
@@ -138,8 +140,21 @@ func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions
 		if !ok {
 			break
 		}
-		if _, ok := ev.(widget.ChangeEvent); ok {
+		switch ev.(type) {
+		case widget.ChangeEvent:
 			changed = true
+		case widget.SubmitEvent:
+			// Enter moves on to the matches.
+			gtx.Execute(key.FocusCmd{Tag: &ui.List})
+		}
+	}
+	for {
+		ev, ok := gtx.Event(key.Filter{Focus: &ui.Filter, Name: key.NameDownArrow})
+		if !ok {
+			break
+		}
+		if ev, ok := ev.(key.Event); ok && ev.State == key.Press {
+			gtx.Execute(key.FocusCmd{Tag: &ui.List})
 		}
 	}
 

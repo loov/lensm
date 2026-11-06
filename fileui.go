@@ -391,6 +391,10 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 		key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("W")},
+		key.Filter{Required: key.ModShortcut, Name: key.Name("F")},
+		key.Filter{Required: key.ModShortcut, Name: key.Name("O")},
+		key.Filter{Required: key.ModShortcut, Name: key.Name(",")},
+		key.Filter{Required: key.ModCtrl, Optional: key.ModShift, Name: key.NameTab},
 	}
 	if !editorFocused {
 		filters = append(filters,
@@ -414,6 +418,27 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			ui.navigateForward()
 		case key.Name("W"):
 			ui.closeTab(ui.ActiveTab)
+		case key.Name("F"):
+			gtx.Execute(key.FocusCmd{Tag: &ui.Funcs.Filter})
+			ui.Funcs.Filter.SetCaret(ui.Funcs.Filter.Len(), 0)
+		case key.Name("O"):
+			ui.chooseFile()
+		case key.Name(","):
+			ui.openSettingsWindow()
+		case key.NameTab:
+			if n := len(ui.CodeTabs); n > 0 {
+				step := 1
+				if keyEvent.Modifiers.Contain(key.ModShift) {
+					step = n - 1
+				}
+				ui.activateTab((ui.ActiveTab + step) % n)
+			}
+		}
+	}
+	// Enter in the function list keeps the previewed function open.
+	if ui.Funcs.List.Activated() {
+		if tab := ui.activeTab(); tab != nil && tab.Preview {
+			ui.selectTab(ui.ActiveTab)
 		}
 	}
 	for ui.BrowseButton.Clicked(gtx) {

@@ -200,12 +200,21 @@ func (ui *FileUI) keepActiveTab() {
 	}
 }
 
+// selectTab activates the tab at index and keeps it open.
 func (ui *FileUI) selectTab(index int) {
 	if index < 0 || index >= len(ui.CodeTabs) {
 		return
 	}
-	ui.ActiveTab = index
 	ui.CodeTabs[index].Preview = false
+	ui.activateTab(index)
+}
+
+// activateTab activates the tab at index, leaving a preview a preview.
+func (ui *FileUI) activateTab(index int) {
+	if index < 0 || index >= len(ui.CodeTabs) {
+		return
+	}
+	ui.ActiveTab = index
 	ui.commentKey = ""
 	ui.Funcs.Select(ui.CodeTabs[index].Name)
 	ui.recordNavigation(ui.CodeTabs[index].Name, false)
