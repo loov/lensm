@@ -170,7 +170,11 @@ func (server *mcpServer) handleRequest(method string, params json.RawMessage) (a
 				"title":   "lensm",
 				"version": "dev",
 			},
-			"instructions": "Use tools to inspect Go source, Go assembly, native assembly, and comments for the loaded executable.",
+			"instructions": "Inspect the loaded binary: Go, C, C++, Rust or TinyGo executables and object files, or wasm modules. " +
+				"list_functions finds names, get_function returns source, assembly and the mapping between them, " +
+				"and set_comment/get_comments annotate lines and instructions. " +
+				"go_asm is Go assembler syntax for any compiled language; native_asm is the platform's own syntax. " +
+				"For Thumb, AVR and Xtensa both hold the same native text; for wasm, go_asm holds the text format and native_asm is empty.",
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
@@ -248,20 +252,16 @@ func (server *mcpServer) toolListFunctions(args json.RawMessage) (any, error) {
 		}
 	}
 
-	type functionInfo struct {
-		Index int    `json:"index"`
-		Name  string `json:"name"`
-	}
-	var all []functionInfo
-	for i, fn := range server.session.Funcs() {
+	var all []string
+	for _, fn := range server.session.Funcs() {
 		name := fn.Name()
 		if rx != nil && !rx.MatchString(name) {
 			continue
 		}
-		all = append(all, functionInfo{Index: i, Name: name})
+		all = append(all, name)
 	}
 
-	var page []functionInfo
+	var page []string
 	if req.Offset < len(all) {
 		page = all[req.Offset:min(req.Offset+req.Limit, len(all))]
 	}
@@ -498,7 +498,7 @@ func mcpTools() []mcpTool {
 		{
 			Name:        "list_functions",
 			Title:       "List Functions",
-			Description: "List functions in the loaded executable. The optional filter is a case-insensitive Go regexp.",
+			Description: "List function names in the loaded binary, sorted. Pass a name to get_function. The optional filter is a case-insensitive Go regexp.",
 			InputSchema: objectSchema(map[string]any{
 				"filter": stringSchema("Optional case-insensitive regexp matched against function names."),
 				"limit":  integerSchema("Maximum number of functions to return. Defaults to 100, capped at 1000."),
@@ -508,7 +508,9 @@ func mcpTools() []mcpTool {
 		{
 			Name:        "get_function",
 			Title:       "Get Function Code",
-			Description: "Return Go source, Go assembly, native assembly, source-to-asm mappings, and comments for a function.",
+			Description: "Return a function's source, its assembly in Go and native syntax, which instructions each source line compiled to, and comments. " +
+				"Source comes from the debug info and is missing when the files aren't on this machine. " +
+				"Instructions come in pages of 500; when truncated is set, call again with offset.",
 			InputSchema: objectSchema(map[string]any{
 				"name":    stringSchema("Exact function name."),
 				"context": integerSchema("Number of extra source lines to include before and after referenced lines. Defaults to 3."),
@@ -528,7 +530,7 @@ func mcpTools() []mcpTool {
 		{
 			Name:        "set_comment",
 			Title:       "Set Comment",
-			Description: "Set or delete a comment for a source line, Go asm instruction, or native asm instruction. Empty text deletes the comment.",
+			Description: "Set or delete a comment on a source line or an instruction of a function. Comments are saved beside the binary and shown in the lensm window. Empty text deletes the comment.",
 			InputSchema: objectSchema(map[string]any{
 				"name": stringSchema("Exact function name."),
 				"view": enumSchema("Code view for the comment.", []string{
