@@ -30,7 +30,9 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 		}
 		inst := disasm.Inst{PC: uint64(i), Text: in.Text, Indent: min(level, maxIndent)}
 		switch in.Op {
-		case "block", "loop", "if", "else":
+		// watgo prints try_table's catch clauses inline and has no
+		// legacy try, so try_table is the only other opener.
+		case "block", "loop", "if", "try_table", "else":
 			level++
 		}
 		inst.File, inst.Line = bin.PCToLine(in.Addr)
