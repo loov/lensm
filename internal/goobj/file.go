@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -77,16 +77,22 @@ func Load(path string) (*File, error) {
 		cache: make(map[cacheKey]cacheEntry),
 	}
 
-	for i := range bin.Funcs {
-		file.funcs = append(file.funcs, &Func{
-			file: file,
-			fn:   &bin.Funcs[i],
-		})
+	// Compute each sort key once; in the comparator the regexp ran
+	// 2 million times for a binary with 66k functions.
+	type keyed struct {
+		key string
+		fn  *Func
 	}
-
-	sort.SliceStable(file.funcs, func(i, k int) bool {
-		return sortingName(file.funcs[i].Name()) < sortingName(file.funcs[k].Name())
-	})
+	sorted := make([]keyed, len(bin.Funcs))
+	for i := range bin.Funcs {
+		fn := &Func{file: file, fn: &bin.Funcs[i]}
+		sorted[i] = keyed{sortingName(fn.Name()), fn}
+	}
+	slices.SortStableFunc(sorted, func(a, b keyed) int { return strings.Compare(a.key, b.key) })
+	file.funcs = make([]disasm.Func, len(sorted))
+	for i, k := range sorted {
+		file.funcs[i] = k.fn
+	}
 
 	return file, nil
 }
