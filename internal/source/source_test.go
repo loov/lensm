@@ -45,3 +45,17 @@ func TestLoad_RelatesLines(t *testing.T) {
 		t.Fatalf("line 4 related = %+v", got)
 	}
 }
+
+func TestLoad_IgnoresLineZero(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "a.c")
+	if err := os.WriteFile(src, []byte("1\n2\n3\n4\n5\n6\n7\n8\n9\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refs := Refs{}
+	refs.Add(src, 0, 0)
+	refs.Add(src, 8, 1)
+	sources := Load(refs, src, 1)
+	if len(sources) != 1 || len(sources[0].Blocks) != 1 || sources[0].Blocks[0].From != 7 {
+		t.Fatalf("want one block around line 8, got %+v", sources)
+	}
+}
