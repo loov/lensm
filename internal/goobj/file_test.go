@@ -53,3 +53,34 @@ func add(a, b int) int { return a + b }
 	}
 	wg.Wait()
 }
+
+// TestLoadAfterTruncate checks that a binary shrinking under an open
+// File, as cp onto it or a rebuild does, gives an error rather than a
+// SIGBUS from the mapping.
+func TestLoadAfterTruncate(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "tinygo", "esp32c3.elf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "prog.elf")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	file, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := os.Truncate(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, fn := range file.Funcs() {
+		if fn.Name() == "main.sumInts" {
+			if _, err := fn.Load(disasm.Options{}); err == nil {
+				t.Fatal("loading from a truncated binary succeeded")
+			}
+			return
+		}
+	}
+	t.Fatal("main.sumInts not found")
+}

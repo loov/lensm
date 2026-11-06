@@ -4,7 +4,9 @@
 package goobj
 
 import (
+	"fmt"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -62,7 +64,7 @@ func (file *File) Close() error {
 
 // Load opens the binary at path. objfile detects the format.
 func Load(path string) (*File, error) {
-	bin, err := objfile.Open(path)
+	bin, err := open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +88,18 @@ func Load(path string) (*File, error) {
 	return file, nil
 }
 
+// open parses path, turning a fault from the file shrinking mid-parse
+// into an error, see File.disassemble.
+func open(path string) (bin *objfile.Binary, err error) {
+	defer debug.SetPanicOnFault(debug.SetPanicOnFault(true))
+	defer func() {
+		if r := recover(); r != nil {
+			bin, err = nil, fmt.Errorf("reading %s: %v", path, r)
+		}
+	}()
+	return objfile.Open(path)
+}
+
 func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 	file := fn.file
 	file.mu.Lock()
@@ -93,14 +107,27 @@ func (fn *Func) Load(opts disasm.Options) (*disasm.Code, error) {
 	key := cacheKey{fn: fn, context: opts.Context}
 	entry, ok := file.cache[key]
 	if !ok {
-		if file.bin.Arch == "wasm" {
-			entry.code, entry.err = disassembleWasm(file.bin, fn, opts)
-		} else {
-			entry.code, entry.err = disassemble(file.bin, fn, opts)
-		}
+		entry.code, entry.err = file.disassemble(fn, opts)
 		file.cache[key] = entry
 	}
 	return entry.code, entry.err
+}
+
+// disassemble turns a fault into an error. The binary is memory mapped,
+// so truncating or rewriting it in place (cp onto it, a rebuild in
+// -watch mode) makes reads fault with SIGBUS, which would otherwise kill
+// the process.
+func (file *File) disassemble(fn *Func, opts disasm.Options) (code *disasm.Code, err error) {
+	defer debug.SetPanicOnFault(debug.SetPanicOnFault(true))
+	defer func() {
+		if r := recover(); r != nil {
+			code, err = nil, fmt.Errorf("disassembling %s: %v", fn.Name(), r)
+		}
+	}()
+	if file.bin.Arch == "wasm" {
+		return disassembleWasm(file.bin, fn, opts)
+	}
+	return disassemble(file.bin, fn, opts)
 }
 
 var rxCodeDelimiter = regexp.MustCompile(`[ *().]+`)
