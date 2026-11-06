@@ -3,6 +3,7 @@ package codeview
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"math"
 
 	"gioui.org/f32"
@@ -25,10 +26,10 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 
 	var highlightRanges []disasm.LineRange
 	top := int(ui.src.Offset)
-	var highlightPaths []clip.PathSpec
-	relationStroke := ui.Theme.Colors.RelationStroke
-	relationFill := relationStroke
-	relationFill.A /= 2
+	viewHeight := float32(gtx.Constraints.Max.Y)
+	var highlightPath clip.PathSpec
+	var highlightColor color.NRGBA
+	related := 0
 	for row := range sourceRows(ui.Code) {
 		rowTop := top
 		top += lineHeight
@@ -40,19 +41,23 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 			continue
 		}
 		ranges := block.Related[row.off]
+		// Each line keeps its hue while scrolling, so count every
+		// related line, drawn or not.
+		related++
+
 		highlight := mouseInSource && float32(rowTop) <= mousePosition.Y && mousePosition.Y < float32(rowTop+lineHeight)
-		if !highlight && mouseInAsm {
-			for _, r := range ranges {
-				if float32(r.From*lineHeight)+ui.asm.Offset <= mousePosition.Y && mousePosition.Y < float32(r.To*lineHeight)+ui.asm.Offset {
-					highlight = true
-					break
-				}
+		minY, maxY := float32(rowTop), float32(rowTop+lineHeight)
+		for _, r := range ranges {
+			from := float32(r.From*lineHeight) + ui.asm.Offset
+			to := float32(r.To*lineHeight) + ui.asm.Offset
+			if mouseInAsm && from <= mousePosition.Y && mousePosition.Y < to {
+				highlight = true
 			}
+			minY, maxY = min(minY, from), max(maxY, to)
 		}
-		if !highlight {
+		if maxY < 0 || minY > viewHeight {
 			continue
 		}
-		highlightRanges = ranges
 
 		var p clip.Path
 		p.Begin(gtx.Ops)
@@ -76,11 +81,22 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 				f32.Pt(gutter.Lerp(0.5-S), pin),
 				f32.Pt(gutter.Max, pin))
 		}
-		highlightPaths = append(highlightPaths, p.End())
+		path := p.End()
+
+		hue := float32(math.Mod(float64(related)*math.Phi, 1))
+		lightness := ui.Theme.Colors.RelationLightness
+		if !highlight {
+			paint.FillShape(gtx.Ops, hsla(hue, 0.9, lightness, 0.4), clip.Outline{Path: path}.Op())
+			continue
+		}
+		// The hovered band is drawn last so it stays on top.
+		highlightRanges = ranges
+		highlightPath = path
+		highlightColor = hsla(hue, 0.9, lightness, 0.8)
 	}
-	for _, path := range highlightPaths {
-		paint.FillShape(gtx.Ops, relationFill, clip.Outline{Path: path}.Op())
-		paint.FillShape(gtx.Ops, relationStroke, clip.Stroke{Path: path, Width: 1}.Op())
+	if highlightRanges != nil {
+		paint.FillShape(gtx.Ops, highlightColor, clip.Outline{Path: highlightPath}.Op())
+		paint.FillShape(gtx.Ops, ui.Theme.Colors.RelationStroke, clip.Stroke{Path: highlightPath, Width: 1}.Op())
 	}
 	return highlightRanges
 }

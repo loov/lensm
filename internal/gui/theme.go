@@ -60,6 +60,9 @@ type UIColors struct {
 	Error               color.NRGBA
 	Selection           color.NRGBA
 	RelationStroke      color.NRGBA
+	// RelationLightness is the HSL lightness of the bands linking source
+	// lines to their assembly; each line gets its own hue.
+	RelationLightness float32
 }
 
 func applyPalette(th *material.Theme, dark bool) UIColors {
@@ -80,6 +83,7 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 			Error:               color.NRGBA{R: 0xff, G: 0xb4, B: 0xab, A: 0xff},
 			Selection:           color.NRGBA{R: 0x26, G: 0x32, B: 0x47, A: 0xff},
 			RelationStroke:      color.NRGBA{R: 0xe8, G: 0xea, B: 0xed, A: 0x70},
+			RelationLightness:   0.3,
 		}
 	}
 
@@ -99,5 +103,6 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 		Error:               color.NRGBA{R: 0xb0, G: 0x00, B: 0x20, A: 0xff},
 		Selection:           color.NRGBA{R: 0xc8, G: 0xda, B: 0xfc, A: 0xff},
 		RelationStroke:      color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0x40},
+		RelationLightness:   0.8,
 	}
 }
