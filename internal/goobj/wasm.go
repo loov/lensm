@@ -1,6 +1,9 @@
 package goobj
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/loov/disasm/objfile"
 
 	"loov.dev/lensm/internal/disasm"
@@ -38,7 +41,12 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 			code.File = inst.File
 		}
 		if in.Call {
-			if name, base := bin.Lookup(in.Ref); name != "" && base == in.Ref {
+			// objfile names the callee in Text from the calling module.
+			// Lookup can't stand in: in a component it resolves the index
+			// in the first module, whichever module the call is in. An
+			// unnamed callee stays a bare index.
+			name, ok := strings.CutPrefix(in.Text, "call ")
+			if _, err := strconv.ParseUint(name, 10, 64); ok && err != nil {
 				inst.Call = name
 			}
 		}
