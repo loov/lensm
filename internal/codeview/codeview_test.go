@@ -59,7 +59,7 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 	style := Style{
 		UI:         state,
 		Theme:      theme,
-		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, theme.Colors.SyntaxColors()),
+		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, SyntaxColors(theme.Colors)),
 		ShowNative: true,
 		TextHeight: theme.TextSize,
 		CopyText: func(_ layout.Context, text string) {

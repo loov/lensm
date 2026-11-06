@@ -5,8 +5,6 @@ import (
 
 	"gioui.org/unit"
 	"gioui.org/widget/material"
-
-	"loov.dev/lensm/internal/syntax"
 )
 
 // Theme bundles the material theme with the app palette so layout
@@ -62,10 +60,6 @@ type UIColors struct {
 	Error               color.NRGBA
 	Selection           color.NRGBA
 	RelationStroke      color.NRGBA
-}
-
-func (c UIColors) SyntaxColors() syntax.Colors {
-	return syntax.Colors{Text: c.Text, MutedText: c.MutedText, Background: c.Background}
 }
 
 func applyPalette(th *material.Theme, dark bool) UIColors {

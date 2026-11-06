@@ -1,4 +1,4 @@
-package gui
+package codeview
 
 import (
 	"image"
@@ -9,21 +9,21 @@ import (
 	"gioui.org/widget/material"
 )
 
-// ScrollRegion is the vertical scroll state for a manually drawn
+// scrollRegion is the vertical scroll state for a manually drawn
 // column: a scrollbar and animated jumps. The owner applies wheel
 // scrolling to Offset.
 // Offset is the pixel offset of the content top relative to the
 // viewport top, so it goes negative as the content scrolls up.
-type ScrollRegion struct {
+type scrollRegion struct {
 	Offset float32
 	Bar    widget.Scrollbar
-	Anim   ScrollAnimation
+	Anim   scrollAnimation
 }
 
 // LayoutBar draws a vertical scrollbar at barX with the given width,
 // applies scrollbar drags, and clamps the offset
 // so the viewport stays within [contentTop, contentBot].
-func (region *ScrollRegion) LayoutBar(gtx layout.Context, th *material.Theme, barX, barWidth int, contentTop, contentBot float32) {
+func (region *scrollRegion) LayoutBar(gtx layout.Context, th *material.Theme, barX, barWidth int, contentTop, contentBot float32) {
 	viewTop := -region.Offset
 	viewBot := -region.Offset + float32(gtx.Constraints.Max.Y)
 
@@ -44,7 +44,7 @@ func (region *ScrollRegion) LayoutBar(gtx layout.Context, th *material.Theme, ba
 
 // Clamp keeps the viewport within the content, stopping any running
 // jump animation when it hits an edge.
-func (region *ScrollRegion) Clamp(gtx layout.Context, contentTop, contentBot float32) {
+func (region *scrollRegion) Clamp(gtx layout.Context, contentTop, contentBot float32) {
 	if -region.Offset < contentTop {
 		region.Offset = -contentTop
 		region.Anim.Stop()

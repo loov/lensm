@@ -60,7 +60,7 @@ func (ui Style) layoutRowComment(gtx layout.Context, coord comments.Coord, prefi
 	if comment == "" {
 		return col.textWidth
 	}
-	gui.SourceLine{
+	sourceLine{
 		TopLeft:    image.Pt(col.commentLeft, top),
 		Width:      col.commentWidth,
 		Text:       prefix + " " + comment,
@@ -77,7 +77,7 @@ func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coo
 		if comment == "" {
 			return
 		}
-		gui.SourceLine{
+		sourceLine{
 			TopLeft:    image.Pt(left, top),
 			Width:      width,
 			Text:       prefix + " " + comment,
@@ -110,7 +110,7 @@ func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coo
 	}
 
 	prefixWidth := lineHeight
-	gui.SourceLine{
+	sourceLine{
 		TopLeft:    image.Pt(left, top),
 		Width:      prefixWidth,
 		Text:       prefix,

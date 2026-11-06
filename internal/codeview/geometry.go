@@ -3,8 +3,6 @@ package codeview
 import (
 	"gioui.org/f32"
 	"gioui.org/layout"
-
-	"loov.dev/lensm/internal/gui"
 )
 
 // codeColumns is the horizontal geometry of the code view: the pixel
@@ -18,11 +16,11 @@ type codeColumns struct {
 	// indentStep is the offset per Inst.Indent level.
 	indentStep int
 
-	jump   gui.Bounds
-	asm    gui.Bounds
-	native gui.Bounds
-	gutter gui.Bounds
-	source gui.Bounds
+	jump   bounds
+	asm    bounds
+	native bounds
+	gutter bounds
+	source bounds
 
 	// goCol, nativeCol and sourceCol split each column into text and
 	// comment regions.
@@ -64,7 +62,7 @@ type codeHover struct {
 func (ui Style) columns(gtx layout.Context) codeColumns {
 	// The layout has the following sections:
 	// pad | Jump | pad/2 | Go asm | pad | Native asm | pad | Gutter | pad | Source | pad
-	lineHeight := gui.CodeLineHeightPx(gtx, ui.TextHeight)
+	lineHeight := codeLineHeightPx(gtx, ui.TextHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
 	jumpWidth := jumpStep * ui.Code.MaxJump
@@ -75,21 +73,21 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	}
 	blocksWidth := max(0, gtx.Constraints.Max.X-fixedWidth)
 
-	jump := gui.BoundsWidth(pad, jumpWidth)
+	jump := boundsWidth(pad, jumpWidth)
 	asmWidth := blocksWidth * 40 / 100
 	if ui.ShowNative {
 		asmWidth = blocksWidth * 28 / 100
 	}
-	asm := gui.BoundsWidth(int(jump.Max)+pad/2, asmWidth)
-	native := gui.BoundsWidth(int(asm.Max), 0)
-	gutter := gui.BoundsWidth(int(asm.Max)+pad, gutterWidth)
+	asm := boundsWidth(int(jump.Max)+pad/2, asmWidth)
+	native := boundsWidth(int(asm.Max), 0)
+	gutter := boundsWidth(int(asm.Max)+pad, gutterWidth)
 	sourceWidth := blocksWidth - int(asm.Width())
 	if ui.ShowNative {
-		native = gui.BoundsWidth(int(asm.Max)+pad, blocksWidth*28/100)
-		gutter = gui.BoundsWidth(int(native.Max)+pad, gutterWidth)
+		native = boundsWidth(int(asm.Max)+pad, blocksWidth*28/100)
+		gutter = boundsWidth(int(native.Max)+pad, gutterWidth)
 		sourceWidth -= int(native.Width())
 	}
-	source := gui.BoundsWidth(int(gutter.Max)+pad, max(0, sourceWidth))
+	source := boundsWidth(int(gutter.Max)+pad, max(0, sourceWidth))
 
 	c := codeColumns{
 		lineHeight: lineHeight,

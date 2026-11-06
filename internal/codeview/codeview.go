@@ -24,8 +24,8 @@ import (
 type UI struct {
 	*disasm.Code
 
-	asm gui.ScrollRegion
-	src gui.ScrollRegion
+	asm scrollRegion
+	src scrollRegion
 
 	hl highlightCache
 

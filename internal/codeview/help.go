@@ -206,7 +206,7 @@ func (ui Style) layoutSelectionPerf(gtx layout.Context, c codeColumns) {
 		Min: image.Pt(left, top),
 		Max: image.Pt(right, top+1),
 	}.Op())
-	gui.SourceLine{
+	sourceLine{
 		TopLeft:    image.Pt(left+c.pad/2, top+c.pad/4),
 		Width:      right - left - c.pad,
 		Text:       text,

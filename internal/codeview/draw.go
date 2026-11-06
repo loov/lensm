@@ -12,7 +12,6 @@ import (
 	"gioui.org/op/paint"
 
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/gui"
 )
 
 // layoutRelations draws the curved bands linking source lines to the
@@ -131,7 +130,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 			}.Op())
 		}
 		indent := ix.Indent * c.indentStep
-		gui.SourceLine{
+		sourceLine{
 			TopLeft:    image.Pt(c.goCol.textLeft+indent, i*lineHeight+int(ui.asm.Offset)),
 			Width:      max(c.goCol.codeWidth-indent, 0),
 			Text:       ix.Text,
@@ -148,7 +147,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		if ui.ShowNative {
 			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
 				ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm)
-			gui.SourceLine{
+			sourceLine{
 				TopLeft:    image.Pt(c.nativeCol.textLeft, i*lineHeight+int(ui.asm.Offset)),
 				Width:      width,
 				Text:       hl.nativeText[i],
@@ -238,7 +237,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 		paintSourceSelection(sourceRow-1, rowTop)
 		switch row.kind {
 		case sourceRowHeader:
-			gui.SourceLine{
+			sourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),
 				Text:       row.text,
 				TextHeight: ui.TextHeight,
@@ -259,7 +258,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 			}
 			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
 			width := ui.layoutRowComment(gtx, ui.sourceCoord(src.File, lineNo), "//", c.sourceCol, rowTop, lineHeight, selectedSource)
-			gui.SourceLine{
+			sourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),
 				Width:      width,
 				Spans:      hl.source[row.file][row.block][row.off],

@@ -702,7 +702,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								CommentEditor: &ui.Comment,
 
 								Theme:      ui.Theme,
-								Syntax:     syntax.PaletteFor(ui.Settings.SyntaxStyle, colors.SyntaxColors()),
+								Syntax:     syntax.PaletteFor(ui.Settings.SyntaxStyle, codeview.SyntaxColors(colors)),
 								ShowNative: ui.ShowNativeAsm.Value,
 								ShowHelp:   ui.ShowAsmHelp.Value,
 								TextHeight: ui.Theme.TextSize,
