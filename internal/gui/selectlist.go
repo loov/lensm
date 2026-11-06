@@ -13,20 +13,18 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
 
-// NewVerticalSelectList creates a new select list with the specified item height.
-func NewVerticalSelectList(itemHeight unit.Dp) SelectList {
+// NewVerticalSelectList creates a new select list.
+func NewVerticalSelectList() SelectList {
 	return SelectList{
 		List: widget.List{
 			List: layout.List{
 				Axis: layout.Vertical,
 			},
 		},
-		ItemHeight: itemHeight,
 	}
 }
 
@@ -36,8 +34,6 @@ type SelectList struct {
 
 	Selected int
 	Hovered  int
-
-	ItemHeight unit.Dp
 }
 
 // Layout draws the list.
@@ -52,10 +48,8 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 		changed := false
 		grabbed := false
 
-		itemHeight := gtx.Metric.Dp(list.ItemHeight)
-		if itemHeight == 0 {
-			itemHeight = gtx.Metric.Sp(th.TextSize)
-		}
+		// Follow the text size, which settings can change at any time.
+		itemHeight := gtx.Metric.Sp(th.TextSize) + gtx.Metric.Dp(4)
 
 		pointerClicked := false
 		pointerHovered := false

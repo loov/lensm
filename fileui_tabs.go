@@ -258,7 +258,8 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout
 		return layout.Dimensions{}
 	}
 
-	height := max(gtx.Metric.Dp(22), 20)
+	// 22 dp at the default 12 sp, growing with the text size.
+	height := max(gtx.Metric.Sp(ui.Theme.TextSize)+gtx.Metric.Dp(10), 20)
 	availableWidth := gtx.Constraints.Max.X
 	gtx.Constraints = layout.Exact(image.Pt(availableWidth, height))
 	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
@@ -320,7 +321,7 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 				})
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				closeWidth := gtx.Metric.Dp(22)
+				closeWidth := gtx.Constraints.Max.Y
 				gtx.Constraints = layout.Exact(image.Pt(closeWidth, gtx.Constraints.Max.Y))
 				return tab.Close.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					size := gtx.Constraints.Max

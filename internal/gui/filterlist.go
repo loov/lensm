@@ -9,7 +9,6 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
@@ -37,7 +36,7 @@ type FilterList[T FilterListItem] struct {
 func NewFilterList[T FilterListItem](theme *Theme) *FilterList[T] {
 	ui := &FilterList[T]{}
 	ui.Filter.SingleLine = true
-	ui.List = NewVerticalSelectList(unit.Dp(theme.TextSize) + 4)
+	ui.List = NewVerticalSelectList()
 	return ui
 }
 
