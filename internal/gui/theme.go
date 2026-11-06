@@ -103,7 +103,7 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 		Text:                th.Palette.Fg,
 		MutedText:           color.NRGBA{R: 0x66, G: 0x66, B: 0x66, A: 0xff},
 		Error:               color.NRGBA{R: 0xb0, G: 0x00, B: 0x20, A: 0xff},
-		Selection:           color.NRGBA{R: 0xe8, G: 0xf0, B: 0xfe, A: 0xff},
+		Selection:           color.NRGBA{R: 0xc8, G: 0xda, B: 0xfc, A: 0xff},
 		RelationStroke:      color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0x40},
 	}
 }
