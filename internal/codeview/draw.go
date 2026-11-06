@@ -12,7 +12,6 @@ import (
 	"gioui.org/op/paint"
 
 	"loov.dev/lensm/internal/disasm"
-	"loov.dev/lensm/internal/f32color"
 	"loov.dev/lensm/internal/gui"
 )
 
@@ -195,7 +194,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		} else if disasm.LineRangesContain(highlightRanges, i, i+ix.RefOffset) {
 			width *= 3
 		}
-		jumpColor := f32color.HSLA(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)
+		jumpColor := hsla(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)
 		paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: width}.Op())
 
 		stack.Pop()
