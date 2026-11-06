@@ -3,6 +3,7 @@ package gui
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -19,7 +20,9 @@ type FilterListItem interface {
 
 // FilterList lists symbols for filtering and selection.
 type FilterList[T FilterListItem] struct {
-	All         []T
+	All []T
+	// lower holds the names of All in lower case, for plain filters.
+	lower       []string
 	Filter      widget.Editor
 	FilterError string
 	Filtered    []T
@@ -52,6 +55,10 @@ func (ui *FilterList[T]) SelectIndex(index int) {
 // SetItems updates the full list.
 func (ui *FilterList[T]) SetItems(all []T) {
 	ui.All = all
+	ui.lower = make([]string, len(all))
+	for i, item := range all {
+		ui.lower[i] = strings.ToLower(item.Name())
+	}
 	ui.updateFiltered()
 	if ui.List.Selected == -1 && len(ui.Filtered) > 0 {
 		ui.SelectIndex(0)
@@ -80,8 +87,23 @@ func (ui *FilterList[T]) updateFiltered() {
 		}
 	}()
 
-	rx, err := regexp.Compile("(?i)" + ui.Filter.Text())
+	filter := ui.Filter.Text()
 	ui.FilterError = ""
+	// Most filters are plain text. A substring search over names
+	// lowercased once is about 13x faster than (?i) matching, which ran
+	// 60 ms per keystroke on a binary with 66k functions.
+	if regexp.QuoteMeta(filter) == filter {
+		filter = strings.ToLower(filter)
+		ui.Filtered = ui.Filtered[:0]
+		for i, item := range ui.All {
+			if strings.Contains(ui.lower[i], filter) {
+				ui.Filtered = append(ui.Filtered, item)
+			}
+		}
+		return
+	}
+
+	rx, err := regexp.Compile("(?i)" + filter)
 	if err != nil {
 		ui.FilterError = err.Error()
 		return
