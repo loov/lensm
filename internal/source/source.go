@@ -91,7 +91,7 @@ func Load(files Files, refs Refs, symbolFile string, context int) []disasm.Sourc
 			block.Related = make([][]disasm.LineRange, len(block.Lines))
 			for line := block.From; line < block.From+len(block.Lines); line++ {
 				if set, ok := refs[Ref{src.File, line}]; ok {
-					block.Related[line-block.From] = set.RangesZero()
+					block.Related[line-block.From] = set.Ranges(0)
 				}
 			}
 		}
@@ -150,6 +150,7 @@ func loadLines(files Files, needed map[string]*disasm.LineSet, symbolFile string
 		for _, r := range set.Ranges(context) {
 			// The file may have been edited since the build; clamp both
 			// ends rather than trusting the line table.
+			r.From = max(r.From, 1)
 			from, to := r.From-1, min(r.To-1, len(lines))
 			if from >= to {
 				continue

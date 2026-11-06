@@ -14,7 +14,9 @@ func (rs *LineSet) Add(line int) {
 	}
 }
 
-// Ranges converts line set to line ranges and adds context for extra information.
+// Ranges merges the set into ranges, each widened by context on both
+// sides. The first range can start below the smallest member, at zero
+// or below; callers holding line numbers clamp it.
 func (rs *LineSet) Ranges(context int) []LineRange {
 	if len(rs.list) == 0 {
 		return nil
@@ -23,37 +25,12 @@ func (rs *LineSet) Ranges(context int) []LineRange {
 	var all []LineRange
 
 	current := LineRange{From: rs.list[0] - context, To: rs.list[0] + context + 1}
-	if current.From < 1 {
-		current.From = 1
-	}
 	for _, line := range rs.list {
 		if line-context <= current.To {
 			current.To = line + context + 1
 		} else {
 			all = append(all, current)
 			current = LineRange{From: line - context, To: line + context + 1}
-		}
-	}
-	all = append(all, current)
-
-	return all
-}
-
-// RangesZero returns a ranges without expanding by context.
-func (rs *LineSet) RangesZero() []LineRange {
-	if len(rs.list) == 0 {
-		return nil
-	}
-
-	var all []LineRange
-
-	current := LineRange{From: rs.list[0], To: rs.list[0] + 1}
-	for _, line := range rs.list {
-		if line <= current.To {
-			current.To = line + 1
-		} else {
-			all = append(all, current)
-			current = LineRange{From: line, To: line + 1}
 		}
 	}
 	all = append(all, current)
