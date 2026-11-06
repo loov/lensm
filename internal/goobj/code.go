@@ -1,9 +1,7 @@
 package goobj
 
 import (
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/loov/disasm/objfile"
@@ -11,9 +9,10 @@ import (
 	"loov.dev/lensm/internal/source"
 )
 
-var rxRefAbs = regexp.MustCompile(`\s0x[\da-fA-F]+$`)
-var rxRefRel = regexp.MustCompile(`\s-?\d+\(PC\)$`)
-var rxCallOrJump = regexp.MustCompile(`^(?:CALL|JMP)\s+(.+?)\(SB\)`)
+// inFunc reports whether addr lies inside fn.
+func inFunc(fn *Func, addr uint64) bool {
+	return fn.fn.Addr <= addr && addr-fn.fn.Addr < fn.fn.Size
+}
 
 // entryFile is the file a function belongs to: its entry's, or the first
 // position inside it that has one. A line table need not have a row at
@@ -50,42 +49,29 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 	}
 	var instructions []disasm.Inst
 	for _, in := range decoded {
-		pc, text := in.Addr, in.Text
+		pc := in.Addr
 		file, line := bin.PCToLine(pc)
-		// TODO: find a better way to calculate the jump target
 		var refPC uint64
 		var call string
-		if in.RefKnown {
-			// The decoder resolved the target itself (Thumb, AVR): a
-			// call becomes a link to the callee, a jump an arrow.
-			if in.Ref == 0 {
-				// no reference
-			} else if name, base := bin.Lookup(in.Ref); in.Call && name != "" && base == in.Ref {
-				call = name
-			} else {
-				refPC = in.Ref
-			}
-		} else if match := rxRefAbs.FindString(text); match != "" {
-			if target, err := strconv.ParseInt(match[3:], 16, 64); err == nil {
-				refPC = uint64(target)
-			}
-		} else if match := rxRefRel.FindString(text); match != "" {
-			// TODO: this calculation seems incorrect
-			if target, err := strconv.ParseInt(match[1:len(match)-4], 10, 64); err == nil {
-				refPC = uint64(int64(pc) + target*4)
-			} else {
-				panic(err)
-			}
-		} else if match := rxCallOrJump.FindStringSubmatch(text); len(match) > 0 {
-			call = match[1]
+		if name, base := bin.Lookup(in.Ref); in.Ref != 0 && name != "" && base == in.Ref &&
+			(in.Call || !inFunc(sym, in.Ref)) {
+			// A call, a tail call or a function address: link to it.
+			call = name
+		} else if inFunc(sym, in.Ref) && in.Op != "ADRP" && in.Op != "ADR" {
+			// A branch inside the function gets an arrow. Ref also holds
+			// data addresses, but only ADR and ADRP point into code, and
+			// objfile reports ADRP's unmasked pc+imm, often the
+			// instruction itself.
+			refPC = in.Ref
 		}
 
-		if refPC != 0 {
+		// A jump to itself (for {}) needs no spacer before its target.
+		if refPC != 0 && refPC != pc {
 			needRefPCs[refPC] = struct{}{}
 		}
 		instructions = append(instructions, disasm.Inst{
 			PC:         pc,
-			Text:       text,
+			Text:       in.Text,
 			NativeText: in.GNU,
 			Mnemonic:   in.Op,
 			File:       file,

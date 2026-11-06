@@ -36,6 +36,8 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 			}
 			defer file.Close()
 
+			checkRefs(t, file)
+
 			for _, fn := range file.Funcs() {
 				if !strings.Contains(fn.Name(), "main.sumInts") {
 					continue
@@ -58,5 +60,29 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 			}
 			t.Fatal("main.sumInts not found in binary")
 		})
+	}
+}
+
+// checkRefs checks that a tail call links to its target and that no
+// address computation is drawn as a jump.
+func checkRefs(t *testing.T, file *File) {
+	t.Helper()
+	tailCall := false
+	for _, fn := range file.Funcs() {
+		code, err := fn.Load(disasm.Options{})
+		if err != nil {
+			continue
+		}
+		for _, in := range code.Insts {
+			if fn.Name() == "runtime.morestack_noctxt.abi0" && in.Call == "runtime.morestack.abi0" {
+				tailCall = true
+			}
+			if in.RefPC != 0 && (in.Mnemonic == "ADRP" || in.Mnemonic == "ADR") {
+				t.Fatalf("%s: %s is drawn as a jump", fn.Name(), in.Text)
+			}
+		}
+	}
+	if !tailCall {
+		t.Error("runtime.morestack_noctxt.abi0 has no link to runtime.morestack.abi0")
 	}
 }
