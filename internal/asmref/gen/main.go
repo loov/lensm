@@ -37,11 +37,7 @@ func main() {
 
 	table := b.Table()
 
-	covered := make(map[string]bool, len(table))
-	for k := range table {
-		covered[k] = true
-	}
-	if missing := missingCoverage(covered); len(missing) > 0 {
+	if missing := missingCoverage(table); len(missing) > 0 {
 		sample := missing
 		if len(sample) > 20 {
 			sample = sample[:20]
