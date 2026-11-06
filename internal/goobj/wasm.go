@@ -21,12 +21,15 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 	refs := source.Refs{}
 	// Block nesting is kept as one space per level: Go's function
 	// prologue opens one block per resume point, so two would run wide.
+	// The indent stops at maxIndent, otherwise thousands of nested blocks
+	// cost memory quadratic in the depth.
+	const maxIndent = 32
 	level := 0
 	for i, in := range decoded {
 		if in.Op == "end" || in.Op == "else" {
 			level = max(level-1, 0)
 		}
-		inst := disasm.Inst{PC: uint64(i), Text: strings.Repeat(" ", level) + in.Text}
+		inst := disasm.Inst{PC: uint64(i), Text: strings.Repeat(" ", min(level, maxIndent)) + in.Text}
 		switch in.Op {
 		case "block", "loop", "if", "else":
 			level++
