@@ -423,8 +423,10 @@ func (store *Store) Normalize(coord Coord) Coord {
 	return coord
 }
 
+// key identifies a record within the store. It skips Normalize: the
+// binary and pc_hex aren't part of it, and cleaning the binary path ran
+// filepath.Abs for every row the code view draws.
 func (store *Store) key(coord Coord) string {
-	coord = store.Normalize(coord)
 	switch coord.View {
 	case ViewSource:
 		return fmt.Sprintf("%s\x00%s\x00%s\x00%d", coord.Function, coord.View, CleanPath(coord.File), coord.Line)
