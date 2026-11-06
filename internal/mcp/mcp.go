@@ -506,8 +506,8 @@ func mcpTools() []mcpTool {
 			}, nil),
 		},
 		{
-			Name:        "get_function",
-			Title:       "Get Function Code",
+			Name:  "get_function",
+			Title: "Get Function Code",
 			Description: "Return a function's source, its assembly in Go and native syntax, which instructions each source line compiled to, and comments. " +
 				"Source comes from the debug info and is missing when the files aren't on this machine. " +
 				"Instructions come in pages of 500; when truncated is set, call again with offset.",
