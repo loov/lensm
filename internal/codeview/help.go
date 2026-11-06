@@ -21,7 +21,7 @@ import (
 // layoutHelp draws the instruction help tooltip for the hovered assembly
 // line, when help is enabled and the user is not selecting or editing.
 func (ui Style) layoutHelp(gtx layout.Context, c codeColumns, hover codeHover) {
-	commentEditing := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
+	commentEditing := ui.CommentEditor != nil && gtx.Focused(&ui.CommentEditor.Editor)
 	if !ui.ShowHelp || ui.selecting || commentEditing || hover.asmIndex < 0 || hover.asmIndex >= len(ui.Code.Insts) {
 		return
 	}

@@ -71,7 +71,7 @@ type FileUI struct {
 	SyntaxStyle    widget.Enum
 	ShowNativeAsm  widget.Bool
 	ShowAsmHelp    widget.Bool
-	Comment        widget.Editor
+	Comment        codeview.CommentEditor
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -91,7 +91,6 @@ type FileUI struct {
 	exited             chan struct{}
 	flushTimer         *time.Timer
 	sessionDirty       bool
-	commentKey         string
 	copyStatus         string
 	copyStatusAt       time.Time
 	saveError          string
@@ -313,7 +312,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	ui.loadCommentsForPath(ui.Config.Path)
 	ui.CodeTabs = nil
 	ui.ActiveTab = -1
-	ui.commentKey = ""
+	ui.Comment.Reset()
 	ui.Funcs.SetItems(file.Funcs())
 
 	if activeName != "" {
@@ -698,7 +697,6 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 
 								Comments:      ui.Comments,
 								SetComment:    ui.setBufferedComment,
-								CommentKey:    &ui.commentKey,
 								CommentEditor: &ui.Comment,
 
 								Theme:      ui.Theme,

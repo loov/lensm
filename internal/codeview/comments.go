@@ -30,6 +30,18 @@ func (ui Style) sourceCoord(file string, line int) comments.Coord {
 	return comments.Coord{Function: name, View: comments.ViewSource, File: file, Line: line}
 }
 
+// CommentEditor is the inline comment editor, shared by every row and
+// tab. It remembers which comment it holds, so moving to another row
+// reloads its text.
+type CommentEditor struct {
+	widget.Editor
+	key string
+}
+
+// Reset unbinds the editor, so the next row it is drawn on loads its
+// comment even if it is the same row in another function's code.
+func (e *CommentEditor) Reset() { e.key = "" }
+
 // commentEditKey identifies which comment the shared inline editor is
 // bound to, so moving to a different line reloads the editor text.
 func commentEditKey(coord comments.Coord) string {
@@ -71,7 +83,7 @@ func (ui Style) layoutRowComment(gtx layout.Context, coord comments.Coord, prefi
 }
 
 func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coord, prefix string, top, left, width, lineHeight int) {
-	if ui.CommentEditor == nil || ui.CommentKey == nil || ui.SetComment == nil {
+	if ui.CommentEditor == nil || ui.SetComment == nil {
 		comment := ui.Comments.Get(coord)
 		if comment == "" {
 			return
@@ -88,8 +100,8 @@ func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coo
 	}
 
 	key := commentEditKey(coord)
-	if key != *ui.CommentKey {
-		*ui.CommentKey = key
+	if key != ui.CommentEditor.key {
+		ui.CommentEditor.key = key
 		ui.CommentEditor.SetText(ui.Comments.Get(coord))
 	}
 
@@ -121,7 +133,7 @@ func (ui Style) layoutInlineCommentEditor(gtx layout.Context, coord comments.Coo
 	editorWidth := max(width-prefixWidth, 0)
 	stack := op.Offset(image.Pt(editorLeft, top)).Push(gtx.Ops)
 	gtx.Constraints = layout.Exact(image.Pt(editorWidth, lineHeight))
-	editor := material.Editor(ui.Theme.Theme, ui.CommentEditor, "comment")
+	editor := material.Editor(ui.Theme.Theme, &ui.CommentEditor.Editor, "comment")
 	editor.TextSize = ui.TextHeight
 	editor.Font.Typeface = gui.Monospace
 	editor.Color = ui.Theme.Colors.Text

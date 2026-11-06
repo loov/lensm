@@ -12,7 +12,6 @@ import (
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
-	"gioui.org/widget"
 
 	"loov.dev/lensm/internal/asmhelp"
 	"loov.dev/lensm/internal/comments"
@@ -134,12 +133,11 @@ type Style struct {
 
 	// Comments backs inline comment display and editing. Reads go through
 	// the store directly; SetComment records an edit (buffered write plus
-	// flush scheduling), and CommentKey/CommentEditor drive the single
-	// shared inline editor.
+	// flush scheduling), and CommentEditor is the single shared inline
+	// editor.
 	Comments      *comments.Store
 	SetComment    func(comments.Coord, string)
-	CommentKey    *string
-	CommentEditor *widget.Editor
+	CommentEditor *CommentEditor
 	Theme         *gui.Theme
 	Syntax        syntax.Palette
 

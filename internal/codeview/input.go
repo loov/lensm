@@ -145,7 +145,11 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 		}
 	}
 	selectionFocus := event.Tag(ui.UI)
-	commentFocused := ui.CommentEditor != nil && gtx.Focused(ui.CommentEditor)
+	var commentTag event.Tag
+	if ui.CommentEditor != nil {
+		commentTag = &ui.CommentEditor.Editor
+	}
+	commentFocused := commentTag != nil && gtx.Focused(commentTag)
 	if ui.Selection.Active && !commentFocused {
 		// A drag can leave keyboard focus on a surrounding widget on macOS.
 		// An active line selection still owns Cmd/Ctrl+C, Cmd/Ctrl+A, and
@@ -165,14 +169,18 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			}
 		}
 	}
+	filters := []event.Filter{
+		key.FocusFilter{Target: ui.UI},
+		key.Filter{Focus: selectionFocus, Required: key.ModShortcut, Name: key.Name("A")},
+		key.Filter{Focus: selectionFocus, Name: key.NameEscape},
+		key.Filter{Focus: selectionFocus, Name: key.NameReturn},
+	}
+	if commentTag != nil {
+		// A nil Focus would match whatever has focus.
+		filters = append(filters, key.Filter{Focus: commentTag, Name: key.NameEscape})
+	}
 	for {
-		ev, ok := gtx.Event(
-			key.FocusFilter{Target: ui.UI},
-			key.Filter{Focus: selectionFocus, Required: key.ModShortcut, Name: key.Name("A")},
-			key.Filter{Focus: selectionFocus, Name: key.NameEscape},
-			key.Filter{Focus: selectionFocus, Name: key.NameReturn},
-			key.Filter{Focus: ui.CommentEditor, Name: key.NameEscape},
-		)
+		ev, ok := gtx.Event(filters...)
 		if !ok {
 			break
 		}
@@ -227,7 +235,7 @@ func (ui Style) editComment(gtx layout.Context) {
 	if ui.SelectedAsm < 0 && (ui.SelectedView != ViewSource || ui.SelectedLine <= 0) {
 		return
 	}
-	gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
+	gtx.Execute(key.FocusCmd{Tag: &ui.CommentEditor.Editor})
 }
 
 // resolveHover computes the pointer hover state and handles clicks on the
