@@ -100,3 +100,29 @@ func TestFileUIPreviewTab(t *testing.T) {
 		t.Fatalf("keepActiveTab did not clear Preview")
 	}
 }
+
+// TestFileUIReloadKeepsView checks that reloading the same binary, as
+// watch mode does, keeps each tab's selection and preview state.
+func TestFileUIReloadKeepsView(t *testing.T) {
+	functions := []disasm.Func{navigationTestFunc("main.A"), navigationTestFunc("main.B")}
+	theme := gui.NewTheme(material.NewTheme(), false)
+	ui := &FileUI{
+		Theme:     theme,
+		Funcs:     gui.NewFilterList[disasm.Func](theme),
+		ActiveTab: -1,
+	}
+	ui.Navigation.Reset()
+	ui.SetFile(navigationTestFile{funcs: functions})
+	ui.openTab(functions[0], false)
+	ui.previewTab(functions[1])
+	ui.activeTab().Code.SelectedAsm = 5
+
+	ui.SetFile(navigationTestFile{funcs: functions})
+	if len(ui.CodeTabs) != 2 {
+		t.Fatalf("%d tabs after reload, want 2", len(ui.CodeTabs))
+	}
+	tab := ui.activeTab()
+	if tab.Name != "main.B" || !tab.Preview || tab.Code.SelectedAsm != 5 {
+		t.Fatalf("active tab after reload = %s preview=%v selected=%d", tab.Name, tab.Preview, tab.Code.SelectedAsm)
+	}
+}

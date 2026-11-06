@@ -115,6 +115,14 @@ func (ui *UI) ResetScroll() {
 	ui.src.Offset = 100000
 }
 
+// KeepView carries the scroll positions and selected row over from
+// prev, the same function before the binary was reloaded.
+func (ui *UI) KeepView(prev *UI) {
+	ui.asm.Offset, ui.src.Offset = prev.asm.Offset, prev.src.Offset
+	ui.SelectedAsm, ui.SelectedView = prev.SelectedAsm, prev.SelectedView
+	ui.SelectedFile, ui.SelectedLine = prev.SelectedFile, prev.SelectedLine
+}
+
 type Style struct {
 	*UI
 

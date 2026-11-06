@@ -271,10 +271,18 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	// tabs are preserved there too. Entries whose functions vanished are
 	// skipped during navigation.
 	path := comments.CleanPath(ui.Config.Path)
-	if ui.File == nil || path != ui.loadedPath {
+	reload := ui.File != nil && path == ui.loadedPath
+	if !reload {
 		ui.Navigation.Reset()
 	}
 	ui.loadedPath = path
+	// A reload keeps each tab where it was, matched by function name.
+	previous := map[string]*CodeTab{}
+	if reload {
+		for _, tab := range ui.CodeTabs {
+			previous[tab.Name] = tab
+		}
+	}
 
 	initialLoad := ui.File == nil
 	if ui.File != nil {
@@ -314,6 +322,10 @@ func (ui *FileUI) SetFile(file disasm.File) {
 			continue
 		}
 		tab := ui.appendCodeTab(fn)
+		if old, ok := previous[name]; ok {
+			tab.Code.KeepView(&old.Code)
+			tab.Preview = old.Preview
+		}
 		if name == activeName {
 			ui.ActiveTab = len(ui.CodeTabs) - 1
 			ui.Funcs.Select(tab.Name)
