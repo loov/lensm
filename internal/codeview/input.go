@@ -72,10 +72,9 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 		ev, ok := gtx.Event(pointer.Filter{
 			Target: ui.UI,
 			Kinds:  pointer.Move | pointer.Leave | pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Scroll,
-			ScrollY: pointer.ScrollRange{
-				Min: int(ui.asm.Offset) - lineHeight,
-				Max: len(ui.Code.Insts)*lineHeight + lineHeight - int(ui.asm.Offset),
-			},
+			// One filter serves both columns, so the range can't follow
+			// either column's offset; LayoutBar clamps each afterwards.
+			ScrollY: pointer.ScrollRange{Min: -math.MaxInt32, Max: math.MaxInt32},
 		})
 		if !ok {
 			break
@@ -130,13 +129,16 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 				ui.selecting = false
 			case pointer.Scroll:
 				ui.mousePosition = ev.Position
+				// Clamp here, with the bounds layoutScrollbars uses, so the
+				// frame isn't drawn scrolled past the end.
+				overflow := float32(lineHeight)
 				switch {
-				case c.asm.Contains(ev.Position.X):
+				case c.asm.Contains(ev.Position.X) || ui.ShowNative && c.native.Contains(ev.Position.X):
 					ui.asm.Offset -= ev.Scroll.Y
-				case ui.ShowNative && c.native.Contains(ev.Position.X):
-					ui.asm.Offset -= ev.Scroll.Y
+					ui.asm.Clamp(gtx, -overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow)
 				case c.source.Contains(ev.Position.X):
 					ui.src.Offset -= ev.Scroll.Y
+					ui.src.Clamp(gtx, -overflow, float32(sourceRowCount(ui.Code)*lineHeight)+overflow)
 				}
 			}
 		}
