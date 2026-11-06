@@ -20,8 +20,11 @@ type CodeTab struct {
 	Func    disasm.Func
 	Code    codeview.UI
 	Preview bool
-	Tab     widget.Clickable
-	Close   widget.Clickable
+	// LoadError is why the function failed to disassemble. It is kept
+	// apart from FileUI.LoadError, which is about the file.
+	LoadError error
+	Tab       widget.Clickable
+	Close     widget.Clickable
 }
 
 func (ui *FileUI) activeTab() *CodeTab {
@@ -43,7 +46,7 @@ func (ui *FileUI) loadTabCode(tab *CodeTab, fn disasm.Func) {
 	tab.Name = fn.Name()
 	tab.Func = fn
 	tab.Code = codeview.UI{}
-	tab.Code.Code, ui.LoadError = fn.Load(ui.loadOptions())
+	tab.Code.Code, tab.LoadError = fn.Load(ui.loadOptions())
 	tab.Code.SelectedAsm = -1
 	tab.Code.SelectedView = codeview.ViewGoAsm
 	tab.Code.ResetScroll()

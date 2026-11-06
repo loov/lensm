@@ -634,6 +634,10 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					if ui.LoadError != nil && ui.File == nil {
 						return layout.Dimensions{}
 					}
+					if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
+						txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)
+						return layout.UniformInset(6).Layout(gtx, txt.Layout)
+					}
 					code := ui.activeCode()
 					if code == nil {
 						return layout.Dimensions{}
