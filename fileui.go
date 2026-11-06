@@ -93,6 +93,7 @@ type FileUI struct {
 	sessionDirty       bool
 	commentKey         string
 	copyStatus         string
+	copyStatusAt       time.Time
 	saveError          string
 	settingsWindowOpen bool
 	pickerOpen         bool
@@ -449,6 +450,15 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				return layout.Inset{Left: 4}.Layout(gtx, button.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				// "Copied selection" is feedback for the moment, not state.
+				const copyStatusFor = 2 * time.Second
+				if ui.copyStatus != "" && !ui.copyStatusAt.IsZero() {
+					if gtx.Now.Sub(ui.copyStatusAt) >= copyStatusFor {
+						ui.copyStatus = ""
+					} else {
+						gtx.Execute(op.InvalidateCmd{At: ui.copyStatusAt.Add(copyStatusFor)})
+					}
+				}
 				if ui.copyStatus == "" {
 					return layout.Dimensions{}
 				}
@@ -745,6 +755,7 @@ func (ui *FileUI) writeClipboardText(gtx layout.Context, text, status string) {
 		Data: io.NopCloser(strings.NewReader(text)),
 	})
 	ui.copyStatus = status
+	ui.copyStatusAt = gtx.Now
 }
 
 func (ui *FileUI) tryOpen(gtx layout.Context, call string) {
