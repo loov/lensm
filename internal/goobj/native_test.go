@@ -19,7 +19,7 @@ func buildC(t *testing.T, name, src string) string {
 		cc = "cc"
 	}
 	if _, err := exec.LookPath(cc); err != nil {
-		t.Skipf("no C compiler: %v", err)
+		noToolchain(t, "no C compiler: %v", err)
 	}
 	dir := t.TempDir()
 	source := filepath.Join(dir, name)
@@ -31,7 +31,7 @@ func buildC(t *testing.T, name, src string) string {
 	// the line table this test is about.
 	cmd := exec.Command(cc, "-g", "-O1", "-o", binary, source)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("%s: %v\n%s", cc, err, out)
+		noToolchain(t, "%s: %v\n%s", cc, err, out)
 	}
 	return binary
 }
@@ -184,7 +184,7 @@ func buildCPP(t *testing.T, src string) string {
 		cxx = "c++"
 	}
 	if _, err := exec.LookPath(cxx); err != nil {
-		t.Skipf("no C++ compiler: %v", err)
+		noToolchain(t, "no C++ compiler: %v", err)
 	}
 	dir := t.TempDir()
 	source := filepath.Join(dir, "prog.cpp")
@@ -193,7 +193,7 @@ func buildCPP(t *testing.T, src string) string {
 	}
 	binary := filepath.Join(dir, "prog")
 	if out, err := exec.Command(cxx, "-g", "-O1", "-o", binary, source).CombinedOutput(); err != nil {
-		t.Skipf("%s: %v\n%s", cxx, err, out)
+		noToolchain(t, "%s: %v\n%s", cxx, err, out)
 	}
 	return binary
 }
@@ -221,7 +221,7 @@ func TestLoadRust(t *testing.T) {
 		t.Skip("compiles a Rust program")
 	}
 	if _, err := exec.LookPath("rustc"); err != nil {
-		t.Skipf("no rustc: %v", err)
+		noToolchain(t, "no rustc: %v", err)
 	}
 	dir := t.TempDir()
 	source := filepath.Join(dir, "prog.rs")
@@ -231,7 +231,7 @@ func TestLoadRust(t *testing.T) {
 	binary := filepath.Join(dir, "prog")
 	cmd := exec.Command("rustc", "-g", "-O", "-o", binary, source)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("rustc: %v\n%s", err, out)
+		noToolchain(t, "rustc: %v\n%s", err, out)
 	}
 
 	file, err := Load(binary)
@@ -511,4 +511,15 @@ func TestLoadXtensa(t *testing.T) {
 	if words == 0 {
 		t.Error("no literal pool rendered as WORD data")
 	}
+}
+
+// noToolchain skips a test that needs a compiler that is missing or
+// broken. CI has gcc, g++ and rustc, so there it fails instead: a skip
+// would hide that the C, C++ or Rust path went untested.
+func noToolchain(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv("CI") != "" {
+		t.Fatalf(format, args...)
+	}
+	t.Skipf(format, args...)
 }
