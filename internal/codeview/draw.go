@@ -1,11 +1,11 @@
 package codeview
 
 import (
+	"fmt"
 	"image"
 	"math"
 
 	"gioui.org/f32"
-	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -254,8 +254,8 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 				ui.SelectedView = ViewSource
 				ui.SelectedFile = src.File
 				ui.SelectedLine = lineNo
-				if ui.CommentEditor != nil {
-					gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
+				if ui.doubleClicked(gtx, fmt.Sprint(src.File, lineNo)) {
+					ui.editComment(gtx)
 				}
 			}
 			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo

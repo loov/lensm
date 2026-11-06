@@ -1,6 +1,8 @@
 package codeview
 
 import (
+	"time"
+
 	"image"
 	"strings"
 
@@ -38,6 +40,11 @@ type UI struct {
 	selectionPointer pointer.ID
 	selectionStart   f32.Point
 	selectionMoved   bool
+
+	// lastClickRow and lastClickAt detect a double click, which opens
+	// the comment editor on the row.
+	lastClickRow string
+	lastClickAt  time.Time
 }
 
 // highlightCache holds the syntax highlight spans for a Code. Layout

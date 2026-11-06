@@ -1,6 +1,7 @@
 package codeview
 
 import (
+	"fmt"
 	"image"
 	"math"
 	"strings"
@@ -169,6 +170,8 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			key.FocusFilter{Target: ui.UI},
 			key.Filter{Focus: selectionFocus, Required: key.ModShortcut, Name: key.Name("A")},
 			key.Filter{Focus: selectionFocus, Name: key.NameEscape},
+			key.Filter{Focus: selectionFocus, Name: key.NameReturn},
+			key.Filter{Focus: ui.CommentEditor, Name: key.NameEscape},
 		)
 		if !ok {
 			break
@@ -191,10 +194,40 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 				ui.Selection = TextSelection{View: view, Anchor: 0, Head: lineCount - 1, Active: true}
 			}
 		case key.NameEscape:
-			ui.Selection.Clear()
+			if commentFocused {
+				gtx.Execute(key.FocusCmd{Tag: ui.UI})
+			} else {
+				ui.Selection.Clear()
+			}
+		case key.NameReturn:
+			ui.editComment(gtx)
 		}
 	}
 	return mouseClicked
+}
+
+// doubleClicked records a click on row and reports whether it is the
+// second of a double click.
+func (ui Style) doubleClicked(gtx layout.Context, row string) bool {
+	double := row == ui.lastClickRow && gtx.Now.Sub(ui.lastClickAt) < 500*time.Millisecond
+	ui.lastClickRow, ui.lastClickAt = row, gtx.Now
+	if double {
+		ui.lastClickRow = ""
+	}
+	return double
+}
+
+// editComment focuses the comment editor on the selected row. A plain
+// click only selects, so stray typing and shortcuts after it don't land
+// in a comment.
+func (ui Style) editComment(gtx layout.Context) {
+	if ui.CommentEditor == nil {
+		return
+	}
+	if ui.SelectedAsm < 0 && (ui.SelectedView != ViewSource || ui.SelectedLine <= 0) {
+		return
+	}
+	gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
 }
 
 // resolveHover computes the pointer hover state and handles clicks on the
@@ -241,8 +274,8 @@ func (ui Style) resolveHover(gtx layout.Context, c codeColumns, mouseClicked boo
 			} else {
 				ui.SelectedView = ViewGoAsm
 			}
-			if ui.CommentEditor != nil {
-				gtx.Execute(key.FocusCmd{Tag: ui.CommentEditor})
+			if ui.doubleClicked(gtx, fmt.Sprint(ui.SelectedView, highlightAsmIndex)) {
+				ui.editComment(gtx)
 			}
 		}
 		if ix.Call == "" && ix.RefOffset != 0 {
