@@ -1,7 +1,8 @@
 package goobj
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/loov/disasm/objfile"
@@ -91,78 +92,7 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 		code.Insts = append(code.Insts, ix)
 	}
 
-	type jumpInterval struct {
-		index    int
-		ix       *disasm.Inst
-		min, max uint64
-	}
-
-	var jumps []jumpInterval
-	for i := range code.Insts {
-		ix := &code.Insts[i]
-		if ix.RefPC != 0 {
-			target, ok := pcToIndex[ix.RefPC]
-			if !ok {
-				continue
-			}
-			ix.RefOffset = target - i
-
-			if ix.PC <= ix.RefPC {
-				jumps = append(jumps, jumpInterval{
-					index: i,
-					ix:    ix,
-					min:   ix.PC,
-					max:   ix.RefPC,
-				})
-			} else {
-				jumps = append(jumps, jumpInterval{
-					index: i,
-					ix:    ix,
-					min:   ix.RefPC,
-					max:   ix.PC,
-				})
-			}
-		}
-	}
-
-	sort.Slice(jumps, func(i, k int) bool {
-		if jumps[i].min == jumps[k].min {
-			return jumps[i].max > jumps[k].max
-		}
-		return jumps[i].min < jumps[k].min
-	})
-
-	var stackLayers []uint64
-	insertToStack := func(ix *disasm.Inst, max uint64) {
-		found := false
-		for k, pc := range stackLayers {
-			if pc == 0 {
-				stackLayers[k] = max
-				ix.RefStack = k
-				found = true
-				break
-			}
-		}
-		if !found {
-			code.MaxJump = len(stackLayers)
-			ix.RefStack = len(stackLayers)
-			stackLayers = append(stackLayers, max)
-		}
-	}
-
-	for _, jump := range jumps {
-		for i, pc := range stackLayers {
-			if pc <= jump.min {
-				stackLayers[i] = 0
-			}
-		}
-		insertToStack(jump.ix, jump.max)
-	}
-	for i := range code.Insts {
-		ix := &code.Insts[i]
-		ix.RefStack = code.MaxJump - ix.RefStack + 1
-	}
-	code.MaxJump++
+	layoutJumps(code, pcToIndex)
 
 	// remove trailing interrupts and padding from funcs
 	for len(code.Insts) > 0 &&
@@ -179,4 +109,54 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 	code.Source = source.Load(sym.file.files, refs, code.File, opts.Context)
 
 	return code, nil
+}
+
+// layoutJumps sets each jump's RefOffset and gives it a column, so jumps
+// whose spans overlap get separate lines. Jumps that start earlier, and
+// the longer one on a tie, take the outer columns.
+func layoutJumps(code *disasm.Code, pcToIndex map[uint64]int) {
+	type jump struct {
+		ix       *disasm.Inst
+		min, max uint64
+	}
+	var jumps []jump
+	for i := range code.Insts {
+		ix := &code.Insts[i]
+		if ix.RefPC == 0 {
+			continue
+		}
+		target, ok := pcToIndex[ix.RefPC]
+		if !ok {
+			continue
+		}
+		ix.RefOffset = target - i
+		jumps = append(jumps, jump{ix, min(ix.PC, ix.RefPC), max(ix.PC, ix.RefPC)})
+	}
+	slices.SortFunc(jumps, func(a, b jump) int {
+		return cmp.Or(cmp.Compare(a.min, b.min), cmp.Compare(b.max, a.max))
+	})
+
+	// columns holds the end of the jump in each column, 0 when free.
+	var columns []uint64
+	for _, j := range jumps {
+		for k, end := range columns {
+			if end <= j.min {
+				columns[k] = 0
+			}
+		}
+		k := slices.Index(columns, 0)
+		if k < 0 {
+			k = len(columns)
+			code.MaxJump = k
+			columns = append(columns, 0)
+		}
+		columns[k] = j.max
+		j.ix.RefStack = k
+	}
+	// Number the columns from the code outwards.
+	for i := range code.Insts {
+		ix := &code.Insts[i]
+		ix.RefStack = code.MaxJump - ix.RefStack + 1
+	}
+	code.MaxJump++
 }
