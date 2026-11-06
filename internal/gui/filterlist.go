@@ -168,7 +168,7 @@ func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions
 				}))
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			body := th.Label(fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)), 0.8)
+			body := th.Label(fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)), 0.9)
 			return layout.Center.Layout(gtx, body.Layout)
 		}),
 	)

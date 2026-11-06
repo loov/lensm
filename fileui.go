@@ -438,7 +438,7 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				if ui.Config.Path == "" {
 					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
 				}
-				label := ui.Theme.Muted(ui.Config.Path, 0.8)
+				label := ui.Theme.Muted(ui.Config.Path, 0.9)
 				label.MaxLines = 1
 				return layout.W.Layout(gtx, label.Layout)
 			}),
@@ -452,14 +452,14 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				if ui.copyStatus == "" {
 					return layout.Dimensions{}
 				}
-				label := ui.Theme.Muted(ui.copyStatus, 0.75)
+				label := ui.Theme.Muted(ui.copyStatus, 0.85)
 				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				if ui.saveError == "" {
 					return layout.Dimensions{}
 				}
-				label := ui.Theme.ErrorLabel(ui.saveError, 0.75)
+				label := ui.Theme.ErrorLabel(ui.saveError, 0.85)
 				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
 			}),
 		)

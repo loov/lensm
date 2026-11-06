@@ -193,7 +193,7 @@ func StringListItem(th *material.Theme, state *SelectList, item func(int) string
 			label := material.Body1(th, item(index))
 			label.Color = fg
 			label.MaxLines = 1
-			label.TextSize = th.TextSize * 8 / 10
+			label.TextSize = th.TextSize * 9 / 10
 			label.Font.Weight = weight
 			gtx.Constraints.Max.X = MaxLineWidth
 			return label.Layout(gtx)

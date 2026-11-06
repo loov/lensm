@@ -308,7 +308,7 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 					size := gtx.Constraints.Max
 					defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 
-					label := ui.Theme.Label(tab.Name, 0.8)
+					label := ui.Theme.Label(tab.Name, 0.9)
 					label.MaxLines = 1
 					if active {
 						label.Font.Weight = font.Black
@@ -328,7 +328,7 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 					if tab.Close.Hovered() {
 						paint.FillShape(gtx.Ops, colors.Selection, clip.Rect{Max: size}.Op())
 					}
-					label := ui.Theme.Muted("x", 0.8)
+					label := ui.Theme.Muted("x", 0.9)
 					label.MaxLines = 1
 					dims := layout.Center.Layout(gtx, label.Layout)
 					return layout.Dimensions{Size: size, Baseline: dims.Baseline}
