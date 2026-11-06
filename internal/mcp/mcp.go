@@ -134,8 +134,10 @@ func (server *mcpServer) writeMessage(msg rpcMessage) error {
 	return server.out.Flush()
 }
 
+// handle answers a request. Notifications (no id) and responses from
+// the client (no method) get no reply.
 func (server *mcpServer) handle(msg rpcMessage) (rpcMessage, bool) {
-	if len(msg.ID) == 0 {
+	if len(msg.ID) == 0 || msg.Method == "" {
 		return rpcMessage{}, false
 	}
 	response := rpcMessage{JSONRPC: "2.0", ID: msg.ID}

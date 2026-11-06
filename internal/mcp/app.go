@@ -149,21 +149,18 @@ func (server *AppServer) handleHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "http://localhost")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id")
 
 	switch req.Method {
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
-	case http.MethodGet:
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"name": "lensm",
-			"mcp":  server.url,
-		})
 	case http.MethodPost:
 		server.handleHTTPPost(w, req)
 	default:
+		// GET would open a server-to-client event stream, which lensm
+		// doesn't have; streamable HTTP wants 405 for that.
+		w.Header().Set("Allow", "POST, OPTIONS")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }

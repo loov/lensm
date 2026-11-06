@@ -53,16 +53,16 @@ func TestMCPHandleHTTPRejectsRebinding(t *testing.T) {
 		origin string
 		status int
 	}{
-		{name: "loopback ip", host: "127.0.0.1:7077", status: 200},
-		{name: "localhost", host: "localhost:7077", status: 200},
-		{name: "ipv6 loopback", host: "[::1]:7077", status: 200},
+		{name: "loopback ip", host: "127.0.0.1:7077", status: 204},
+		{name: "localhost", host: "localhost:7077", status: 204},
+		{name: "ipv6 loopback", host: "[::1]:7077", status: 204},
 		{name: "rebound host", host: "evil.example.com:7077", status: 403},
-		{name: "loopback origin", host: "127.0.0.1:7077", origin: "http://localhost:8000", status: 200},
+		{name: "loopback origin", host: "127.0.0.1:7077", origin: "http://localhost:8000", status: 204},
 		{name: "cross-site origin", host: "127.0.0.1:7077", origin: "https://evil.example.com", status: 403},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "http://placeholder/", nil)
+			req := httptest.NewRequest("OPTIONS", "http://placeholder/", nil)
 			req.Host = tc.host
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
@@ -119,4 +119,17 @@ type closeCounter struct {
 func (f *closeCounter) Close() error {
 	f.closed.Add(1)
 	return nil
+}
+
+func TestMCPIgnoresResponses(t *testing.T) {
+	server := &mcpServer{}
+	if _, ok := server.handle(rpcMessage{ID: json.RawMessage("4"), Result: map[string]any{}}); ok {
+		t.Fatal("replied to a response")
+	}
+	if _, ok := server.handle(rpcMessage{Method: "notifications/initialized"}); ok {
+		t.Fatal("replied to a notification")
+	}
+	if _, ok := server.handle(rpcMessage{ID: json.RawMessage("5"), Method: "ping"}); !ok {
+		t.Fatal("no reply to ping")
+	}
 }
