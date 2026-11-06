@@ -57,7 +57,7 @@ func TestMCPHandleHTTPRejectsRebinding(t *testing.T) {
 		{name: "localhost", host: "localhost:7077", status: 204},
 		{name: "ipv6 loopback", host: "[::1]:7077", status: 204},
 		{name: "rebound host", host: "evil.example.com:7077", status: 403},
-		{name: "loopback origin", host: "127.0.0.1:7077", origin: "http://localhost:8000", status: 204},
+		{name: "loopback origin", host: "127.0.0.1:7077", origin: "http://localhost:8000", status: 403},
 		{name: "cross-site origin", host: "127.0.0.1:7077", origin: "https://evil.example.com", status: 403},
 	}
 	for _, tc := range cases {

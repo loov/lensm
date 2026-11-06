@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -139,18 +138,18 @@ func (server *AppServer) handleHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	// The MCP streamable-HTTP spec requires validating Origin (and, for a
 	// loopback server, Host) to block DNS-rebinding pages from driving the
-	// server; the CORS headers below are advisory only.
+	// server. MCP clients aren't browsers and send no Origin, so any
+	// Origin is refused: a page served by another local dev server could
+	// otherwise read code and write comments. Without CORS headers a
+	// browser won't send the POST at all.
 	if !isLoopbackHost(req.Host) {
 		http.Error(w, "forbidden host", http.StatusForbidden)
 		return
 	}
-	if origin := req.Header.Get("Origin"); origin != "" && !isLoopbackOrigin(origin) {
+	if req.Header.Get("Origin") != "" {
 		http.Error(w, "forbidden origin", http.StatusForbidden)
 		return
 	}
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id")
 
 	switch req.Method {
 	case http.MethodOptions:
@@ -228,14 +227,4 @@ func isLoopbackHost(hostport string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
-}
-
-// isLoopbackOrigin reports whether an Origin header value refers to a
-// page served from this machine.
-func isLoopbackOrigin(origin string) bool {
-	u, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	return isLoopbackHost(u.Host)
 }
