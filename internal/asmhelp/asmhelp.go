@@ -539,17 +539,29 @@ const noReferenceNote = "No reference information available for this instruction
 // mnemonic (ADD, LD1, CRC32) while the disassembly shows ADDQ, CRC32Q (x86 size
 // suffixes) or VLD1.P, VMOV (arm64 SIMD V-prefix and .P post-index marker).
 func referenceEntry(arch, canonical, textMnemonic string) (asmref.Entry, bool) {
+	for _, candidate := range lookupCandidates(arch, canonical, textMnemonic) {
+		if e, ok := asmref.Lookup(candidate); ok {
+			return e, true
+		}
+	}
+	return asmref.Entry{}, false
+}
+
+// lookupCandidates returns the table keys to try for an instruction, from
+// the canonical mnemonic first, without repeats.
+func lookupCandidates(arch, canonical, textMnemonic string) []string {
+	var out []string
 	for _, m := range []string{canonical, textMnemonic} {
 		if m == "" {
 			continue
 		}
-		for _, candidate := range mnemonicCandidates(arch, m) {
-			if e, ok := asmref.Lookup(candidate); ok {
-				return e, true
+		for _, c := range mnemonicCandidates(arch, m) {
+			if !slices.Contains(out, c) {
+				out = append(out, c)
 			}
 		}
 	}
-	return asmref.Entry{}, false
+	return out
 }
 
 // mnemonicCandidates returns the base mnemonics to try, most specific first.
@@ -629,14 +641,7 @@ var x86ConditionXED = map[string]string{
 }
 
 func isArmSizeSuffix(s string) bool {
-	for _, r := range s {
-		switch r {
-		case 'B', 'H', 'W', 'S', 'D', 'Q':
-		default:
-			return false
-		}
-	}
-	return true
+	return strings.Trim(s, "BHWSDQ") == ""
 }
 
 // trimGoAsmSuffix removes a single trailing Go-assembler operand-size suffix.

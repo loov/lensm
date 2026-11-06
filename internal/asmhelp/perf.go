@@ -24,10 +24,7 @@ type Perf struct {
 // chain: the measured latency, or the reciprocal throughput as a floor when
 // latency was not measured.
 func (p Perf) SerialCycles() float64 {
-	if float64(p.Latency) > p.TP {
-		return float64(p.Latency)
-	}
-	return p.TP
+	return max(float64(p.Latency), p.TP)
 }
 
 // PerfForNative returns the measurement for an x86 instruction in native
@@ -51,51 +48,33 @@ func PerfForNative(arch, canonical, nativeText string) (Perf, bool) {
 	// The table merges ARM and x86 under one key, and an ARM entry without
 	// x86 variants can shadow the spelling we need (SETE), so every
 	// candidate mnemonic is scanned rather than the first table hit.
-	var seen []string
-	for _, m := range []string{canonical, mnemonic} {
-		if m == "" {
+	for _, candidate := range lookupCandidates(arch, canonical, mnemonic) {
+		ref, ok := asmref.Lookup(candidate)
+		if !ok {
 			continue
 		}
-		for _, candidate := range mnemonicCandidates(arch, m) {
-			if slices.Contains(seen, candidate) {
+		for _, v := range ref.Variants {
+			i := slices.IndexFunc(v.Perf, func(p asmref.ArchPerf) bool { return p.Arch == referenceArch })
+			if i < 0 {
 				continue
 			}
-			seen = append(seen, candidate)
-			ref, ok := asmref.Lookup(candidate)
-			if !ok {
-				continue
-			}
-			for _, v := range ref.Variants {
-				perf, ok := variantPerf(v, referenceArch)
-				if !ok {
-					continue
-				}
-				score := scoreForm(v.Form, operands, widthHint)
-				// Ties go to the slower variant, so ambiguity reads conservative.
-				if score > bestScore || (score == bestScore && bestScore > 0 && perf.TP > best.TP) {
-					bestScore = score
-					best = Perf{
-						Arch:    referenceArch,
-						Form:    v.Form,
-						Uops:    perf.Uops,
-						Latency: perf.Latency,
-						TP:      perf.TP,
-						Ports:   perf.Ports,
-					}
+			perf := v.Perf[i]
+			score := scoreForm(v.Form, operands, widthHint)
+			// Ties go to the slower variant, so ambiguity reads conservative.
+			if score > bestScore || (score == bestScore && bestScore > 0 && perf.TP > best.TP) {
+				bestScore = score
+				best = Perf{
+					Arch:    referenceArch,
+					Form:    v.Form,
+					Uops:    perf.Uops,
+					Latency: perf.Latency,
+					TP:      perf.TP,
+					Ports:   perf.Ports,
 				}
 			}
 		}
 	}
 	return best, bestScore > 0
-}
-
-func variantPerf(v asmref.Variant, arch string) (asmref.ArchPerf, bool) {
-	for _, p := range v.Perf {
-		if p.Arch == arch {
-			return p, true
-		}
-	}
-	return asmref.ArchPerf{}, false
 }
 
 // operandClass is a coarse classification of one operand for form matching.
