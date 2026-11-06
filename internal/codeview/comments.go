@@ -19,8 +19,7 @@ func (ui Style) asmCoord(view View, inst disasm.Inst) comments.Coord {
 	if ui.Code != nil {
 		name = ui.Code.Name
 	}
-	cview, _ := view.CommentView()
-	return comments.Coord{Function: name, View: cview, PC: inst.PC}
+	return comments.Coord{Function: name, View: view, PC: inst.PC}
 }
 
 func (ui Style) sourceCoord(file string, line int) comments.Coord {

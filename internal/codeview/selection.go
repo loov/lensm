@@ -8,29 +8,16 @@ import (
 	"loov.dev/lensm/internal/disasm"
 )
 
-type View uint8
+// View is the pane a row belongs to. It is the comment store's view, so
+// a selection maps to a comment without translation.
+type View = comments.View
 
 const (
-	ViewNone View = iota
-	ViewGoAsm
-	ViewNativeAsm
-	ViewSource
+	ViewNone      View = ""
+	ViewGoAsm          = comments.ViewGoAsm
+	ViewNativeAsm      = comments.ViewNativeAsm
+	ViewSource         = comments.ViewSource
 )
-
-// CommentView maps a pane to its comment-store view. ok is false for
-// CodeViewNone, which has no comments.
-func (v View) CommentView() (view comments.View, ok bool) {
-	switch v {
-	case ViewGoAsm:
-		return comments.ViewGoAsm, true
-	case ViewNativeAsm:
-		return comments.ViewNativeAsm, true
-	case ViewSource:
-		return comments.ViewSource, true
-	default:
-		return "", false
-	}
-}
 
 type TextSelection struct {
 	View   View
