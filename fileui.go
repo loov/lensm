@@ -73,6 +73,8 @@ type FileUI struct {
 	ShowAsmHelp    widget.Bool
 	Comment        widget.Editor
 	TextSizeEditor widget.Editor
+	// textSizeEdited marks TextSizeEditor as changed since it was applied.
+	textSizeEdited bool
 	StartMCP       widget.Clickable
 	StopMCP        widget.Clickable
 

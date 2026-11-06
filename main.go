@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
+	"strconv"
 
 	"gioui.org/app"
 	"gioui.org/text"
@@ -54,7 +55,9 @@ func main() {
 	theme.TextSize = unit.Sp(*textSize)
 
 	ui := NewFileUI(windows, theme)
-	if !explicitTextSize {
+	if explicitTextSize {
+		ui.TextSizeEditor.SetText(strconv.Itoa(*textSize))
+	} else {
 		theme.TextSize = unit.Sp(ui.Settings.TextSize)
 	}
 	if exePath == "" {

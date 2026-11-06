@@ -166,9 +166,9 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 		ui.SyntaxStyle.Value = syntax.NormalizeStyle(ui.SyntaxStyle.Value)
 		changedVisual = true
 	}
-	if ui.updatePositiveIntEditor(gtx, &ui.TextSizeEditor, func(value int) {
+	if value, ok := ui.updateTextSize(gtx); ok {
 		ui.Theme.TextSize = unit.Sp(value)
-	}) {
+		ui.Settings.TextSize = value
 		changedVisual = true
 	}
 	if changedVisual {
@@ -187,27 +187,39 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 	}
 }
 
-func (ui *FileUI) updatePositiveIntEditor(gtx layout.Context, editor *widget.Editor, apply func(int)) bool {
-	changed := false
+// Text sizes outside these make the window unusable.
+const minTextSize, maxTextSize = 6, 48
+
+// updateTextSize returns a new text size once the field is submitted
+// with Enter or loses focus. Applying each keystroke would set size 1
+// on the way to typing 16, and save it.
+func (ui *FileUI) updateTextSize(gtx layout.Context) (int, bool) {
+	editor := &ui.TextSizeEditor
+	submitted := false
 	for {
 		ev, ok := editor.Update(gtx)
 		if !ok {
 			break
 		}
 		switch ev.(type) {
-		case widget.ChangeEvent, widget.SubmitEvent:
-			changed = true
+		case widget.ChangeEvent:
+			ui.textSizeEdited = true
+		case widget.SubmitEvent:
+			submitted = true
 		}
 	}
-	if !changed {
-		return false
+	if !submitted && !(ui.textSizeEdited && !gtx.Focused(editor)) {
+		return 0, false
 	}
+	ui.textSizeEdited = false
 	value, err := strconv.Atoi(strings.TrimSpace(editor.Text()))
-	if err != nil || value <= 0 {
-		return false
+	if err != nil {
+		editor.SetText(strconv.Itoa(int(ui.Theme.TextSize)))
+		return 0, false
 	}
-	apply(value)
-	return true
+	value = min(max(value, minTextSize), maxTextSize)
+	editor.SetText(strconv.Itoa(value))
+	return value, true
 }
 
 func (ui *FileUI) saveVisualSettings() {
@@ -216,9 +228,6 @@ func (ui *FileUI) saveVisualSettings() {
 	settings.ShowNativeAsm = ui.ShowNativeAsm.Value
 	settings.ShowAsmHelp = ui.ShowAsmHelp.Value
 	settings.SyntaxStyle = syntax.NormalizeStyle(ui.SyntaxStyle.Value)
-	if value, err := strconv.Atoi(strings.TrimSpace(ui.TextSizeEditor.Text())); err == nil && value > 0 {
-		settings.TextSize = value
-	}
 	ui.saveSettings(settings)
 }
 
