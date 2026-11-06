@@ -144,3 +144,52 @@ func TestMCPRejectsUnknownArguments(t *testing.T) {
 		t.Fatalf("want an error naming contxt, got %+v", r)
 	}
 }
+
+// codeFile is a disasm.File with one function f of three instructions.
+type codeFile struct{ emptyFile }
+
+type codeFunc struct{}
+
+func (codeFile) Funcs() []disasm.Func { return []disasm.Func{codeFunc{}} }
+func (codeFunc) Name() string         { return "f" }
+func (codeFunc) Load(disasm.Options) (*disasm.Code, error) {
+	return &disasm.Code{Name: "f", File: "f.go", Insts: []disasm.Inst{
+		{PC: 0x10, Text: "MOVQ AX, BX", NativeText: "mov rbx, rax", File: "f.go", Line: 1},
+		{},
+		{PC: 0x14, Text: "RET", NativeText: "ret", File: "g.go", Line: 2},
+	}}, nil
+}
+
+func TestMCPGetFunctionPages(t *testing.T) {
+	server := &mcpServer{session: &Session{File: codeFile{}}}
+	get := func(args string) FunctionCodeDTO {
+		t.Helper()
+		result, rpcErr := server.handleToolCall(json.RawMessage(`{"name":"get_function","arguments":` + args + `}`))
+		if rpcErr != nil {
+			t.Fatal(rpcErr.Message)
+		}
+		r := result.(mcpToolResult)
+		if r.IsError {
+			t.Fatal(r.Content[0].Text)
+		}
+		return r.StructuredContent.(FunctionCodeDTO)
+	}
+
+	all := get(`{"name":"f"}`)
+	if all.AsmTotal != 3 || len(all.Asm) != 2 || all.Truncated {
+		t.Fatalf("want 2 rows of 3 without the spacer, got %+v", all)
+	}
+	if all.Asm[0].File != "" || all.Asm[1].File != "g.go" {
+		t.Errorf("file should only be set when it differs from f.go: %+v", all.Asm)
+	}
+
+	page := get(`{"name":"f","views":["native_asm"],"offset":2,"limit":1}`)
+	if len(page.Asm) != 1 || page.Asm[0].Native != "ret" || page.Asm[0].Go != "" || page.Truncated {
+		t.Fatalf("want only ret in native syntax, got %+v", page.Asm)
+	}
+
+	first := get(`{"name":"f","limit":1}`)
+	if !first.Truncated || len(first.Asm) != 1 {
+		t.Fatalf("want a truncated first page, got %+v", first)
+	}
+}

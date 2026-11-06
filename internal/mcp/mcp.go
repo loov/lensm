@@ -24,6 +24,11 @@ const defaultMCPSourceContext = 3
 // error, letting one request kill the stdio server.
 const maxMCPSourceContext = 1000
 
+// defaultMCPAsmLimit is the page size for get_function's instructions.
+// runtime.schedule is about 2000; a page of 500 keeps a response near
+// 50 KB.
+const defaultMCPAsmLimit = 500
+
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -271,8 +276,11 @@ func (server *mcpServer) toolListFunctions(args json.RawMessage) (any, error) {
 
 func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 	var req struct {
-		Name    string `json:"name"`
-		Context *int   `json:"context"`
+		Name    string          `json:"name"`
+		Context *int            `json:"context"`
+		Views   []comments.View `json:"views"`
+		Offset  int             `json:"offset"`
+		Limit   *int            `json:"limit"`
 	}
 	if err := decodeArgs(args, &req); err != nil {
 		return nil, err
@@ -290,11 +298,33 @@ func (server *mcpServer) toolGetFunction(args json.RawMessage) (any, error) {
 	if context > maxMCPSourceContext {
 		return nil, fmt.Errorf("context must be at most %d", maxMCPSourceContext)
 	}
+	opts := ExportOptions{Offset: req.Offset, Limit: defaultMCPAsmLimit}
+	if req.Limit != nil {
+		opts.Limit = *req.Limit
+	}
+	if opts.Offset < 0 || opts.Limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative")
+	}
+	if len(req.Views) == 0 {
+		req.Views = []comments.View{comments.ViewSource, comments.ViewGoAsm, comments.ViewNativeAsm}
+	}
+	for _, view := range req.Views {
+		switch view {
+		case comments.ViewSource:
+			opts.Source = true
+		case comments.ViewGoAsm:
+			opts.GoAsm = true
+		case comments.ViewNativeAsm:
+			opts.NativeAsm = true
+		default:
+			return nil, fmt.Errorf("unknown view %q", view)
+		}
+	}
 	code, err := server.session.LoadCode(req.Name, context)
 	if err != nil {
 		return nil, err
 	}
-	return BuildFunctionCodeDTO(server.session.Path, code, server.session.Comments), nil
+	return BuildFunctionCodeDTO(server.session.Path, code, server.session.Comments, opts), nil
 }
 
 func (server *mcpServer) toolSetComment(args json.RawMessage) (any, error) {
@@ -436,8 +466,11 @@ func invalidParams(err error) *rpcError {
 	return &rpcError{Code: -32602, Message: err.Error()}
 }
 
+// toolSuccess returns value as structured content and, as the spec
+// asks for older clients, as JSON text. The text is compact: indenting
+// a large function added a third to its size.
 func toolSuccess(value any) mcpToolResult {
-	text, err := json.MarshalIndent(value, "", "  ")
+	text, err := json.Marshal(value)
 	if err != nil {
 		text = fmt.Append(nil, value)
 	}
@@ -479,6 +512,17 @@ func mcpTools() []mcpTool {
 			InputSchema: objectSchema(map[string]any{
 				"name":    stringSchema("Exact function name."),
 				"context": integerSchema("Number of extra source lines to include before and after referenced lines. Defaults to 3."),
+				"views": map[string]any{
+					"type":        "array",
+					"description": "Views to include. Defaults to all three.",
+					"items": enumSchema("A code view.", []string{
+						string(comments.ViewSource),
+						string(comments.ViewGoAsm),
+						string(comments.ViewNativeAsm),
+					}),
+				},
+				"offset": integerSchema("Index of the first instruction to return. Use asm_offset plus the page size to continue after a truncated response."),
+				"limit":  integerSchema("Maximum instruction rows to return. Defaults to 500; 0 returns all."),
 			}, []string{"name"}),
 		},
 		{
