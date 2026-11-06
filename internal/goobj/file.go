@@ -14,6 +14,7 @@ import (
 	"github.com/loov/disasm/objfile"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/source"
 )
 
 var _ disasm.File = (*File)(nil)
@@ -24,9 +25,10 @@ type File struct {
 	bin   *objfile.Binary
 	funcs []disasm.Func
 
-	// mu guards cache and serializes access to bin.
+	// mu guards cache and files and serializes access to bin.
 	mu    sync.Mutex
 	cache map[cacheKey]cacheEntry
+	files source.Files
 }
 
 // maxCached bounds the code cache, which holds source lines as well.
@@ -75,6 +77,7 @@ func Load(path string) (*File, error) {
 	file := &File{
 		bin:   bin,
 		cache: make(map[cacheKey]cacheEntry),
+		files: make(source.Files),
 	}
 
 	// Compute each sort key once; in the comparator the regexp ran

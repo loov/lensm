@@ -18,7 +18,7 @@ func TestLoad_SkipsNonRegularFiles(t *testing.T) {
 	refs := Refs{}
 	refs.Add("/dev/zero", 1, 0)
 	refs.Add(fifo, 1, 1)
-	if sources := Load(refs, "/dev/zero", 0); len(sources) != 0 {
+	if sources := Load(Files{}, refs, "/dev/zero", 0); len(sources) != 0 {
 		t.Fatalf("want no sources, got %d", len(sources))
 	}
 }

@@ -14,7 +14,7 @@ func TestLoad_TruncatedFile(t *testing.T) {
 	}
 	refs := Refs{}
 	refs.Add(src, 40, 0) // line table says 40, file has 1 line
-	sources := Load(refs, src, 2)
+	sources := Load(Files{}, refs, src, 2)
 	if len(sources) != 1 || len(sources[0].Blocks) != 0 {
 		t.Fatalf("want one source with no blocks, got %+v", sources)
 	}
@@ -30,7 +30,7 @@ func TestLoad_RelatesLines(t *testing.T) {
 	refs.Add(src, 3, 0)
 	refs.Add(src, 3, 1)
 	refs.Add(src, 4, 5)
-	sources := Load(refs, src, 0)
+	sources := Load(Files{}, refs, src, 0)
 	if len(sources) != 1 || len(sources[0].Blocks) != 1 {
 		t.Fatalf("got %+v", sources)
 	}
@@ -54,7 +54,7 @@ func TestLoad_IgnoresLineZero(t *testing.T) {
 	refs := Refs{}
 	refs.Add(src, 0, 0)
 	refs.Add(src, 8, 1)
-	sources := Load(refs, src, 1)
+	sources := Load(Files{}, refs, src, 1)
 	if len(sources) != 1 || len(sources[0].Blocks) != 1 || sources[0].Blocks[0].From != 7 {
 		t.Fatalf("want one block around line 8, got %+v", sources)
 	}
@@ -67,7 +67,7 @@ func TestLoad_ClampsRangeToFile(t *testing.T) {
 	}
 	refs := Refs{}
 	refs.Add(src, 3, 0)
-	block := Load(refs, src, 2)[0].Blocks[0]
+	block := Load(Files{}, refs, src, 2)[0].Blocks[0]
 	if block.To != block.From+len(block.Lines) {
 		t.Fatalf("range %d-%d holds %d lines", block.From, block.To, len(block.Lines))
 	}

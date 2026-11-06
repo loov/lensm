@@ -176,7 +176,7 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 	for i, ix := range code.Insts {
 		refs.Add(ix.File, ix.Line, i)
 	}
-	code.Source = source.Load(refs, code.File, opts.Context)
+	code.Source = source.Load(sym.file.files, refs, code.File, opts.Context)
 
 	return code, nil
 }

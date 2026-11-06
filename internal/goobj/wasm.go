@@ -55,6 +55,6 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 		refs.Add(inst.File, inst.Line, i)
 		code.Insts = append(code.Insts, inst)
 	}
-	code.Source = source.Load(refs, code.File, opts.Context)
+	code.Source = source.Load(fn.file.files, refs, code.File, opts.Context)
 	return code, nil
 }

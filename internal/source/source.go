@@ -39,9 +39,41 @@ func (refs Refs) Add(file string, line int, index int) {
 	set.Add(index)
 }
 
+// Files caches source files split into lines, with tabs expanded, so
+// opening one function after another doesn't read and split the same
+// file each time. A missing file is cached as nil. The zero value is not
+// usable; make one per loaded binary, since a rebuild may come with
+// edited sources. Not safe for concurrent use.
+type Files map[string][]string
+
+func (files Files) lines(file string) []string {
+	if lines, ok := files[file]; ok {
+		return lines
+	}
+	data, err := readSource(replaceEnvironmentVariables(file))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unable to load source from %q: %v\n", file, err)
+		files[file] = nil // don't retry, or repeat the message, per function
+		return nil
+	}
+	lines := strings.Split(string(data), "\n")
+	for i, v := range lines {
+		lines[i] = strings.ReplaceAll(v, "\t", "    ")
+	}
+	// An MCP client sweeping the binary would otherwise hold every
+	// source file it was built from.
+	if len(files) >= maxCachedFiles {
+		clear(files)
+	}
+	files[file] = lines
+	return lines
+}
+
+const maxCachedFiles = 256
+
 // Load reads the referenced lines of each file with context lines around
 // them and fills SourceBlock.Related from refs. symbolFile sorts first.
-func Load(refs Refs, symbolFile string, context int) []disasm.Source {
+func Load(files Files, refs Refs, symbolFile string, context int) []disasm.Source {
 	needed := map[string]*disasm.LineSet{}
 	for ref := range refs {
 		set, ok := needed[ref.File]
@@ -51,7 +83,7 @@ func Load(refs Refs, symbolFile string, context int) []disasm.Source {
 		}
 		set.Add(ref.Line)
 	}
-	sources := loadLines(needed, symbolFile, context)
+	sources := loadLines(files, needed, symbolFile, context)
 	for i := range sources {
 		src := &sources[i]
 		for k := range src.Blocks {
@@ -105,16 +137,13 @@ func readSource(path string) ([]byte, error) {
 }
 
 // loadLines loads the specified line sets.
-func loadLines(needed map[string]*disasm.LineSet, symbolFile string, context int) []disasm.Source {
+func loadLines(files Files, needed map[string]*disasm.LineSet, symbolFile string, context int) []disasm.Source {
 	var sources []disasm.Source
 	for file, set := range needed {
-		data, err := readSource(replaceEnvironmentVariables(file))
-		if err != nil {
-			// TODO: should we create a stub source block instead?
-			fmt.Fprintf(os.Stderr, "unable to load source from %q: %v\n", file, err)
+		lines := files.lines(file)
+		if lines == nil {
 			continue
 		}
-		lines := strings.Split(string(data), "\n")
 		source := disasm.Source{
 			File: file,
 		}
@@ -125,10 +154,8 @@ func loadLines(needed map[string]*disasm.LineSet, symbolFile string, context int
 			if from >= to {
 				continue
 			}
-			lineBlock := lines[from:to]
-			for i, v := range lineBlock {
-				lineBlock[i] = strings.ReplaceAll(v, "\t", "    ")
-			}
+			// Cap the capacity: the lines are shared through the cache.
+			lineBlock := lines[from:to:to]
 
 			source.Blocks = append(source.Blocks, disasm.SourceBlock{
 				LineRange: disasm.LineRange{From: r.From, To: r.From + len(lineBlock)},
