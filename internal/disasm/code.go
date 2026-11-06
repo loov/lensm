@@ -35,6 +35,9 @@ type Inst struct {
 	File string
 	// Line is the line in the file where this instruction was compiled from.
 	Line int
+	// Indent is the nesting depth, e.g. of wasm blocks. Viewers indent
+	// Text by it.
+	Indent int
 
 	// RefPC is a reference to another program counter, e.g. a call.
 	RefPC uint64

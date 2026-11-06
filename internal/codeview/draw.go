@@ -125,9 +125,10 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				Max: image.Pt(int(gutter.Min), (i+1)*lineHeight+int(ui.asm.Offset)),
 			}.Op())
 		}
+		indent := ix.Indent * c.indentStep
 		gui.SourceLine{
-			TopLeft:    image.Pt(c.goCol.textLeft, i*lineHeight+int(ui.asm.Offset)),
-			Width:      c.goCol.codeWidth,
+			TopLeft:    image.Pt(c.goCol.textLeft+indent, i*lineHeight+int(ui.asm.Offset)),
+			Width:      max(c.goCol.codeWidth-indent, 0),
 			Text:       ix.Text,
 			Spans:      hl.asm[i],
 			TextHeight: ui.TextHeight,

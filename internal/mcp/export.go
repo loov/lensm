@@ -44,6 +44,7 @@ type AsmLineDTO struct {
 	PC        uint64 `json:"pc"`
 	PCHex     string `json:"pc_hex"`
 	Text      string `json:"text"`
+	Indent    int    `json:"indent,omitempty"`
 	File      string `json:"file,omitempty"`
 	Line      int    `json:"line,omitempty"`
 	Call      string `json:"call,omitempty"`
@@ -124,6 +125,7 @@ func asmLineDTO(index int, inst disasm.Inst, text string) AsmLineDTO {
 		PC:        inst.PC,
 		PCHex:     comments.FormatPC(inst.PC),
 		Text:      text,
+		Indent:    inst.Indent,
 		File:      inst.File,
 		Line:      inst.Line,
 		Call:      inst.Call,

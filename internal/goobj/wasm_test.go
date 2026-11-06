@@ -36,6 +36,35 @@ func TestLoadRendersInstructions(t *testing.T) {
 	t.Fatal("function add not found")
 }
 
+// TestLoadIndentsBlocks checks that block nesting is reported in Indent
+// and not baked into Text as leading spaces.
+func TestLoadIndentsBlocks(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "example.wasm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	for _, fn := range file.Funcs() {
+		code, err := fn.Load(disasm.Options{})
+		if err != nil {
+			continue
+		}
+		indented := false
+		for _, in := range code.Insts {
+			if strings.HasPrefix(in.Text, " ") {
+				t.Fatalf("%s: %q starts with a space", fn.Name(), in.Text)
+			}
+			if in.Indent > 0 {
+				indented = true
+			}
+		}
+		if indented {
+			return
+		}
+	}
+	t.Fatal("no function has nested blocks")
+}
+
 // TestLoadGoWasm builds testdata/testprog for wasip1 and checks that
 // names come through and calls resolve to other functions.
 func TestLoadGoWasm(t *testing.T) {

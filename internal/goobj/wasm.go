@@ -1,8 +1,6 @@
 package goobj
 
 import (
-	"strings"
-
 	"github.com/loov/disasm/objfile"
 
 	"loov.dev/lensm/internal/disasm"
@@ -19,17 +17,15 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 
 	code := &disasm.Code{Name: fn.fn.Name, Arch: bin.Arch}
 	refs := source.Refs{}
-	// Block nesting is kept as one space per level: Go's function
-	// prologue opens one block per resume point, so two would run wide.
-	// The indent stops at maxIndent, otherwise thousands of nested blocks
-	// cost memory quadratic in the depth.
+	// The indent stops at maxIndent: past that it no longer helps reading,
+	// and thousands of nested blocks would push the text off screen.
 	const maxIndent = 32
 	level := 0
 	for i, in := range decoded {
 		if in.Op == "end" || in.Op == "else" {
 			level = max(level-1, 0)
 		}
-		inst := disasm.Inst{PC: uint64(i), Text: strings.Repeat(" ", min(level, maxIndent)) + in.Text}
+		inst := disasm.Inst{PC: uint64(i), Text: in.Text, Indent: min(level, maxIndent)}
 		switch in.Op {
 		case "block", "loop", "if", "else":
 			level++

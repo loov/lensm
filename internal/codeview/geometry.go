@@ -15,6 +15,8 @@ type codeColumns struct {
 	lineHeight int
 	pad        int
 	jumpStep   int
+	// indentStep is the offset per Inst.Indent level.
+	indentStep int
 
 	jump   gui.Bounds
 	asm    gui.Bounds
@@ -93,6 +95,7 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 		lineHeight: lineHeight,
 		pad:        pad,
 		jumpStep:   jumpStep,
+		indentStep: lineHeight / 2,
 		jump:       jump,
 		asm:        asm,
 		native:     native,

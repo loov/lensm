@@ -218,7 +218,7 @@ func (ui Style) resolveHover(gtx layout.Context, c codeColumns, mouseClicked boo
 			ix.Call != "" &&
 			c.asm.Contains(mousePosition.X) &&
 			mousePosition.X <= float32(c.goCol.textLeft+c.goCol.codeWidth) &&
-			ui.callTargetHit(gtx, *ix, c.goCol.textLeft, mousePosition.X)
+			ui.callTargetHit(gtx, *ix, c.goCol.textLeft+ix.Indent*c.indentStep, mousePosition.X)
 		if callTargetHovered {
 			pointer.CursorPointer.Add(gtx.Ops)
 			if mouseClicked {

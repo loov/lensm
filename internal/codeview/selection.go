@@ -180,7 +180,7 @@ func (s TextSelection) Text(code *disasm.Code) string {
 			to = len(code.Insts) - 1
 		}
 		for i := from; i <= to; i++ {
-			text := code.Insts[i].Text
+			text := strings.Repeat(" ", code.Insts[i].Indent) + code.Insts[i].Text
 			if s.View == ViewNativeAsm {
 				text = strings.ToUpper(code.Insts[i].NativeText)
 			}
