@@ -4,6 +4,7 @@ package source
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -76,11 +77,36 @@ func replaceEnvironmentVariables(s string) string {
 	})
 }
 
+// maxSourceSize bounds a source file. The path comes from the binary's
+// debug info, so it can name /dev/zero or a FIFO as easily as a .go file.
+const maxSourceSize = 16 << 20
+
+// readSource reads a regular file of at most maxSourceSize bytes.
+func readSource(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("not a regular file")
+	}
+	if info.Size() > maxSourceSize {
+		return nil, fmt.Errorf("%d bytes is larger than the %d byte limit", info.Size(), maxSourceSize)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	// The file can grow between Stat and the read.
+	return io.ReadAll(io.LimitReader(f, maxSourceSize))
+}
+
 // loadLines loads the specified line sets.
 func loadLines(needed map[string]*disasm.LineSet, symbolFile string, context int) []disasm.Source {
 	var sources []disasm.Source
 	for file, set := range needed {
-		data, err := os.ReadFile(replaceEnvironmentVariables(file))
+		data, err := readSource(replaceEnvironmentVariables(file))
 		if err != nil {
 			// TODO: should we create a stub source block instead?
 			fmt.Fprintf(os.Stderr, "unable to load source from %q: %v\n", file, err)
