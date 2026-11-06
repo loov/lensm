@@ -13,7 +13,6 @@ import (
 	"compress/gzip"
 	_ "embed"
 	"encoding/json"
-	"io"
 	"strings"
 	"sync"
 )
@@ -67,28 +66,19 @@ func (e Entry) PerfFor(arch string) []ArchPerf {
 //go:embed table.json.gz
 var tableGz []byte
 
-var (
-	tableOnce sync.Once
-	table     map[string]Entry
-)
-
-func load() {
-	// A malformed embed should surface as "no data" rather than panic in the
-	// UI hover path; the generator is what guarantees validity.
+// table decodes the embed on first use. A malformed embed reads as "no
+// data" rather than a panic in the UI hover path; the generator is what
+// guarantees validity.
+var table = sync.OnceValue(func() map[string]Entry {
+	m := map[string]Entry{}
 	if r, err := gzip.NewReader(bytes.NewReader(tableGz)); err == nil {
-		if data, err := io.ReadAll(r); err == nil {
-			_ = json.Unmarshal(data, &table)
-		}
+		_ = json.NewDecoder(r).Decode(&m)
 	}
-	if table == nil {
-		table = map[string]Entry{}
-	}
-}
+	return m
+})
 
-// Lookup returns the reference entry for a mnemonic (case-insensitive). The
-// table is loaded once on first use.
+// Lookup returns the reference entry for a mnemonic (case-insensitive).
 func Lookup(mnemonic string) (Entry, bool) {
-	tableOnce.Do(load)
-	e, ok := table[strings.ToUpper(strings.TrimSpace(mnemonic))]
+	e, ok := table()[strings.ToUpper(strings.TrimSpace(mnemonic))]
 	return e, ok
 }
