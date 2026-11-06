@@ -1,13 +1,16 @@
 package mcp
 
 import (
+	"bufio"
 	"encoding/json"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 )
 
@@ -191,5 +194,97 @@ func TestMCPGetFunctionPages(t *testing.T) {
 	first := get(`{"name":"f","limit":1}`)
 	if !first.Truncated || len(first.Asm) != 1 {
 		t.Fatalf("want a truncated first page, got %+v", first)
+	}
+}
+
+func TestParsePC(t *testing.T) {
+	for _, tc := range []struct {
+		in     string
+		pc     uint64
+		ok     bool
+		hasErr bool
+	}{
+		{in: ``},
+		{in: `null`},
+		{in: `16`, pc: 16, ok: true},
+		{in: `"0x10"`, pc: 16, ok: true},
+		{in: `"16"`, pc: 16, ok: true},
+		{in: `"-1"`, ok: true, hasErr: true},
+		{in: `1.5`, ok: true, hasErr: true},
+		{in: `"0x"`, ok: true, hasErr: true},
+		{in: `-3`, ok: true, hasErr: true},
+	} {
+		pc, ok, err := parsePC(json.RawMessage(tc.in))
+		if pc != tc.pc || ok != tc.ok || (err != nil) != tc.hasErr {
+			t.Errorf("parsePC(%s) = %d, %v, %v", tc.in, pc, ok, err)
+		}
+	}
+}
+
+// TestMCPSetComment checks that set_comment only accepts positions the
+// function has, and that an accepted comment comes back.
+func TestMCPSetComment(t *testing.T) {
+	store, err := comments.Open(filepath.Join(t.TempDir(), "c.json"), "bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &mcpServer{session: &Session{File: codeFile{}, Comments: store}}
+	call := func(args string) mcpToolResult {
+		t.Helper()
+		result, rpcErr := server.handleToolCall(json.RawMessage(`{"name":"set_comment","arguments":` + args + `}`))
+		if rpcErr != nil {
+			t.Fatal(rpcErr.Message)
+		}
+		return result.(mcpToolResult)
+	}
+	for _, bad := range []string{
+		`{"name":"f","view":"go_asm","pc":"0x11","text":"x"}`,
+		`{"name":"f","view":"go_asm","text":"x"}`,
+		`{"name":"f","view":"source","file":"f.go","line":1,"text":"x"}`,
+		`{"name":"missing","view":"go_asm","pc":16,"text":"x"}`,
+	} {
+		if r := call(bad); !r.IsError {
+			t.Errorf("set_comment %s succeeded", bad)
+		}
+	}
+	if r := call(`{"name":"f","view":"native_asm","pc":"0x14","text":"returns"}`); r.IsError {
+		t.Fatal(r.Content[0].Text)
+	}
+	if got := store.ForAsm("f", comments.ViewNativeAsm, 0x14); got != "returns" {
+		t.Fatalf("stored comment = %q", got)
+	}
+}
+
+// TestMCPServeStdio runs the stdio loop: one reply per request, none for
+// a notification, and a parse error with a null id.
+func TestMCPServeStdio(t *testing.T) {
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
+		`not json`,
+		`{"jsonrpc":"2.0","id":3,"method":"nope"}`,
+	}, "\n")
+	var out strings.Builder
+	server := &mcpServer{out: bufio.NewWriter(&out)}
+	if err := server.serve(strings.NewReader(input)); err != nil {
+		t.Fatal(err)
+	}
+	var replies []rpcMessage
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		var msg rpcMessage
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			t.Fatalf("%q: %v", line, err)
+		}
+		replies = append(replies, msg)
+	}
+	if len(replies) != 4 {
+		t.Fatalf("%d replies, want 4: %s", len(replies), out.String())
+	}
+	if string(replies[2].ID) != "null" || replies[2].Error == nil || replies[2].Error.Code != -32700 {
+		t.Errorf("parse error reply = %+v", replies[2])
+	}
+	if replies[3].Error == nil || replies[3].Error.Code != -32601 {
+		t.Errorf("unknown method reply = %+v", replies[3])
 	}
 }
