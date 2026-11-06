@@ -46,15 +46,33 @@ executable and information when it changes.
 lensm -watch lensm
 ```
 
-Inside the code view:
+Flags:
 
+| Flag | Meaning |
+|------|---------|
+| `-watch` | reload the binary when it changes |
+| `-filter regexp` | start with the function list filtered |
+| `-context n` | source lines shown around each referenced line (default 3) |
+| `-comments path` | comments file, instead of `<executable>.lensm-comments.json` |
+| `-text-size n` | text size for this run; Settings saves one for later runs |
+| `-font path` | font file to use instead of the bundled ones |
+| `-cpuprofile path` | write a CPU profile of lensm itself |
+
+Keys:
+
+- `Cmd/Ctrl+F` focuses the function filter; `Down` or `Enter` moves into the
+  list, and `Enter` there keeps the previewed function open in a tab;
+- `Cmd/Ctrl+O` opens a binary and `Cmd/Ctrl+,` opens settings;
+- `Ctrl+Tab` and `Ctrl+Shift+Tab` switch tabs, `Cmd/Ctrl+W` closes one;
 - follow call targets and use `Alt+Left/Right` (or `Cmd/Ctrl+[` and
   `Cmd/Ctrl+]`) to navigate between functions;
 - hover an assembly instruction to see its reference and a simplified
   explanation when Lensm has a matching rule;
 - drag across Go assembly, native assembly, or source lines to select a block,
   then use `Cmd/Ctrl+C` to copy it. `Shift` extends a selection and
-  `Escape` clears it.
+  `Escape` clears it;
+- double-click a line, or press `Enter` on a selected one, to comment on it;
+  `Escape` leaves the comment.
 
 Run lensm as an MCP server over stdio:
 
@@ -62,10 +80,20 @@ Run lensm as an MCP server over stdio:
 lensm mcp [-comments ./lensm.lensm-comments.json] ./lensm
 ```
 
+Flags go before the path: `lensm mcp ./lensm -comments x` is a usage error.
+
 The MCP server exposes tools for listing functions, reading a function's
-Go source, Go assembly and native assembly, and reading or writing comments.
-By default comments are stored in a sidecar file named
-`<executable>.lensm-comments.json`.
+source with its assembly in Go and native syntax, and reading or writing
+comments. `get_function` returns 500 instructions at a time; `views`,
+`offset` and `limit` select what comes back. By default comments are stored
+in a sidecar file named `<executable>.lensm-comments.json`.
+
+The GUI can also serve MCP over HTTP: Settings starts a server at
+`http://127.0.0.1:7077/mcp` (or another free port if that one is taken) for
+the binary that is open, and it follows whatever the window loads. It only
+listens on loopback and refuses requests from web pages, but it has no
+authentication, so any program running as any user on the machine can read
+the code and write comments while it runs.
 
 When the GUI and a separate `lensm mcp` process write the same sidecar,
 saves merge per comment: each process's additions, edits, and deletions

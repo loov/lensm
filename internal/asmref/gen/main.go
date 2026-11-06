@@ -1,9 +1,9 @@
 // Command gen flattens CPU ISA XML into internal/asmref/table.json.gz.
 //
-// It is run via `go generate ./internal/asmref`. By default it reads the small
-// checked-in fixtures so a bare run stays reproducible; point -arm and -x86 at
-// a real ARM AArch64 ISA XML release and a uops.info instructions.xml to
-// produce the full table. See ../README.md for source versions and URLs.
+// `go generate ./internal/asmref` runs it on the downloaded ARM AArch64 ISA
+// XML release and uops.info instructions.xml under data/. Without flags it
+// reads the small checked-in fixtures instead. See ../README.md for source
+// versions and URLs.
 package main
 
 import (

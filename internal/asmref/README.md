@@ -15,19 +15,20 @@ that gzips to ~0.6MB, hence the compressed embed.
 
 ## Regenerating
 
+The checked-in table is the full one. Download the sources first
+(`data/download.sh`), then:
+
 ```
 go generate ./internal/asmref
 ```
 
-With no arguments the generator reads the small checked-in fixtures under
-`gen/testdata`, so a bare run stays reproducible. To build the full table,
-download the sources (`data/download.sh`) and point it at them:
+The `//go:generate` directive points the generator at `data/`, so it fails
+until the download is done. Run without flags, from `internal/asmref`, the
+generator reads the small fixtures under `gen/testdata` instead, which is
+enough to try a change to the generator:
 
 ```
-go run ./internal/asmref/gen \
-  -arm  data/arm64/ISA_A64_xml_A_profile-2025-12 \
-  -x86  data/x86/instructions.xml \
-  -out  internal/asmref/table.json.gz
+cd internal/asmref && go run ./gen -out /tmp/table.json.gz
 ```
 
 The generator also prints (to stderr) any mnemonics that `golang.org/x/arch`'s
