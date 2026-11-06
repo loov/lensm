@@ -6,20 +6,38 @@ const navigationHistoryLimit = 256
 type NavigationHistory struct {
 	entries []string
 	index   int
+	// preview marks the current entry as a preview visit, which the next
+	// preview visit replaces.
+	preview bool
 }
 
 func (h *NavigationHistory) Reset() {
 	h.entries = nil
 	h.index = -1
+	h.preview = false
 }
 
-func (h *NavigationHistory) Visit(name string) {
+// Visit records a visit to name.
+func (h *NavigationHistory) Visit(name string) { h.visit(name, false) }
+
+// VisitPreview records a preview visit. Consecutive previews, such as
+// arrowing through the function list, share one entry, so Back skips
+// over everything passed on the way.
+func (h *NavigationHistory) VisitPreview(name string) { h.visit(name, true) }
+
+func (h *NavigationHistory) visit(name string, preview bool) {
 	if name == "" {
 		return
 	}
 	if h.index >= 0 && h.index < len(h.entries) && h.entries[h.index] == name {
+		h.preview = h.preview && preview
 		return
 	}
+	if preview && h.preview && h.index == len(h.entries)-1 {
+		h.entries[h.index] = name
+		return
+	}
+	h.preview = preview
 	if h.index+1 < len(h.entries) {
 		h.entries = h.entries[:h.index+1]
 	}
@@ -62,8 +80,13 @@ func (h *NavigationHistory) Current() string {
 	return h.entries[h.index]
 }
 
-func (ui *FileUI) recordNavigation(name string) {
-	if !ui.navigatingHistory {
+func (ui *FileUI) recordNavigation(name string, preview bool) {
+	if ui.navigatingHistory {
+		return
+	}
+	if preview {
+		ui.Navigation.VisitPreview(name)
+	} else {
 		ui.Navigation.Visit(name)
 	}
 }
@@ -91,8 +114,10 @@ func (ui *FileUI) navigateHistoryEntry(name string) bool {
 	if fn == nil {
 		return false
 	}
+	// previewTab activates an open tab as it is, and shows a closed one
+	// in the preview slot, so going back doesn't pin or add tabs.
 	ui.navigatingHistory = true
-	ui.openTab(fn, false)
+	ui.previewTab(fn)
 	ui.navigatingHistory = false
 	ui.copyStatus = ""
 	ui.invalidateMain()

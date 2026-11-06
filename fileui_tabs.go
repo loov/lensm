@@ -140,7 +140,7 @@ func (ui *FileUI) previewTab(fn disasm.Func) *CodeTab {
 	}
 	ui.Funcs.Select(name)
 	ui.commentKey = ""
-	ui.recordNavigation(name)
+	ui.recordNavigation(name, true)
 	ui.saveSessionState()
 	return tab
 }
@@ -173,7 +173,7 @@ func (ui *FileUI) openTab(fn disasm.Func, next bool) *CodeTab {
 	tab.Preview = false
 	ui.Funcs.Select(name)
 	ui.commentKey = ""
-	ui.recordNavigation(name)
+	ui.recordNavigation(name, false)
 	ui.saveSessionState()
 	return tab
 }
@@ -208,7 +208,7 @@ func (ui *FileUI) selectTab(index int) {
 	ui.CodeTabs[index].Preview = false
 	ui.commentKey = ""
 	ui.Funcs.Select(ui.CodeTabs[index].Name)
-	ui.recordNavigation(ui.CodeTabs[index].Name)
+	ui.recordNavigation(ui.CodeTabs[index].Name, false)
 	ui.saveSessionState()
 }
 
@@ -231,7 +231,7 @@ func (ui *FileUI) closeTab(index int) {
 	}
 	if tab := ui.activeTab(); tab != nil {
 		ui.Funcs.Select(tab.Name)
-		ui.recordNavigation(tab.Name)
+		ui.recordNavigation(tab.Name, false)
 	} else {
 		ui.commentKey = ""
 	}

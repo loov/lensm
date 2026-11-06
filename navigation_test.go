@@ -49,3 +49,23 @@ func TestNavigationHistorySkipsDuplicateVisit(t *testing.T) {
 		t.Fatal("duplicate visit created a history entry")
 	}
 }
+
+func TestNavigationHistoryMergesPreviews(t *testing.T) {
+	var history NavigationHistory
+	history.Reset()
+	history.Visit("A")
+	history.VisitPreview("B")
+	history.VisitPreview("C")
+	history.VisitPreview("D")
+	history.Visit("E")
+	history.VisitPreview("F")
+
+	for _, want := range []string{"E", "D", "A"} {
+		if got, _ := history.Back(); got != want {
+			t.Fatalf("Back() = %q, want %q", got, want)
+		}
+	}
+	if history.CanBack() {
+		t.Fatal("previews between A and E left extra entries")
+	}
+}
