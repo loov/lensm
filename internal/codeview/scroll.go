@@ -7,6 +7,8 @@ import (
 	"gioui.org/op"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+
+	"loov.dev/lensm/internal/gui"
 )
 
 // scrollRegion is the vertical scroll state for a manually drawn
@@ -23,14 +25,16 @@ type scrollRegion struct {
 // LayoutBar draws a vertical scrollbar at barX with the given width,
 // applies scrollbar drags, and clamps the offset
 // so the viewport stays within [contentTop, contentBot].
-func (region *scrollRegion) LayoutBar(gtx layout.Context, th *material.Theme, barX, barWidth int, contentTop, contentBot float32) {
+func (region *scrollRegion) LayoutBar(gtx layout.Context, th *gui.Theme, barX, barWidth int, contentTop, contentBot float32) {
 	viewTop := -region.Offset
 	viewBot := -region.Offset + float32(gtx.Constraints.Max.Y)
 
 	stack := op.Offset(image.Pt(barX, 0)).Push(gtx.Ops)
 	bgtx := gtx
 	bgtx.Constraints = layout.Exact(image.Pt(barWidth, gtx.Constraints.Max.Y))
-	material.Scrollbar(th, &region.Bar).Layout(bgtx, layout.Vertical,
+	bar := material.Scrollbar(th.Theme, &region.Bar)
+	th.StyleScrollbar(&bar)
+	bar.Layout(bgtx, layout.Vertical,
 		(viewTop-contentTop)/(contentBot-contentTop),
 		(viewBot-contentTop)/(contentBot-contentTop),
 	)

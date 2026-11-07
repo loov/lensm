@@ -66,12 +66,17 @@ type UIColors struct {
 	Selection color.NRGBA
 	// Accent marks the focused selection, the active tab and focused
 	// fields; AccentText is text on top of it.
-	Accent         color.NRGBA
-	AccentText     color.NRGBA
-	RelationStroke color.NRGBA
-	// RelationLightness is the HSL lightness of the bands linking source
-	// lines to their assembly; each line gets its own hue.
-	RelationLightness float32
+	Accent     color.NRGBA
+	AccentText color.NRGBA
+	Relation   RelationColors
+}
+
+// RelationColors styles the bands linking source lines to their
+// assembly. Each line gets its own hue at this saturation and lightness;
+// the hovered band doubles Alpha and gets the Stroke outline.
+type RelationColors struct {
+	Saturation, Lightness, Alpha float32
+	Stroke                       color.NRGBA
 }
 
 func rgb(v uint32) color.NRGBA {
@@ -93,8 +98,10 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 			Selection:           rgb(0x2e436e),
 			Accent:              rgb(0x3574f0),
 			AccentText:          rgb(0xffffff),
-			RelationStroke:      color.NRGBA{R: 0xdf, G: 0xe1, B: 0xe5, A: 0x60},
-			RelationLightness:   0.3,
+			Relation: RelationColors{
+				Saturation: 0.45, Lightness: 0.4, Alpha: 0.2,
+				Stroke: color.NRGBA{R: 0xdf, G: 0xe1, B: 0xe5, A: 0x60},
+			},
 		}
 	} else {
 		c = UIColors{
@@ -109,8 +116,10 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 			Selection:           rgb(0xd5e1ff),
 			Accent:              rgb(0x3574f0),
 			AccentText:          rgb(0xffffff),
-			RelationStroke:      color.NRGBA{A: 0x40},
-			RelationLightness:   0.8,
+			Relation: RelationColors{
+				Saturation: 0.75, Lightness: 0.8, Alpha: 0.35,
+				Stroke: color.NRGBA{A: 0x40},
+			},
 		}
 	}
 	th.Palette = material.Palette{

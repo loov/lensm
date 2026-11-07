@@ -84,19 +84,19 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 		path := p.End()
 
 		hue := float32(math.Mod(float64(related)*math.Phi, 1))
-		lightness := ui.Theme.Colors.RelationLightness
+		c := ui.Theme.Colors.Relation
 		if !highlight {
-			paint.FillShape(gtx.Ops, hsla(hue, 0.9, lightness, 0.4), clip.Outline{Path: path}.Op())
+			paint.FillShape(gtx.Ops, hsla(hue, c.Saturation, c.Lightness, c.Alpha), clip.Outline{Path: path}.Op())
 			continue
 		}
 		// The hovered band is drawn last so it stays on top.
 		highlightRanges = ranges
 		highlightPath = path
-		highlightColor = hsla(hue, 0.9, lightness, 0.8)
+		highlightColor = hsla(hue, c.Saturation, c.Lightness, min(2*c.Alpha, 1))
 	}
 	if highlightRanges != nil {
 		paint.FillShape(gtx.Ops, highlightColor, clip.Outline{Path: highlightPath}.Op())
-		paint.FillShape(gtx.Ops, ui.Theme.Colors.RelationStroke, clip.Stroke{Path: highlightPath, Width: 1}.Op())
+		paint.FillShape(gtx.Ops, ui.Theme.Colors.Relation.Stroke, clip.Stroke{Path: highlightPath, Width: 1}.Op())
 	}
 	return highlightRanges
 }
@@ -302,7 +302,7 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 			Min: image.Pt(int(jump.Min)-pad, 0),
 			Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
-		ui.asm.LayoutBar(gtx, ui.Theme.Theme, int(jump.Min)-pad, pad,
+		ui.asm.LayoutBar(gtx, ui.Theme, int(jump.Min)-pad, pad,
 			-overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow)
 		stack.Pop()
 	}
@@ -312,7 +312,7 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 			Min: image.Pt(int(source.Min), 0),
 			Max: image.Pt(int(source.Max)+pad, gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
-		ui.src.LayoutBar(gtx, ui.Theme.Theme, int(source.Max), pad,
+		ui.src.LayoutBar(gtx, ui.Theme, int(source.Max), pad,
 			-overflow, float32(sourceContentHeight)+overflow)
 		stack.Pop()
 	}
