@@ -5,7 +5,6 @@ import (
 	"image/color"
 
 	"gioui.org/f32"
-	"gioui.org/font"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
@@ -20,6 +19,7 @@ import (
 // NewVerticalSelectList creates a new select list.
 func NewVerticalSelectList() SelectList {
 	return SelectList{
+		Hovered: -1,
 		List: widget.List{
 			List: layout.List{
 				Axis: layout.Vertical,
@@ -48,8 +48,8 @@ func (list *SelectList) Activated() bool {
 }
 
 // Layout draws the list.
-func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length int, element layout.ListElement) layout.Dimensions {
-	return FocusBorder(th, gtx.Focused(list)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+func (list *SelectList) Layout(th *Theme, gtx layout.Context, length int, element layout.ListElement) layout.Dimensions {
+	{
 		size := gtx.Constraints.Max
 		gtx.Constraints = layout.Exact(size)
 		defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
@@ -60,7 +60,7 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 		grabbed := false
 
 		// Follow the text size, which settings can change at any time.
-		itemHeight := gtx.Metric.Sp(th.TextSize) + gtx.Metric.Dp(4)
+		itemHeight := gtx.Metric.Sp(th.TextSize) + gtx.Metric.Dp(8)
 
 		pointerClicked := false
 		pointerHovered := false
@@ -164,7 +164,8 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 			}
 		}
 
-		style := material.List(th, &list.List)
+		style := material.List(th.Theme, &list.List)
+		th.StyleScrollbar(&style.ScrollbarStyle)
 		style.AnchorStrategy = material.Overlay
 		return style.Layout(gtx, length,
 			func(gtx layout.Context, index int) layout.Dimensions {
@@ -174,42 +175,34 @@ func (list *SelectList) Layout(th *material.Theme, gtx layout.Context, length in
 				})
 				return element(gtx, index)
 			})
-	})
+	}
 }
 
 // StringListItem creates a string item drawer that reacts to hover and selection.
-func StringListItem(th *material.Theme, state *SelectList, item func(int) string) layout.ListElement {
+func StringListItem(th *Theme, state *SelectList, item func(int) string) layout.ListElement {
 	return func(gtx layout.Context, index int) layout.Dimensions {
 		defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
-		bg := color.NRGBA{}
-		fg := th.Fg
-		weight := font.Normal
-
+		c := th.Colors
+		var bg color.NRGBA
+		fg := c.Text
 		switch {
+		case state.Selected == index && gtx.Focused(state):
+			bg, fg = c.Accent, c.AccentText
 		case state.Selected == index:
-			if gtx.Focused(state) {
-				bg = th.ContrastBg
-				fg = th.ContrastFg
-			}
-			weight = font.Black
+			bg = c.Selection
 		case state.Hovered == index:
-			bg = th.ContrastBg
-			bg.A /= 4
+			bg = c.Hover
 		}
-
 		if bg != (color.NRGBA{}) {
 			paint.Fill(gtx.Ops, bg)
 		}
-		inset := layout.Inset{Top: 1, Right: 4, Bottom: 1, Left: 4}
-		return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			label := material.Body1(th, item(index))
+		return layout.Inset{Left: 10, Right: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			label := material.Body1(th.Theme, item(index))
 			label.Color = fg
 			label.MaxLines = 1
-			label.TextSize = th.TextSize * 9 / 10
-			label.Font.Weight = weight
-			gtx.Constraints.Max.X = MaxLineWidth
-			return label.Layout(gtx)
+			label.TextSize = th.TextSize * 0.95
+			return layout.W.Layout(gtx, label.Layout)
 		})
 	}
 }

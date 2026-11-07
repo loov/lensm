@@ -20,7 +20,6 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"gioui.org/x/component"
@@ -507,35 +506,6 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 			}),
 		)
 	})
-}
-
-func (ui *FileUI) layoutSyntaxSelector(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
-	return layout.Inset{Left: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := ui.Theme.Muted("Syntax", 0.85)
-				return layout.Inset{Right: 3}.Layout(gtx, label.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSyntaxRadio(gtx, colors, syntax.StyleGoLand)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSyntaxRadio(gtx, colors, syntax.StyleDarcula)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSyntaxRadio(gtx, colors, syntax.StyleMono)
-			}),
-		)
-	})
-}
-
-func (ui *FileUI) layoutSyntaxRadio(gtx layout.Context, colors gui.UIColors, style string) layout.Dimensions {
-	radio := material.RadioButton(ui.Theme.Theme, &ui.SyntaxStyle, style, syntax.StyleLabel(style))
-	radio.Color = colors.MutedText
-	radio.IconColor = ui.Theme.ContrastBg
-	radio.TextSize = ui.Theme.TextSize * 0.78
-	radio.Size = unit.Dp(18)
-	return layout.Inset{Left: 2}.Layout(gtx, radio.Layout)
 }
 
 // scheduleFlush arranges for buffered comment and settings changes to

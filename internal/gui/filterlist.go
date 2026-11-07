@@ -167,24 +167,35 @@ func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions
 		Axis: layout.Vertical,
 	}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return FocusBorder(th.Theme, gtx.Focused(&ui.Filter)).Layout(gtx,
-				material.Editor(th.Theme, &ui.Filter, "Filter (regexp)").Layout)
+			return layout.UniformInset(8).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Constraints.Max.X
+				return Field(gtx, th, gtx.Focused(&ui.Filter), func(gtx layout.Context) layout.Dimensions {
+					editor := material.Editor(th.Theme, &ui.Filter, "Filter functions")
+					editor.TextSize = th.TextSize * 0.95
+					editor.HintColor = th.Colors.MutedText
+					return editor.Layout(gtx)
+				})
+			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if ui.FilterError == "" {
 				return layout.Dimensions{}
 			}
-			return th.ErrorLabel(ui.FilterError, 1).Layout(gtx)
+			return layout.Inset{Left: 10, Right: 10, Bottom: 6}.Layout(gtx, th.ErrorLabel(ui.FilterError, 0.85).Layout)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.List.Layout(th.Theme, gtx, len(ui.Filtered),
-				StringListItem(th.Theme, &ui.List, func(index int) string {
+			return ui.List.Layout(th, gtx, len(ui.Filtered),
+				StringListItem(th, &ui.List, func(index int) string {
 					return ui.Filtered[index].Name()
 				}))
 		}),
+		layout.Rigid(HorizontalLine{Height: 1, Color: th.Colors.Splitter}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			body := th.Label(fmt.Sprintf("%d / %d", len(ui.Filtered), len(ui.All)), 0.9)
-			return layout.Center.Layout(gtx, body.Layout)
+			count := fmt.Sprintf("%d of %d functions", len(ui.Filtered), len(ui.All))
+			if len(ui.Filtered) == len(ui.All) {
+				count = fmt.Sprintf("%d functions", len(ui.All))
+			}
+			return layout.Inset{Top: 5, Bottom: 5, Left: 10, Right: 10}.Layout(gtx, th.Muted(count, 0.85).Layout)
 		}),
 	)
 }

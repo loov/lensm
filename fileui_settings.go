@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gioui.org/app"
+	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -24,7 +25,7 @@ func (ui *FileUI) openSettingsWindow() {
 	}
 	ui.settingsWindowOpen = true
 	events, acks, exited := ui.settingsEvents, ui.settingsAcks, ui.exited
-	ui.Windows.Open("lensm settings", image.Pt(520, 360), func(w *app.Window) error {
+	ui.Windows.Open("lensm settings", image.Pt(480, 430), func(w *app.Window) error {
 		// Only pump events here: the settings window is laid out on the
 		// main event loop, because layout reads and mutates state shared
 		// with the main window (Settings, MCP, Config, widget state) and
@@ -54,104 +55,106 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 	paint.FillShape(gtx.Ops, colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 	ui.handleSettingsActions(gtx)
 
-	return layout.UniformInset(14).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return layout.Inset{Top: 18, Bottom: 18, Left: 20, Right: 20}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				title := material.H6(ui.Theme.Theme, "Settings")
-				return layout.Inset{Bottom: 12}.Layout(gtx, title.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSettingsSection(gtx, "Visual", []layout.FlexChild{
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-							layout.Rigid(material.Switch(ui.Theme.Theme, &ui.Dark, "Dark theme").Layout),
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								label := ui.Theme.Label("Dark theme", 1)
-								return layout.Inset{Left: 6}.Layout(gtx, label.Layout)
-							}),
-						)
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						check := material.CheckBox(ui.Theme.Theme, &ui.ShowNativeAsm, "Native asm")
-						return check.Layout(gtx)
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						check := material.CheckBox(ui.Theme.Theme, &ui.ShowAsmHelp, "Show instruction help")
-						return check.Layout(gtx)
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						check := material.CheckBox(ui.Theme.Theme, &ui.HoverLinksOnly, "Link only the hovered line")
-						return check.Layout(gtx)
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.layoutSyntaxSelector(gtx, colors)
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.layoutLabeledEditor(gtx, "Text size", &ui.TextSizeEditor)
-					}),
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: 14}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutSettingsSection(gtx, "MCP", []layout.FlexChild{
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							status := "Stopped"
-							if ui.MCP != nil {
-								status = "Running: " + ui.MCP.URL()
-							}
-							label := ui.Theme.Muted(status, 1)
-							return layout.Inset{Top: 6, Bottom: 6}.Layout(gtx, label.Layout)
-						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									if ui.MCP != nil {
-										gtx = gtx.Disabled()
-									}
-									button := material.Button(ui.Theme.Theme, &ui.StartMCP, "Start MCP")
-									return button.Layout(gtx)
-								}),
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									if ui.MCP == nil {
-										gtx = gtx.Disabled()
-									}
-									button := material.Button(ui.Theme.Theme, &ui.StopMCP, "Stop MCP")
-									return layout.Inset{Left: 8}.Layout(gtx, button.Layout)
-								}),
-							)
-						}),
+			layout.Rigid(ui.settingsSection("Appearance",
+				ui.settingsCheck(&ui.Dark, "Dark theme"),
+				ui.settingsRow("Syntax colors", func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(ui.settingsRadio(syntax.StyleGoLand)),
+						layout.Rigid(ui.settingsRadio(syntax.StyleDarcula)),
+						layout.Rigid(ui.settingsRadio(syntax.StyleMono)),
+					)
+				}),
+				ui.settingsRow("Text size", func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Metric.Dp(56)
+					gtx.Constraints.Max.X = gtx.Constraints.Min.X
+					return gui.Field(gtx, ui.Theme, gtx.Focused(&ui.TextSizeEditor), func(gtx layout.Context) layout.Dimensions {
+						editor := material.Editor(ui.Theme.Theme, &ui.TextSizeEditor, "")
+						editor.TextSize = ui.Theme.TextSize * 0.95
+						return editor.Layout(gtx)
 					})
-				})
-			}),
+				}),
+			)),
+			layout.Rigid(ui.settingsSection("Code view",
+				ui.settingsCheck(&ui.ShowNativeAsm, "Show native assembly"),
+				ui.settingsCheck(&ui.ShowAsmHelp, "Show instruction help on hover"),
+				ui.settingsCheck(&ui.HoverLinksOnly, "Link only the hovered line"),
+			)),
+			layout.Rigid(ui.settingsSection("MCP server",
+				func(gtx layout.Context) layout.Dimensions {
+					status := "Not running. Agents can connect to lensm over HTTP while it runs."
+					if ui.MCP != nil {
+						status = "Running at " + ui.MCP.URL()
+					}
+					return layout.Inset{Bottom: 8}.Layout(gtx, ui.Theme.Muted(status, 0.9).Layout)
+				},
+				func(gtx layout.Context) layout.Dimensions {
+					if ui.MCP != nil {
+						return gui.Button{Theme: ui.Theme, Clickable: &ui.StopMCP, Text: "Stop server"}.Layout(gtx)
+					}
+					return gui.Button{Theme: ui.Theme, Clickable: &ui.StartMCP, Text: "Start server", Primary: true}.Layout(gtx)
+				},
+			)),
 		)
 	})
 }
 
-func (ui *FileUI) layoutSettingsSection(gtx layout.Context, title string, children []layout.FlexChild) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		append([]layout.FlexChild{
+// settingsSection lays out a titled group of settings rows.
+func (ui *FileUI) settingsSection(title string, rows ...layout.Widget) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := ui.Theme.Muted(title, 0.9)
+				label := ui.Theme.Label(title, 0.95)
+				label.Font.Weight = font.SemiBold
 				return layout.Inset{Bottom: 6}.Layout(gtx, label.Layout)
 			}),
-		}, children...)...,
-	)
+		}
+		for _, row := range rows {
+			children = append(children, layout.Rigid(row))
+		}
+		return layout.Inset{Bottom: 20}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+		})
+	}
 }
 
-func (ui *FileUI) layoutLabeledEditor(gtx layout.Context, labelText string, editor *widget.Editor) layout.Dimensions {
-	return layout.Inset{Top: 6}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := ui.Theme.Label(labelText, 1)
-				return layout.Inset{Right: 8}.Layout(gtx, label.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints = layout.Exact(image.Pt(gtx.Metric.Dp(80), gtx.Metric.Dp(34)))
-				return gui.FocusBorder(ui.Theme.Theme, gtx.Focused(editor)).Layout(gtx,
-					material.Editor(ui.Theme.Theme, editor, "").Layout)
-			}),
-		)
-	})
+// settingsRow puts a label in a fixed column so the controls line up.
+func (ui *FileUI) settingsRow(label string, w layout.Widget) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: 3, Bottom: 3}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Metric.Dp(110)
+					return ui.Theme.Label(label, 0.95).Layout(gtx)
+				}),
+				layout.Rigid(w),
+			)
+		})
+	}
+}
+
+func (ui *FileUI) settingsCheck(value *widget.Bool, label string) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		check := material.CheckBox(ui.Theme.Theme, value, label)
+		check.Color = ui.Theme.Colors.Text
+		check.IconColor = ui.Theme.Colors.Accent
+		check.TextSize = ui.Theme.TextSize * 0.95
+		check.Size = 20
+		// The checkbox pads its icon; pull it back to the text edge.
+		return layout.Inset{Left: -4}.Layout(gtx, check.Layout)
+	}
+}
+
+func (ui *FileUI) settingsRadio(style string) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		radio := material.RadioButton(ui.Theme.Theme, &ui.SyntaxStyle, style, syntax.StyleLabel(style))
+		radio.Color = ui.Theme.Colors.Text
+		radio.IconColor = ui.Theme.Colors.Accent
+		radio.TextSize = ui.Theme.TextSize * 0.95
+		radio.Size = 20
+		return layout.Inset{Left: -4, Right: 14}.Layout(gtx, radio.Layout)
+	}
 }
 
 func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
