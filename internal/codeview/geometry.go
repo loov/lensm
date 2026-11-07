@@ -60,34 +60,67 @@ type codeHover struct {
 }
 
 func (ui Style) columns(gtx layout.Context) codeColumns {
-	// The layout has the following sections:
+	// The layout has the following sections, hidden columns and their
+	// padding take no space:
 	// pad | Jump | pad/2 | Go asm | pad | Native asm | pad | Gutter | pad | Source | pad
 	lineHeight := codeLineHeightPx(gtx, ui.TextHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
-	jumpWidth := jumpStep * ui.Code.MaxJump
-	gutterWidth := lineHeight * 8
-	fixedWidth := gutterWidth + jumpWidth + 4*pad + pad/2
-	if ui.ShowNative {
-		fixedWidth += pad
+	showAsm := ui.ShowGo || ui.ShowNative
+	jumpWidth, gutterWidth := 0, 0
+	if showAsm {
+		jumpWidth = jumpStep * ui.Code.MaxJump
+	}
+	if ui.ShowSource {
+		gutterWidth = lineHeight * 8
+	}
+
+	// Each shown column gets its share of the width left after the
+	// fixed parts.
+	shares := [3]int{}
+	for i, show := range [3]bool{ui.ShowGo, ui.ShowNative, ui.ShowSource} {
+		if show {
+			shares[i] = [3]int{28, 28, 44}[i]
+		}
+	}
+	total, shown := 0, 0
+	for _, share := range shares {
+		total += share
+		if share > 0 {
+			shown++
+		}
+	}
+	fixedWidth := 2*pad + max(shown-1, 0)*pad
+	if showAsm {
+		fixedWidth += jumpWidth + pad/2
+	}
+	if ui.ShowSource {
+		fixedWidth += gutterWidth + pad
 	}
 	blocksWidth := max(0, gtx.Constraints.Max.X-fixedWidth)
+	width := func(i int) int {
+		if total == 0 {
+			return 0
+		}
+		return blocksWidth * shares[i] / total
+	}
 
-	jump := boundsWidth(pad, jumpWidth)
-	asmWidth := blocksWidth * 40 / 100
-	if ui.ShowNative {
-		asmWidth = blocksWidth * 28 / 100
+	x := pad
+	jump := boundsWidth(x, jumpWidth)
+	if showAsm {
+		x += jumpWidth + pad/2
 	}
-	asm := boundsWidth(int(jump.Max)+pad/2, asmWidth)
-	native := boundsWidth(int(asm.Max), 0)
-	gutter := boundsWidth(int(asm.Max)+pad, gutterWidth)
-	sourceWidth := blocksWidth - int(asm.Width())
-	if ui.ShowNative {
-		native = boundsWidth(int(asm.Max)+pad, blocksWidth*28/100)
-		gutter = boundsWidth(int(native.Max)+pad, gutterWidth)
-		sourceWidth -= int(native.Width())
+	next := func(w int, show bool, gap int) bounds {
+		b := boundsWidth(x, w)
+		if show {
+			x += w + gap
+		}
+		return b
 	}
-	source := boundsWidth(int(gutter.Max)+pad, max(0, sourceWidth))
+	asm := next(width(0), ui.ShowGo, pad)
+	native := next(width(1), ui.ShowNative, pad)
+	gutter := next(gutterWidth, ui.ShowSource, pad)
+	source := next(width(2), ui.ShowSource, pad)
 
 	c := codeColumns{
 		lineHeight: lineHeight,

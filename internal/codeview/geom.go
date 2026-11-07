@@ -12,6 +12,8 @@ func (b bounds) Lerp(p float32) float32 {
 	return b.Min + p*(b.Max-b.Min)
 }
 
+// Contains reports whether v is in [Min, Max), so a hidden column of
+// zero width contains nothing.
 func (b bounds) Contains(v float32) bool {
-	return b.Min <= v && v <= b.Max
+	return b.Min <= v && v < b.Max
 }

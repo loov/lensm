@@ -677,7 +677,9 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 
 								Theme:          ui.Theme,
 								Syntax:         syntax.PaletteFor(ui.Settings.SyntaxStyle, codeview.SyntaxColors(colors)),
+								ShowGo:         true,
 								ShowNative:     ui.ShowNativeAsm.Value,
+								ShowSource:     true,
 								ShowHelp:       ui.ShowAsmHelp.Value,
 								HoverLinksOnly: ui.HoverLinksOnly.Value,
 								TextHeight:     ui.Theme.TextSize,

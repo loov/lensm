@@ -141,7 +141,10 @@ type Style struct {
 	Theme         *gui.Theme
 	Syntax        syntax.Palette
 
+	// ShowGo, ShowNative and ShowSource pick the columns to draw.
+	ShowGo     bool
 	ShowNative bool
+	ShowSource bool
 	ShowHelp   bool
 	// HoverLinksOnly draws only the hovered line's band between source
 	// and assembly.
@@ -172,9 +175,17 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 	}
 
 	hover := ui.resolveHover(gtx, c, mouseClicked)
-	highlightRanges := ui.layoutRelations(gtx, c, hover)
-	ui.layoutAssembly(gtx, c, hover, highlightRanges)
-	sourceContentHeight := ui.layoutSource(gtx, c, hover, mouseClicked)
+	var highlightRanges []disasm.LineRange
+	if ui.ShowSource && (ui.ShowGo || ui.ShowNative) {
+		highlightRanges = ui.layoutRelations(gtx, c, hover)
+	}
+	if ui.ShowGo || ui.ShowNative {
+		ui.layoutAssembly(gtx, c, hover, highlightRanges)
+	}
+	sourceContentHeight := 0
+	if ui.ShowSource {
+		sourceContentHeight = ui.layoutSource(gtx, c, hover, mouseClicked)
+	}
 	ui.layoutScrollbars(gtx, c, sourceContentHeight)
 	ui.layoutSelectionPerf(gtx, c)
 	ui.layoutHelp(gtx, c, hover)

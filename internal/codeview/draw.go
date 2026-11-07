@@ -114,7 +114,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		Min: image.Pt(int(jump.Min), 0),
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
-	if ui.ShowNative {
+	if ui.ShowGo && ui.ShowNative {
 		paint.FillShape(gtx.Ops, ui.Theme.Colors.Splitter, clip.Rect{
 			Min: image.Pt(int(native.Min)-pad/2, 0),
 			Max: image.Pt(int(native.Min)-pad/2+1, gtx.Constraints.Max.Y),
@@ -146,17 +146,19 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 			}.Op())
 		}
 		indent := ix.Indent * c.indentStep
-		sourceLine{
-			TopLeft:    image.Pt(c.goCol.textLeft+indent, i*lineHeight+int(ui.asm.Offset)),
-			Width:      max(c.goCol.codeWidth-indent, 0),
-			Text:       ix.Text,
-			Spans:      hl.asm[i],
-			TextHeight: ui.TextHeight,
-			Italic:     ix.Call != "",
-			Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
-			Color:      ui.Syntax.Plain,
-		}.Layout(ui.Theme.Theme, gtx)
-		if ix.Text != "" {
+		if ui.ShowGo {
+			sourceLine{
+				TopLeft:    image.Pt(c.goCol.textLeft+indent, i*lineHeight+int(ui.asm.Offset)),
+				Width:      max(c.goCol.codeWidth-indent, 0),
+				Text:       ix.Text,
+				Spans:      hl.asm[i],
+				TextHeight: ui.TextHeight,
+				Italic:     ix.Call != "",
+				Bold:       highlightAsmIndex == i || ui.SelectedAsm == i,
+				Color:      ui.Syntax.Plain,
+			}.Layout(ui.Theme.Theme, gtx)
+		}
+		if ui.ShowGo && ix.Text != "" {
 			ui.layoutRowComment(gtx, ui.asmCoord(ViewGoAsm, ix), ";", c.goCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
 		}
@@ -297,7 +299,7 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 
 	overflow := float32(lineHeight)
 
-	{
+	if ui.ShowGo || ui.ShowNative {
 		stack := clip.Rect{
 			Min: image.Pt(int(jump.Min)-pad, 0),
 			Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
@@ -307,7 +309,7 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 		stack.Pop()
 	}
 
-	{
+	if ui.ShowSource {
 		stack := clip.Rect{
 			Min: image.Pt(int(source.Min), 0),
 			Max: image.Pt(int(source.Max)+pad, gtx.Constraints.Max.Y),

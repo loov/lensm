@@ -60,7 +60,9 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 		UI:         state,
 		Theme:      theme,
 		Syntax:     syntax.PaletteFor(syntax.StyleGoLand, SyntaxColors(theme.Colors)),
+		ShowGo:     true,
 		ShowNative: true,
+		ShowSource: true,
 		TextHeight: theme.TextSize,
 		CopyText: func(_ layout.Context, text string) {
 			copied = text
