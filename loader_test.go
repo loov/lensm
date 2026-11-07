@@ -64,3 +64,40 @@ func TestLoaderDebouncesWrites(t *testing.T) {
 		t.Fatalf("%d loads, want 2", n)
 	}
 }
+
+// TestLoaderWatchToggle checks that a change made while watching is off
+// reloads once watching is turned on.
+func TestLoaderWatchToggle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for the debounce")
+	}
+	path := filepath.Join(t.TempDir(), "bin")
+	if err := os.WriteFile(path, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var closed atomic.Int32
+	l := newLoader(func(string) (disasm.File, error) {
+		return loaderTestFile{&closed}, nil
+	}, false)
+	defer l.Close()
+
+	l.Request(1, path)
+	<-l.Results()
+
+	mod := time.Now().Add(time.Second)
+	if err := os.Chtimes(path, mod, mod); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-l.Results():
+		t.Fatal("reloaded with watching off")
+	case <-time.After(600 * time.Millisecond):
+	}
+
+	l.SetWatch(true)
+	select {
+	case <-l.Results():
+	case <-time.After(5 * time.Second):
+		t.Fatal("no reload after turning watching on")
+	}
+}

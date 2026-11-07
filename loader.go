@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"loov.dev/lensm/internal/disasm"
@@ -20,12 +21,12 @@ type fileLoadResult struct {
 	err        error
 }
 
-// loader loads disassembly files on its own goroutine and, when watch
-// is set, polls the current path for modifications with a debounce so
+// loader loads disassembly files on its own goroutine and, while watch
+// is on, polls the current path for modifications with a debounce so
 // a binary is not reloaded mid-write.
 type loader struct {
 	loadFile func(string) (disasm.File, error)
-	watch    bool
+	watch    atomic.Bool
 	requests chan fileLoadRequest
 	results  chan fileLoadResult
 	stop     chan struct{}
@@ -34,16 +35,20 @@ type loader struct {
 func newLoader(loadFile func(string) (disasm.File, error), watch bool) *loader {
 	l := &loader{
 		loadFile: loadFile,
-		watch:    watch,
 		requests: make(chan fileLoadRequest, 1),
 		results:  make(chan fileLoadResult, 1),
 		stop:     make(chan struct{}),
 	}
+	l.watch.Store(watch)
 	go l.run()
 	return l
 }
 
 func (l *loader) Results() <-chan fileLoadResult { return l.results }
+
+// SetWatch turns watching on or off. Turning it on reloads a binary
+// that changed while it was off, since the last load's mod time stays.
+func (l *loader) SetWatch(on bool) { l.watch.Store(on) }
 
 func (l *loader) Close() { close(l.stop) }
 
@@ -118,7 +123,7 @@ func (l *loader) run() {
 			pendingModTime = time.Time{}
 			load(true, time.Now())
 		case now := <-tick.C:
-			if l.watch {
+			if l.watch.Load() {
 				load(false, now)
 			}
 		case <-l.stop:
