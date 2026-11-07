@@ -64,15 +64,30 @@ type FileUI struct {
 	// split divides the function list from the code view.
 	split component.Resize
 
-	// Other FileUI elements.
-	BrowseButton   widget.Clickable
+	// Window chrome.
+	AppMenu        gui.Menu
+	GoToButton     widget.Clickable
+	QuickOpen      gui.QuickOpen[disasm.Func]
 	EmptyOpen      widget.Clickable
 	SettingsButton widget.Clickable
-	Dark           widget.Bool
-	SyntaxStyle    widget.Enum
+	// Panel is the sidebar panel picked in the icon strip.
+	Panel        int
+	PanelButtons [3]widget.Clickable
+	WatchButton  widget.Clickable
+	CommentsList gui.ClickList
+	HistoryList  gui.ClickList
+
+	// Column toggles and settings.
+	ShowGoAsm      widget.Bool
 	ShowNativeAsm  widget.Bool
+	ShowSource     widget.Bool
 	ShowAsmHelp    widget.Bool
 	HoverLinksOnly widget.Bool
+	SettingsNav    gui.NavList
+	ThemeSelect    gui.Select
+	SyntaxSelect   gui.Select
+	SettingsOK     widget.Clickable
+	SettingsCancel widget.Clickable
 	Comment        codeview.CommentEditor
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
@@ -85,25 +100,25 @@ type FileUI struct {
 	Comments *comments.Store
 	MCP      *mcp.AppServer
 
-	picker             *explorer.Explorer
-	loader             *loader
-	invalidate         chan struct{}
-	settingsEvents     chan event.Event
-	settingsAcks       chan struct{}
-	pickerResults      chan pickerResult
-	codeResults        chan codeResult
-	exited             chan struct{}
-	flushTimer         *time.Timer
-	sessionDirty       bool
-	copyStatus         string
-	copyStatusAt       time.Time
-	saveError          string
-	settingsWindowOpen bool
-	pickerOpen         bool
-	loadGeneration     uint64
-	loadedPath         string
-	Navigation         NavigationHistory
-	navigatingHistory  bool
+	window            *app.Window
+	picker            *explorer.Explorer
+	loader            *loader
+	invalidate        chan struct{}
+	pickerResults     chan pickerResult
+	codeResults       chan codeResult
+	exited            chan struct{}
+	flushTimer        *time.Timer
+	sessionDirty      bool
+	copyStatus        string
+	copyStatusAt      time.Time
+	saveError         string
+	settingsOpen      bool
+	settingsSnapshot  AppSettings
+	pickerOpen        bool
+	loadGeneration    uint64
+	loadedPath        string
+	Navigation        NavigationHistory
+	navigatingHistory bool
 }
 
 type pickerResult struct {
@@ -126,13 +141,13 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	}
 	ui.Settings = settings
 	ui.Theme = gui.NewTheme(theme, settings.Dark)
-	ui.SyntaxStyle.Value = settings.SyntaxStyle
-	ui.Dark.Value = settings.Dark
 	ui.Funcs = gui.NewFilterList[disasm.Func]()
 	ui.ActiveTab = -1
 	ui.Navigation.Reset()
 	ui.Tabs.List.Axis = layout.Horizontal
+	ui.ShowGoAsm.Value = settings.ShowGoAsm
 	ui.ShowNativeAsm.Value = settings.ShowNativeAsm
+	ui.ShowSource.Value = settings.ShowSource
 	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
 	ui.HoverLinksOnly.Value = settings.HoverLinksOnly
 	ui.split.Axis = layout.Horizontal
@@ -156,6 +171,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 		}
 	}()
 
+	ui.window = w
 	loader := newLoader(loadFile, ui.Config.Watch)
 	ui.loader = loader
 	defer loader.Close()
@@ -163,10 +179,6 @@ func (ui *FileUI) Run(w *app.Window) error {
 	ui.picker = picker
 	invalidate := make(chan struct{}, 1)
 	ui.invalidate = invalidate
-	settingsEvents := make(chan event.Event)
-	settingsAcks := make(chan struct{})
-	ui.settingsEvents = settingsEvents
-	ui.settingsAcks = settingsAcks
 	pickerResults := make(chan pickerResult, 1)
 	ui.pickerResults = pickerResults
 	codeResults := make(chan codeResult)
@@ -175,14 +187,12 @@ func (ui *FileUI) Run(w *app.Window) error {
 	flushTimer := time.NewTimer(time.Hour)
 	flushTimer.Stop()
 	ui.flushTimer = flushTimer
-	var settingsOps op.Ops
 	defer ui.flushPending()
 	defer func() {
+		ui.window = nil
 		ui.picker = nil
 		ui.loader = nil
 		ui.invalidate = nil
-		ui.settingsEvents = nil
-		ui.settingsAcks = nil
 		ui.pickerResults = nil
 		ui.codeResults = nil
 		ui.exited = nil
@@ -244,16 +254,6 @@ func (ui *FileUI) Run(w *app.Window) error {
 				ui.requestLoad(res.path)
 			}
 			w.Invalidate()
-		case ev := <-settingsEvents:
-			switch e := ev.(type) {
-			case app.FrameEvent:
-				gtx := app.NewContext(&settingsOps, e)
-				ui.layoutSettingsWindow(gtx)
-				e.Frame(gtx.Ops)
-			case app.DestroyEvent:
-				ui.settingsWindowOpen = false
-			}
-			settingsAcks <- struct{}{}
 		case e := <-events:
 			picker.ListenEvents(e)
 			switch e := e.(type) {
@@ -324,6 +324,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	ui.ActiveTab = -1
 	ui.Comment.Reset()
 	ui.Funcs.SetItems(file.Funcs())
+	ui.QuickOpen.SetItems(file.Funcs())
 
 	if activeName != "" {
 		ui.Funcs.Select(activeName)
@@ -380,14 +381,25 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 	layout.Flex{
 		Axis: layout.Vertical,
 	}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutToolbar(gtx, colors)
-		}),
-		layout.Rigid(gui.HorizontalLine{Height: 1, Color: colors.Splitter}.Layout),
+		layout.Rigid(ui.layoutToolbar),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutContent(gtx, colors)
+			return layout.Flex{}.Layout(gtx,
+				layout.Rigid(ui.layoutStrip),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return ui.layoutContent(gtx, colors)
+				}),
+			)
 		}),
+		layout.Rigid(ui.layoutStatus),
 	)
+
+	if fn, ok := ui.QuickOpen.Update(gtx); ok {
+		ui.openTab(fn, false)
+	}
+	ui.QuickOpen.Layout(gtx, ui.Theme, "Go to function")
+	if ui.settingsOpen {
+		ui.layoutSettings(gtx)
+	}
 }
 
 func (ui *FileUI) handleActions(gtx layout.Context) {
@@ -395,13 +407,15 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	// unfocused poll runs before any editor's Update, so it would steal
 	// them from a focused editor. Only listen for Alt+arrows while no
 	// text editor has focus.
-	editorFocused := gtx.Focused(&ui.Comment) || gtx.Focused(&ui.Funcs.Filter)
+	editorFocused := gtx.Focused(&ui.Comment) || gtx.Focused(&ui.Funcs.Filter) || gtx.Focused(&ui.QuickOpen.Editor)
 	filters := []event.Filter{
 		key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("W")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("F")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("O")},
+		key.Filter{Required: key.ModShortcut, Name: key.Name("P")},
+		key.Filter{Required: key.ModShortcut, Name: key.Name("R")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name(",")},
 		key.Filter{Required: key.ModCtrl, Optional: key.ModShift, Name: key.NameTab},
 	}
@@ -420,6 +434,10 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 		if !ok || keyEvent.State != key.Press {
 			continue
 		}
+		// The settings dialog keeps its own keys.
+		if ui.settingsOpen {
+			continue
+		}
 		switch keyEvent.Name {
 		case key.NameLeftArrow, key.Name("["):
 			ui.navigateBack()
@@ -432,8 +450,12 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			ui.Funcs.Filter.SetCaret(ui.Funcs.Filter.Len(), 0)
 		case key.Name("O"):
 			ui.chooseFile()
+		case key.Name("P"):
+			ui.QuickOpen.Show(gtx)
+		case key.Name("R"):
+			ui.reload()
 		case key.Name(","):
-			ui.openSettingsWindow()
+			ui.openSettings()
 		case key.NameTab:
 			if n := len(ui.CodeTabs); n > 0 {
 				step := 1
@@ -450,61 +472,36 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			ui.selectTab(ui.ActiveTab)
 		}
 	}
-	for ui.BrowseButton.Clicked(gtx) || ui.EmptyOpen.Clicked(gtx) {
+	for ui.EmptyOpen.Clicked(gtx) {
 		ui.chooseFile()
 	}
 	for ui.SettingsButton.Clicked(gtx) {
-		ui.openSettingsWindow()
+		ui.openSettings()
 	}
+	for ui.GoToButton.Clicked(gtx) {
+		ui.QuickOpen.Show(gtx)
+	}
+	ui.handleAppMenu(gtx)
+	ui.handleColumnToggles(gtx)
 }
 
-func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
-	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
-
-	inset := layout.Inset{Top: 6, Right: 8, Bottom: 6, Left: 8}
-	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := gui.Button{Theme: ui.Theme, Clickable: &ui.BrowseButton, Text: "Open…"}
-				return layout.Inset{Right: 10}.Layout(gtx, button.Layout)
-			}),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				if ui.Config.Path == "" {
-					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
-				}
-				label := ui.Theme.Muted(ui.Config.Path, 0.9)
-				label.MaxLines = 1
-				return layout.W.Layout(gtx, label.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := gui.IconButton{Theme: ui.Theme, Clickable: &ui.SettingsButton, Icon: SettingsIcon, Description: "Settings"}
-				return layout.Inset{Left: 6}.Layout(gtx, button.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				// "Copied selection" is feedback for the moment, not state.
-				const copyStatusFor = 2 * time.Second
-				if ui.copyStatus != "" && !ui.copyStatusAt.IsZero() {
-					if gtx.Now.Sub(ui.copyStatusAt) >= copyStatusFor {
-						ui.copyStatus = ""
-					} else {
-						gtx.Execute(op.InvalidateCmd{At: ui.copyStatusAt.Add(copyStatusFor)})
-					}
-				}
-				if ui.copyStatus == "" {
-					return layout.Dimensions{}
-				}
-				label := ui.Theme.Muted(ui.copyStatus, 0.85)
-				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if ui.saveError == "" {
-					return layout.Dimensions{}
-				}
-				label := ui.Theme.ErrorLabel(ui.saveError, 0.85)
-				return layout.Inset{Left: 2}.Layout(gtx, label.Layout)
-			}),
-		)
-	})
+// handleColumnToggles saves the column choice and keeps at least one
+// column showing.
+func (ui *FileUI) handleColumnToggles(gtx layout.Context) {
+	changed := false
+	for _, b := range []*widget.Bool{&ui.ShowGoAsm, &ui.ShowNativeAsm, &ui.ShowSource} {
+		for b.Update(gtx) {
+			changed = true
+			if !ui.ShowGoAsm.Value && !ui.ShowNativeAsm.Value && !ui.ShowSource.Value {
+				b.Value = true
+			}
+		}
+	}
+	if changed {
+		s := ui.Settings
+		s.ShowGoAsm, s.ShowNativeAsm, s.ShowSource = ui.ShowGoAsm.Value, ui.ShowNativeAsm.Value, ui.ShowSource.Value
+		ui.saveSettings(s)
+	}
 }
 
 // scheduleFlush arranges for buffered comment and settings changes to
@@ -604,8 +601,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 
 	return ui.split.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints = layout.Exact(gtx.Constraints.Max)
-			return ui.Funcs.Layout(ui.Theme, gtx)
+			return ui.layoutPanel(gtx)
 		},
 		func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -626,17 +622,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					}
 					return ui.layoutCodeTabs(gtx, colors)
 				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					code := ui.activeCode()
-					if code == nil || !code.Loaded() {
-						return layout.Dimensions{}
-					}
-					txt := ui.Theme.Muted(code.Code.File, 0.85)
-					txt.MaxLines = 1
-					inset := layout.Inset{Top: 5, Left: 10, Right: 10, Bottom: 5}
-					return inset.Layout(gtx, txt.Layout)
-				}),
-				layout.Rigid(gui.HorizontalLine{Height: 1, Color: colors.Splitter}.Layout),
+				layout.Rigid(ui.layoutCrumbs),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					if ui.LoadError != nil && ui.File == nil {
 						return layout.Dimensions{}
@@ -677,9 +663,9 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 
 								Theme:          ui.Theme,
 								Syntax:         syntax.PaletteFor(ui.Settings.SyntaxStyle, codeview.SyntaxColors(colors)),
-								ShowGo:         true,
+								ShowGo:         ui.ShowGoAsm.Value,
 								ShowNative:     ui.ShowNativeAsm.Value,
-								ShowSource:     true,
+								ShowSource:     ui.ShowSource.Value,
 								ShowHelp:       ui.ShowAsmHelp.Value,
 								HoverLinksOnly: ui.HoverLinksOnly.Value,
 								TextHeight:     ui.Theme.TextSize,

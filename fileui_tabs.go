@@ -268,11 +268,12 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout
 		return layout.Dimensions{}
 	}
 
-	// 28 dp at the default 12 sp, growing with the text size.
-	height := gtx.Metric.Sp(ui.Theme.TextSize) + gtx.Metric.Dp(16)
+	// 32 dp at the default 12 sp, growing with the text size.
+	height := gtx.Metric.Sp(ui.Theme.TextSize) + gtx.Metric.Dp(20)
 	availableWidth := gtx.Constraints.Max.X
 	gtx.Constraints = layout.Exact(image.Pt(availableWidth, height))
 	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
+	paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{Min: image.Pt(0, height-gtx.Metric.Dp(1)), Max: gtx.Constraints.Max}.Op())
 
 	tabWidth := gtx.Metric.Dp(220)
 	minTabWidth := gtx.Metric.Dp(120)
@@ -306,15 +307,17 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 	}
 	paint.FillShape(gtx.Ops, bg, clip.Rect{Max: size}.Op())
 	if active {
-		underline := gtx.Metric.Dp(2)
-		paint.FillShape(gtx.Ops, colors.Accent, clip.Rect{Min: image.Pt(0, size.Y-underline), Max: size}.Op())
+		paint.FillShape(gtx.Ops, colors.Accent, clip.Rect{Max: image.Pt(size.X, gtx.Metric.Dp(2))}.Op())
+	} else {
+		// Inactive tabs sit on the strip's bottom border.
+		paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{Min: image.Pt(0, size.Y-gtx.Metric.Dp(1)), Max: size}.Op())
 	}
-	paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{
+	paint.FillShape(gtx.Ops, colors.Divider, clip.Rect{
 		Min: image.Pt(size.X-1, 0),
 		Max: size,
 	}.Op())
 
-	layout.Inset{Right: 4, Left: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	layout.Inset{Right: 6, Left: 14}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				gtx.Constraints = layout.Exact(gtx.Constraints.Max)
@@ -322,7 +325,7 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 					size := gtx.Constraints.Max
 					defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 
-					label := ui.Theme.Label(tab.Name, 0.9)
+					label := ui.Theme.Label(gui.ShortName(tab.Name), 0.92)
 					label.MaxLines = 1
 					if !active {
 						label.Color = colors.MutedText
@@ -330,7 +333,7 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 					if tab.Preview {
 						label.Font.Style = font.Italic
 					}
-					dims := layout.W.Layout(gtx, label.Layout)
+					dims := gui.Start(gtx, label.Layout)
 					return layout.Dimensions{Size: size, Baseline: dims.Baseline}
 				})
 			}),

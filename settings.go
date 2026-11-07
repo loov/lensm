@@ -16,7 +16,9 @@ import (
 type AppSettings struct {
 	SyntaxStyle   string `json:"syntax_style"`
 	Dark          bool   `json:"dark,omitempty"`
+	ShowGoAsm     bool   `json:"show_go_asm"`
 	ShowNativeAsm bool   `json:"show_native_asm"`
+	ShowSource    bool   `json:"show_source"`
 	ShowAsmHelp   bool   `json:"show_asm_help"`
 	// HoverLinksOnly draws only the hovered line's source-to-assembly
 	// link instead of all of them.
@@ -31,7 +33,9 @@ type AppSettings struct {
 func DefaultAppSettings() AppSettings {
 	return AppSettings{
 		SyntaxStyle:   syntax.StyleXcode,
+		ShowGoAsm:     true,
 		ShowNativeAsm: true,
+		ShowSource:    true,
 		ShowAsmHelp:   true,
 		TextSize:      12,
 		SidebarRatio:  0.15,

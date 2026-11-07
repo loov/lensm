@@ -73,6 +73,21 @@ func (h *NavigationHistory) Forward() (string, bool) {
 	return h.entries[h.index], true
 }
 
+// Entries returns the visits, oldest first, and the index of the
+// current one.
+func (h *NavigationHistory) Entries() ([]string, int) {
+	return h.entries, h.index
+}
+
+// Go moves to entry i, as Back or Forward repeated would.
+func (h *NavigationHistory) Go(i int) (string, bool) {
+	if i < 0 || i >= len(h.entries) {
+		return "", false
+	}
+	h.index = i
+	return h.entries[i], true
+}
+
 func (h *NavigationHistory) Current() string {
 	if h.index < 0 || h.index >= len(h.entries) {
 		return ""

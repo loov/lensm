@@ -5,14 +5,19 @@ import (
 	"golang.org/x/exp/shiny/materialdesign/icons"
 )
 
-// SettingsIcon is used for application settings.
-var SettingsIcon = func() *widget.Icon {
-	icon, _ := widget.NewIcon(icons.ActionSettings)
+func mustIcon(data []byte) *widget.Icon {
+	icon, err := widget.NewIcon(data)
+	if err != nil {
+		panic(err)
+	}
 	return icon
-}()
+}
 
-// CloseIcon closes a tab.
-var CloseIcon = func() *widget.Icon {
-	icon, _ := widget.NewIcon(icons.NavigationClose)
-	return icon
-}()
+var (
+	SettingsIcon  = mustIcon(icons.ImageTune)
+	CloseIcon     = mustIcon(icons.NavigationClose)
+	FunctionsIcon = mustIcon(icons.EditorFormatListBulleted)
+	CommentsIcon  = mustIcon(icons.CommunicationComment)
+	HistoryIcon   = mustIcon(icons.ActionHistory)
+	WatchIcon     = mustIcon(icons.ActionVisibility)
+)
