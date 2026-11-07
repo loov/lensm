@@ -10,8 +10,11 @@ func TestNormalizeSyntaxStyle(t *testing.T) {
 	if got := NormalizeStyle("jetbrains-dark"); got != StyleDarcula {
 		t.Fatalf("expected darcula alias, got %q", got)
 	}
-	if got := NormalizeStyle("unknown"); got != StyleGoLand {
-		t.Fatalf("expected unknown style to fall back to goland, got %q", got)
+	if got := NormalizeStyle("unknown"); got != StyleXcode {
+		t.Fatalf("expected unknown style to fall back to xcode, got %q", got)
+	}
+	if got := NormalizeStyle("goland-light"); got != StyleGoLand {
+		t.Fatalf("expected goland to stay goland, got %q", got)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	StyleXcode   = "xcode"
 	StyleGoLand  = "goland-light"
 	StyleDarcula = "darcula"
 	StyleMono    = "mono"
@@ -33,16 +34,21 @@ type Palette struct {
 
 func NormalizeStyle(style string) string {
 	switch strings.ToLower(strings.TrimSpace(style)) {
-	case "", "goland", "goland-light", "jetbrains":
+	case "", "xcode":
+		return StyleXcode
+	case "goland", "goland-light", "jetbrains":
 		return StyleGoLand
 	case "darcula", "goland-dark", "jetbrains-dark":
 		return StyleDarcula
 	case "mono", "monochrome", "plain":
 		return StyleMono
 	default:
-		return StyleGoLand
+		return StyleXcode
 	}
 }
+
+// Styles lists the styles in the order settings offers them.
+var Styles = []string{StyleXcode, StyleGoLand, StyleDarcula, StyleMono}
 
 func StyleLabel(style string) string {
 	switch NormalizeStyle(style) {
@@ -50,8 +56,10 @@ func StyleLabel(style string) string {
 		return "Darcula"
 	case StyleMono:
 		return "Mono"
-	default:
+	case StyleGoLand:
 		return "GoLand"
+	default:
+		return "Xcode"
 	}
 }
 
@@ -64,6 +72,37 @@ type Colors struct {
 
 func PaletteFor(style string, colors Colors) Palette {
 	switch NormalizeStyle(style) {
+	case StyleXcode:
+		if syntaxBackgroundDark(colors.Background) {
+			return Palette{
+				Plain:      rgb(0xdfdfe0),
+				Keyword:    rgb(0xfc5fa3),
+				Builtin:    rgb(0xa167e6),
+				String:     rgb(0xfc6a5d),
+				Number:     rgb(0xd0bf69),
+				Comment:    rgb(0x7f8c98),
+				Operator:   rgb(0xdfdfe0),
+				Register:   rgb(0x5dd8ff),
+				Mnemonic:   rgb(0xfc5fa3),
+				Symbol:     rgb(0x67b7a4),
+				LineNumber: colors.MutedText,
+				CallTarget: rgb(0x41a1c0),
+			}
+		}
+		return Palette{
+			Plain:      rgb(0x1d1d1f),
+			Keyword:    rgb(0x9b2393),
+			Builtin:    rgb(0x6c36a9),
+			String:     rgb(0xc41a16),
+			Number:     rgb(0x1c00cf),
+			Comment:    rgb(0x5d6c79),
+			Operator:   rgb(0x1d1d1f),
+			Register:   rgb(0x0f68a0),
+			Mnemonic:   rgb(0x9b2393),
+			Symbol:     rgb(0x326d74),
+			LineNumber: colors.MutedText,
+			CallTarget: rgb(0x0b4f79),
+		}
 	case StyleDarcula:
 		if !syntaxBackgroundDark(colors.Background) {
 			return Palette{
@@ -450,4 +489,8 @@ type Span struct {
 	Color  color.NRGBA
 	Italic bool
 	Bold   bool
+}
+
+func rgb(v uint32) color.NRGBA {
+	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}
 }

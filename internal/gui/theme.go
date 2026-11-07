@@ -52,23 +52,34 @@ func (th *Theme) ErrorLabel(text string, scale float32) material.LabelStyle {
 
 type UIColors struct {
 	// Background is the editor surface, SecondaryBackground the chrome
-	// around it: toolbar, sidebar and tab strip.
+	// around it: toolbar, tab strip and status bar. Sidebar is the
+	// icon strip and the panel next to it.
 	Background          color.NRGBA
 	SecondaryBackground color.NRGBA
-	// Splitter separates panes and outlines fields.
+	Sidebar             color.NRGBA
+	// Splitter separates panes; Divider is the quieter line inside one.
 	Splitter  color.NRGBA
+	Divider   color.NRGBA
 	Gutter    color.NRGBA
 	Text      color.NRGBA
 	MutedText color.NRGBA
 	Error     color.NRGBA
 	// Hover is the background of a row or button under the pointer.
-	Hover     color.NRGBA
+	// It is translucent so it works on every surface.
+	Hover color.NRGBA
+	// Fill is the background of search fields and segmented controls.
+	Fill      color.NRGBA
 	Selection color.NRGBA
-	// Accent marks the focused selection, the active tab and focused
-	// fields; AccentText is text on top of it.
+	// Accent marks the selected row, the active tab and focused fields;
+	// AccentText is text on top of it.
 	Accent     color.NRGBA
 	AccentText color.NRGBA
-	Relation   RelationColors
+	// Positive is a switch that is on and a server that is running.
+	Positive color.NRGBA
+	// Shadow is the outline and drop shadow of popups and dialogs.
+	Shadow   color.NRGBA
+	Scrim    color.NRGBA
+	Relation RelationColors
 }
 
 // RelationColors styles the bands linking source lines to their
@@ -83,42 +94,61 @@ func rgb(v uint32) color.NRGBA {
 	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}
 }
 
+func rgba(v uint32, a uint8) color.NRGBA {
+	c := rgb(v)
+	c.A = a
+	return c
+}
+
+// applyPalette follows the macOS system colours, in light and dark.
 func applyPalette(th *material.Theme, dark bool) UIColors {
 	var c UIColors
 	if dark {
 		c = UIColors{
-			Background:          rgb(0x1e1f22),
-			SecondaryBackground: rgb(0x2b2d30),
-			Splitter:            rgb(0x3c3f43),
-			Gutter:              rgb(0x232427),
-			Text:                rgb(0xdfe1e5),
-			MutedText:           rgb(0x8c9097),
-			Error:               rgb(0xf2827a),
-			Hover:               rgb(0x36383c),
-			Selection:           rgb(0x2e436e),
-			Accent:              rgb(0x3574f0),
+			Background:          rgb(0x1e1e1e),
+			SecondaryBackground: rgb(0x2a2a2c),
+			Sidebar:             rgb(0x252527),
+			Splitter:            rgb(0x3a3a3c),
+			Divider:             rgb(0x313133),
+			Gutter:              rgb(0x222224),
+			Text:                rgb(0xe5e5e7),
+			MutedText:           rgb(0x98989d),
+			Error:               rgb(0xff6961),
+			Hover:               rgba(0xffffff, 0x14),
+			Fill:                rgba(0xffffff, 0x14),
+			Selection:           rgba(0x0a84ff, 0x48),
+			Accent:              rgb(0x0a84ff),
 			AccentText:          rgb(0xffffff),
+			Positive:            rgb(0x30d158),
+			Shadow:              rgba(0x000000, 0x80),
+			Scrim:               rgba(0x000000, 0x60),
 			Relation: RelationColors{
-				Saturation: 0.45, Lightness: 0.4, Alpha: 0.2,
-				Stroke: color.NRGBA{R: 0xdf, G: 0xe1, B: 0xe5, A: 0x60},
+				Saturation: 0.55, Lightness: 0.5, Alpha: 0.05,
+				Stroke: rgba(0x0a84ff, 0xa0),
 			},
 		}
 	} else {
 		c = UIColors{
 			Background:          rgb(0xffffff),
-			SecondaryBackground: rgb(0xf7f8fa),
-			Splitter:            rgb(0xdfe1e5),
-			Gutter:              rgb(0xf2f3f5),
-			Text:                rgb(0x1e1f22),
-			MutedText:           rgb(0x6c707e),
-			Error:               rgb(0xc4232f),
-			Hover:               rgb(0xebecf0),
-			Selection:           rgb(0xd5e1ff),
-			Accent:              rgb(0x3574f0),
+			SecondaryBackground: rgb(0xf6f5f8),
+			Sidebar:             rgb(0xecebf0),
+			Splitter:            rgb(0xd9d8dd),
+			Divider:             rgb(0xe6e5ea),
+			Gutter:              rgb(0xfafafa),
+			Text:                rgb(0x1d1d1f),
+			MutedText:           rgb(0x86868b),
+			Error:               rgb(0xd70015),
+			Hover:               rgba(0x000000, 0x0d),
+			Fill:                rgba(0x000000, 0x0f),
+			Selection:           rgba(0x007aff, 0x24),
+			Accent:              rgb(0x007aff),
 			AccentText:          rgb(0xffffff),
+			Positive:            rgb(0x34c759),
+			Shadow:              rgba(0x000000, 0x38),
+			Scrim:               rgba(0x000000, 0x2e),
 			Relation: RelationColors{
-				Saturation: 0.75, Lightness: 0.8, Alpha: 0.35,
-				Stroke: color.NRGBA{A: 0x40},
+				Saturation: 0.85, Lightness: 0.62, Alpha: 0.16,
+				Stroke: rgba(0x007aff, 0x8c),
 			},
 		}
 	}

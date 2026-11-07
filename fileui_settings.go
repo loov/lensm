@@ -61,6 +61,7 @@ func (ui *FileUI) layoutSettingsWindow(gtx layout.Context) layout.Dimensions {
 				ui.settingsCheck(&ui.Dark, "Dark theme"),
 				ui.settingsRow("Syntax colors", func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(ui.settingsRadio(syntax.StyleXcode)),
 						layout.Rigid(ui.settingsRadio(syntax.StyleGoLand)),
 						layout.Rigid(ui.settingsRadio(syntax.StyleDarcula)),
 						layout.Rigid(ui.settingsRadio(syntax.StyleMono)),

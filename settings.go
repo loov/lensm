@@ -30,7 +30,7 @@ type AppSettings struct {
 
 func DefaultAppSettings() AppSettings {
 	return AppSettings{
-		SyntaxStyle:   syntax.StyleGoLand,
+		SyntaxStyle:   syntax.StyleXcode,
 		ShowNativeAsm: true,
 		ShowAsmHelp:   true,
 		TextSize:      12,
