@@ -10,3 +10,9 @@ var SettingsIcon = func() *widget.Icon {
 	icon, _ := widget.NewIcon(icons.ActionSettings)
 	return icon
 }()
+
+// CloseIcon closes a tab.
+var CloseIcon = func() *widget.Icon {
+	icon, _ := widget.NewIcon(icons.NavigationClose)
+	return icon
+}()

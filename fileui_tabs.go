@@ -5,6 +5,7 @@ import (
 
 	"gioui.org/font"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/widget"
@@ -267,8 +268,8 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout
 		return layout.Dimensions{}
 	}
 
-	// 22 dp at the default 12 sp, growing with the text size.
-	height := max(gtx.Metric.Sp(ui.Theme.TextSize)+gtx.Metric.Dp(10), 20)
+	// 28 dp at the default 12 sp, growing with the text size.
+	height := gtx.Metric.Sp(ui.Theme.TextSize) + gtx.Metric.Dp(16)
 	availableWidth := gtx.Constraints.Max.X
 	gtx.Constraints = layout.Exact(image.Pt(availableWidth, height))
 	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
@@ -284,6 +285,8 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout
 
 	list := material.List(ui.Theme.Theme, &ui.Tabs)
 	list.AnchorStrategy = material.Overlay
+	ui.Theme.StyleScrollbar(&list.ScrollbarStyle)
+	list.Indicator.MinorWidth = 3
 	return list.Layout(gtx, len(ui.CodeTabs), func(gtx layout.Context, index int) layout.Dimensions {
 		gtx.Constraints = layout.Exact(image.Pt(tabWidth, height))
 		return ui.layoutCodeTab(gtx, colors, ui.CodeTabs[index], index == ui.ActiveTab)
@@ -294,22 +297,24 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 	size := gtx.Constraints.Max
 	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 
+	hovered := tab.Tab.Hovered() || tab.Close.Hovered()
 	bg := colors.SecondaryBackground
 	if active {
 		bg = colors.Background
-	} else if tab.Tab.Hovered() {
-		bg = colors.Selection
+	} else if hovered {
+		bg = colors.Hover
 	}
 	paint.FillShape(gtx.Ops, bg, clip.Rect{Max: size}.Op())
 	if active {
-		paint.FillShape(gtx.Ops, ui.Theme.ContrastBg, clip.Rect{Max: image.Pt(size.X, 2)}.Op())
+		underline := gtx.Metric.Dp(2)
+		paint.FillShape(gtx.Ops, colors.Accent, clip.Rect{Min: image.Pt(0, size.Y-underline), Max: size}.Op())
 	}
 	paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{
 		Min: image.Pt(size.X-1, 0),
 		Max: size,
 	}.Op())
 
-	layout.Inset{Top: 1, Right: 4, Bottom: 1, Left: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	layout.Inset{Right: 4, Left: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				gtx.Constraints = layout.Exact(gtx.Constraints.Max)
@@ -319,8 +324,8 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 
 					label := ui.Theme.Label(tab.Name, 0.9)
 					label.MaxLines = 1
-					if active {
-						label.Font.Weight = font.Black
+					if !active {
+						label.Color = colors.MutedText
 					}
 					if tab.Preview {
 						label.Font.Style = font.Italic
@@ -330,17 +335,24 @@ func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *Co
 				})
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				closeWidth := gtx.Constraints.Max.Y
-				gtx.Constraints = layout.Exact(image.Pt(closeWidth, gtx.Constraints.Max.Y))
+				// The close button shows on the active and hovered tabs
+				// only, but keeps its space so names don't shift.
+				side := gtx.Metric.Dp(20)
+				gtx.Constraints = layout.Exact(image.Pt(side, gtx.Constraints.Max.Y))
 				return tab.Close.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					size := gtx.Constraints.Max
-					if tab.Close.Hovered() {
-						paint.FillShape(gtx.Ops, colors.Selection, clip.Rect{Max: size}.Op())
+					if !active && !hovered {
+						return layout.Dimensions{Size: size}
 					}
-					label := ui.Theme.Muted("x", 0.9)
-					label.MaxLines = 1
-					dims := layout.Center.Layout(gtx, label.Layout)
-					return layout.Dimensions{Size: size, Baseline: dims.Baseline}
+					box := image.Rectangle{Min: image.Pt(0, (size.Y-side)/2), Max: image.Pt(side, (size.Y+side)/2)}
+					if tab.Close.Hovered() {
+						paint.FillShape(gtx.Ops, colors.Hover, clip.UniformRRect(box, gtx.Metric.Dp(3)).Op(gtx.Ops))
+					}
+					icon := gtx.Metric.Dp(12)
+					defer op.Offset(image.Pt((side-icon)/2, (size.Y-icon)/2)).Push(gtx.Ops).Pop()
+					gtx.Constraints = layout.Exact(image.Pt(icon, icon))
+					CloseIcon.Layout(gtx, colors.MutedText)
+					return layout.Dimensions{Size: size}
 				})
 			}),
 		)

@@ -20,6 +20,7 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/text"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"gioui.org/x/component"
@@ -65,6 +66,7 @@ type FileUI struct {
 
 	// Other FileUI elements.
 	BrowseButton   widget.Clickable
+	EmptyOpen      widget.Clickable
 	SettingsButton widget.Clickable
 	Dark           widget.Bool
 	SyntaxStyle    widget.Enum
@@ -448,7 +450,7 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			ui.selectTab(ui.ActiveTab)
 		}
 	}
-	for ui.BrowseButton.Clicked(gtx) {
+	for ui.BrowseButton.Clicked(gtx) || ui.EmptyOpen.Clicked(gtx) {
 		ui.chooseFile()
 	}
 	for ui.SettingsButton.Clicked(gtx) {
@@ -459,13 +461,12 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
 	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
-	inset := layout.Inset{Top: 4, Right: 6, Bottom: 4, Left: 6}
+	inset := layout.Inset{Top: 6, Right: 8, Bottom: 6, Left: 8}
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.Button(ui.Theme.Theme, &ui.BrowseButton, "Choose...")
-				button.Inset = layout.Inset{Top: 6, Right: 10, Bottom: 6, Left: 10}
-				return layout.Inset{Right: 6}.Layout(gtx, button.Layout)
+				button := gui.Button{Theme: ui.Theme, Clickable: &ui.BrowseButton, Text: "Open…"}
+				return layout.Inset{Right: 10}.Layout(gtx, button.Layout)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				if ui.Config.Path == "" {
@@ -476,10 +477,8 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context, colors gui.UIColors) layout.
 				return layout.W.Layout(gtx, label.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.IconButton(ui.Theme.Theme, &ui.SettingsButton, SettingsIcon, "Settings")
-				button.Size = 18
-				button.Inset = layout.UniformInset(8)
-				return layout.Inset{Left: 4}.Layout(gtx, button.Layout)
+				button := gui.IconButton{Theme: ui.Theme, Clickable: &ui.SettingsButton, Icon: SettingsIcon, Description: "Settings"}
+				return layout.Inset{Left: 6}.Layout(gtx, button.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				// "Copied selection" is feedback for the moment, not state.
@@ -632,10 +631,9 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					if code == nil || !code.Loaded() {
 						return layout.Dimensions{}
 					}
-					txt := ui.Theme.Muted("file: "+code.Code.File, 1)
-					txt.Font.Style = font.Italic
-
-					inset := layout.Inset{Top: 2, Left: 4, Right: 4, Bottom: 4}
+					txt := ui.Theme.Muted(code.Code.File, 0.85)
+					txt.MaxLines = 1
+					inset := layout.Inset{Top: 5, Left: 10, Right: 10, Bottom: 5}
 					return inset.Layout(gtx, txt.Layout)
 				}),
 				layout.Rigid(gui.HorizontalLine{Height: 1, Color: colors.Splitter}.Layout),
@@ -644,9 +642,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 						return layout.Dimensions{}
 					}
 					if ui.File == nil && ui.Config.Path == "" {
-						txt := ui.Theme.Muted("Choose a binary to disassemble: a Go, C, C++, Rust or TinyGo executable, an object file or a wasm module. "+
-							"It can also be given on the command line, lensm <path>.", 1)
-						return layout.UniformInset(12).Layout(gtx, txt.Layout)
+						return ui.layoutEmptyState(gtx)
 					}
 					if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
 						txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)
@@ -700,6 +696,27 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 			return layout.Dimensions{Size: size}
 		},
 	)
+}
+
+// layoutEmptyState invites the user to open a binary when none is loaded.
+func (ui *FileUI) layoutEmptyState(gtx layout.Context) layout.Dimensions {
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Metric.Dp(420))
+		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				title := ui.Theme.Label("No binary open", 1.3)
+				title.Font.Weight = font.SemiBold
+				return layout.Inset{Bottom: 8}.Layout(gtx, title.Layout)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				txt := ui.Theme.Muted("Open a Go, C, C++, Rust or TinyGo executable, an object file or a wasm module. "+
+					"You can also pass it on the command line: lensm <path>", 0.95)
+				txt.Alignment = text.Middle
+				return layout.Inset{Bottom: 16}.Layout(gtx, txt.Layout)
+			}),
+			layout.Rigid(gui.Button{Theme: ui.Theme, Clickable: &ui.EmptyOpen, Text: "Open binary\u2026", Primary: true}.Layout),
+		)
+	})
 }
 
 func (ui *FileUI) requestLoad(path string) {
