@@ -11,7 +11,6 @@ import (
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/widget"
-	"gioui.org/widget/material"
 )
 
 type FilterListItem interface {
@@ -130,7 +129,7 @@ func (ui *FilterList[T]) updateFiltered() {
 
 // Layout draws the list.
 func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions {
-	paint.FillShape(gtx.Ops, th.Colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Min}.Op())
+	paint.FillShape(gtx.Ops, th.Colors.Sidebar, clip.Rect{Max: gtx.Constraints.Min}.Op())
 
 	ui.SelectIndex(ui.List.Selected)
 
@@ -167,14 +166,9 @@ func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions
 		Axis: layout.Vertical,
 	}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.UniformInset(8).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.UniformInset(10).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				gtx.Constraints.Min.X = gtx.Constraints.Max.X
-				return Field(gtx, th, gtx.Focused(&ui.Filter), func(gtx layout.Context) layout.Dimensions {
-					editor := material.Editor(th.Theme, &ui.Filter, "Filter functions")
-					editor.TextSize = th.TextSize * 0.95
-					editor.HintColor = th.Colors.MutedText
-					return editor.Layout(gtx)
-				})
+				return SearchField(gtx, th, gtx.Focused(&ui.Filter), Editor(th, &ui.Filter, "Filter functions"))
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -185,17 +179,17 @@ func (ui *FilterList[T]) Layout(th *Theme, gtx layout.Context) layout.Dimensions
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return ui.List.Layout(th, gtx, len(ui.Filtered),
-				StringListItem(th, &ui.List, func(index int) string {
+				NameListItem(th, &ui.List, func(index int) string {
 					return ui.Filtered[index].Name()
 				}))
 		}),
-		layout.Rigid(HorizontalLine{Height: 1, Color: th.Colors.Splitter}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			count := fmt.Sprintf("%d of %d functions", len(ui.Filtered), len(ui.All))
-			if len(ui.Filtered) == len(ui.All) {
-				count = fmt.Sprintf("%d functions", len(ui.All))
-			}
-			return layout.Inset{Top: 5, Bottom: 5, Left: 10, Right: 10}.Layout(gtx, th.Muted(count, 0.85).Layout)
-		}),
 	)
+}
+
+// CountText says how many items the filter shows.
+func (ui *FilterList[T]) CountText() string {
+	if len(ui.Filtered) == len(ui.All) {
+		return fmt.Sprintf("%d functions", len(ui.All))
+	}
+	return fmt.Sprintf("%d of %d functions", len(ui.Filtered), len(ui.All))
 }

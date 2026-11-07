@@ -68,7 +68,10 @@ type UIColors struct {
 	// It is translucent so it works on every surface.
 	Hover color.NRGBA
 	// Fill is the background of search fields and segmented controls.
-	Fill      color.NRGBA
+	Fill color.NRGBA
+	// Control is the face of buttons, pop-up buttons and the chosen
+	// segment, raised above Fill.
+	Control   color.NRGBA
 	Selection color.NRGBA
 	// Accent marks the selected row, the active tab and focused fields;
 	// AccentText is text on top of it.
@@ -116,6 +119,7 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 			Error:               rgb(0xff6961),
 			Hover:               rgba(0xffffff, 0x14),
 			Fill:                rgba(0xffffff, 0x14),
+			Control:             rgb(0x4a4a4d),
 			Selection:           rgba(0x0a84ff, 0x48),
 			Accent:              rgb(0x0a84ff),
 			AccentText:          rgb(0xffffff),
@@ -140,6 +144,7 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 			Error:               rgb(0xd70015),
 			Hover:               rgba(0x000000, 0x0d),
 			Fill:                rgba(0x000000, 0x0f),
+			Control:             rgb(0xffffff),
 			Selection:           rgba(0x007aff, 0x24),
 			Accent:              rgb(0x007aff),
 			AccentText:          rgb(0xffffff),

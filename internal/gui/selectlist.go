@@ -178,31 +178,50 @@ func (list *SelectList) Layout(th *Theme, gtx layout.Context, length int, elemen
 	}
 }
 
-// StringListItem creates a string item drawer that reacts to hover and selection.
-func StringListItem(th *Theme, state *SelectList, item func(int) string) layout.ListElement {
+// NameListItem draws a qualified name with its package path dimmed,
+// reacting to hover and selection.
+func NameListItem(th *Theme, state *SelectList, item func(int) string) layout.ListElement {
 	return func(gtx layout.Context, index int) layout.Dimensions {
 		defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
 		c := th.Colors
 		var bg color.NRGBA
-		fg := c.Text
+		fg, muted := c.Text, c.MutedText
 		switch {
 		case state.Selected == index && gtx.Focused(state):
-			bg, fg = c.Accent, c.AccentText
+			bg, fg, muted = c.Accent, c.AccentText, c.AccentText
+			muted.A = 0xc0
 		case state.Selected == index:
 			bg = c.Selection
 		case state.Hovered == index:
 			bg = c.Hover
 		}
+		side := gtx.Metric.Dp(8)
 		if bg != (color.NRGBA{}) {
-			paint.Fill(gtx.Ops, bg)
+			rect := image.Rect(side, 0, gtx.Constraints.Max.X-side, gtx.Constraints.Max.Y)
+			paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, gtx.Metric.Dp(6)).Op(gtx.Ops))
 		}
-		return layout.Inset{Left: 10, Right: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			label := material.Body1(th.Theme, item(index))
-			label.Color = fg
-			label.MaxLines = 1
-			label.TextSize = th.TextSize * 0.95
-			return layout.W.Layout(gtx, label.Layout)
+		pkg, name := SplitPackage(ShortName(item(index)))
+		return layout.Inset{Left: 16, Right: 16}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return Start(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Alignment: layout.Baseline}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						if pkg == "" {
+							return layout.Dimensions{}
+						}
+						label := th.Label(pkg, 0.92)
+						label.Color = muted
+						label.MaxLines = 1
+						return label.Layout(gtx)
+					}),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						label := th.Label(name, 0.92)
+						label.Color = fg
+						label.MaxLines = 1
+						return label.Layout(gtx)
+					}),
+				)
+			})
 		})
 	}
 }

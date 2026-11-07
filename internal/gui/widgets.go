@@ -27,3 +27,12 @@ func (line HorizontalLine) Layout(gtx layout.Context) layout.Dimensions {
 }
 
 const MaxLineWidth = 10 * 1024
+
+// Start draws w at the left edge, centred vertically. layout.W keeps
+// the minimum height, so a label would sit at the top instead.
+func Start(gtx layout.Context, w layout.Widget) layout.Dimensions {
+	return layout.W.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.Y = 0
+		return w(gtx)
+	})
+}

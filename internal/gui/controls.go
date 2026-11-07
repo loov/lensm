@@ -9,6 +9,7 @@ import (
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/widget"
+	"gioui.org/widget/material"
 )
 
 // Button is a flat, outlined button. Primary fills it with the accent.
@@ -30,7 +31,7 @@ func (b Button) Layout(gtx layout.Context) layout.Dimensions {
 		semantic.Button.Add(gtx.Ops)
 		label := b.Theme.Label(b.Text, 0.95)
 		label.MaxLines = 1
-		bg, border := c.Background, c.Splitter
+		bg, border := c.Control, c.Splitter
 		switch {
 		case b.Disabled:
 			label.Color = c.MutedText
@@ -77,6 +78,38 @@ func Field(gtx layout.Context, th *Theme, focused bool, w layout.Widget) layout.
 	return frame(gtx, th.Colors.Background, border, layout.Inset{Top: 4, Bottom: 4, Left: 6, Right: 6}, w)
 }
 
+// SearchField is a filled, rounded field with a search icon in front
+// of w. While focused it turns into an outlined field.
+func SearchField(gtx layout.Context, th *Theme, focused bool, w layout.Widget) layout.Dimensions {
+	c := th.Colors
+	return layout.Background{}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			rect := image.Rectangle{Max: gtx.Constraints.Min}
+			r := gtx.Metric.Dp(7)
+			if focused {
+				ring := gtx.Metric.Dp(2)
+				paint.FillShape(gtx.Ops, c.Selection, clip.UniformRRect(rect.Inset(-ring), r+ring).Op(gtx.Ops))
+				paint.FillShape(gtx.Ops, c.Accent, clip.UniformRRect(rect, r).Op(gtx.Ops))
+				b := gtx.Metric.Dp(1)
+				paint.FillShape(gtx.Ops, c.Background, clip.UniformRRect(rect.Inset(b), r-b).Op(gtx.Ops))
+			} else {
+				paint.FillShape(gtx.Ops, c.Fill, clip.UniformRRect(rect, r).Op(gtx.Ops))
+			}
+			return layout.Dimensions{Size: rect.Max}
+		},
+		func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 5, Bottom: 5, Left: 8, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return layout.Inset{Right: 6}.Layout(gtx, iconWidget(SearchIcon, 14, c.MutedText))
+					}),
+					layout.Flexed(1, w),
+				)
+			})
+		},
+	)
+}
+
 // frame draws w inside a rounded rectangle with a 1 dp border.
 func frame(gtx layout.Context, bg, border color.NRGBA, inset layout.Inset, w layout.Widget) layout.Dimensions {
 	return layout.Background{}.Layout(gtx,
@@ -92,4 +125,16 @@ func frame(gtx layout.Context, bg, border color.NRGBA, inset layout.Inset, w lay
 			return inset.Layout(gtx, w)
 		},
 	)
+}
+
+// Editor returns a text editor in the theme colours.
+func Editor(th *Theme, e *widget.Editor, hint string) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		editor := material.Editor(th.Theme, e, hint)
+		editor.TextSize = th.TextSize * 0.95
+		editor.Color = th.Colors.Text
+		editor.HintColor = th.Colors.MutedText
+		editor.SelectionColor = th.Colors.Selection
+		return editor.Layout(gtx)
+	}
 }
