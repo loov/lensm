@@ -70,11 +70,13 @@ func (s TextSelection) Contains(view View, line int) bool {
 }
 
 // sourceRow is one row of the source column. kind tells what it shows;
-// file/block/line index into code.Source for header and line rows.
+// file/block/line index into code.Source for header and line rows, and
+// for a note row the line it is about.
 type sourceRow struct {
 	kind             sourceRowKind
 	file, block, off int
 	text             string
+	note             *disasm.Note
 }
 
 type sourceRowKind int
@@ -83,13 +85,15 @@ const (
 	sourceRowGap    sourceRowKind = iota // blank row between files or blocks
 	sourceRowHeader                      // "// path/to/file.go"
 	sourceRowLine                        // a source line
+	sourceRowNote                        // a compiler note below its line
 )
 
 // sourceRows enumerates the rows of the source column in display order:
 // a gap between files, the file header, a gap between blocks, then the
-// lines of each block. Every consumer of the source column — drawing,
+// lines of each block, each followed by its notes of the kinds in notes.
+// Every consumer of the source column — drawing,
 // hit testing, copying — must agree on this order, so it lives here once.
-func sourceRows(code *disasm.Code) iter.Seq[sourceRow] {
+func sourceRows(code *disasm.Code, notes disasm.NoteKind) iter.Seq[sourceRow] {
 	return func(yield func(sourceRow) bool) {
 		if code == nil {
 			return
@@ -109,15 +113,29 @@ func sourceRows(code *disasm.Code) iter.Seq[sourceRow] {
 					if !yield(sourceRow{kind: sourceRowLine, file: i, block: k, off: off, text: line}) {
 						return
 					}
+					if off >= len(block.Notes) {
+						continue
+					}
+					indent := line[:len(line)-len(strings.TrimLeft(line, " "))]
+					for n := range block.Notes[off] {
+						note := &block.Notes[off][n]
+						if note.Kind()&notes == 0 {
+							continue
+						}
+						text := indent + "// " + note.Text()
+						if !yield(sourceRow{kind: sourceRowNote, file: i, block: k, off: off, text: text, note: note}) {
+							return
+						}
+					}
 				}
 			}
 		}
 	}
 }
 
-func sourceTextRows(code *disasm.Code) []string {
+func sourceTextRows(code *disasm.Code, notes disasm.NoteKind) []string {
 	var rows []string
-	for row := range sourceRows(code) {
+	for row := range sourceRows(code, notes) {
 		rows = append(rows, row.text)
 	}
 	return rows
@@ -125,15 +143,15 @@ func sourceTextRows(code *disasm.Code) []string {
 
 // sourceRowCount runs on every pointer event; it walks the structure
 // without building any strings.
-func sourceRowCount(code *disasm.Code) int {
+func sourceRowCount(code *disasm.Code, notes disasm.NoteKind) int {
 	count := 0
-	for range sourceRows(code) {
+	for range sourceRows(code, notes) {
 		count++
 	}
 	return count
 }
 
-func sourceRowAtY(code *disasm.Code, scroll float32, lineHeight int, y float32) int {
+func sourceRowAtY(code *disasm.Code, notes disasm.NoteKind, scroll float32, lineHeight int, y float32) int {
 	if code == nil || lineHeight <= 0 {
 		return -1
 	}
@@ -142,13 +160,13 @@ func sourceRowAtY(code *disasm.Code, scroll float32, lineHeight int, y float32) 
 		return -1
 	}
 	row := int(relative / float32(lineHeight))
-	if row < 0 || row >= sourceRowCount(code) {
+	if row < 0 || row >= sourceRowCount(code, notes) {
 		return -1
 	}
 	return row
 }
 
-func (s TextSelection) Text(code *disasm.Code) string {
+func (s TextSelection) Text(code *disasm.Code, notes disasm.NoteKind) string {
 	if code == nil {
 		return ""
 	}
@@ -174,7 +192,7 @@ func (s TextSelection) Text(code *disasm.Code) string {
 			lines = append(lines, text)
 		}
 	case ViewSource:
-		rows := sourceTextRows(code)
+		rows := sourceTextRows(code, notes)
 		if from < 0 {
 			from = 0
 		}

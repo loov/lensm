@@ -41,7 +41,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			return view, line, line < len(ui.Code.Insts)
 		}
 		if c.source.Contains(position.X) {
-			line := sourceRowAtY(ui.Code, ui.src.Offset, lineHeight, position.Y)
+			line := sourceRowAtY(ui.Code, ui.Notes, ui.src.Offset, lineHeight, position.Y)
 			return ViewSource, line, line >= 0
 		}
 		return ViewNone, -1, false
@@ -56,7 +56,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			count = len(ui.Code.Insts)
 			line = int(position.Y-ui.asm.Offset) / lineHeight
 		case ViewSource:
-			count = sourceRowCount(ui.Code)
+			count = sourceRowCount(ui.Code, ui.Notes)
 			line = int(position.Y-ui.src.Offset) / lineHeight
 		default:
 			return -1, false
@@ -136,7 +136,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 					ui.asm.Clamp(gtx, -overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow)
 				case c.source.Contains(ev.Position.X):
 					ui.src.Offset -= ev.Scroll.Y
-					ui.src.Clamp(gtx, -overflow, float32(sourceRowCount(ui.Code)*lineHeight)+overflow)
+					ui.src.Clamp(gtx, -overflow, float32(sourceRowCount(ui.Code, ui.Notes)*lineHeight)+overflow)
 				}
 			}
 		}
@@ -161,7 +161,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 		}
 		keyEvent, ok := ev.(key.Event)
 		if ok && keyEvent.State == key.Press {
-			if text := ui.Selection.Text(ui.Code); text != "" && ui.CopyText != nil {
+			if text := ui.Selection.Text(ui.Code, ui.Notes); text != "" && ui.CopyText != nil {
 				ui.CopyText(gtx, text)
 			}
 		}
@@ -193,7 +193,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			}
 			lineCount := len(ui.Code.Insts)
 			if view == ViewSource {
-				lineCount = sourceRowCount(ui.Code)
+				lineCount = sourceRowCount(ui.Code, ui.Notes)
 			}
 			if lineCount > 0 {
 				ui.Selection = TextSelection{View: view, Anchor: 0, Head: lineCount - 1, Active: true}

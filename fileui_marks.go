@@ -18,6 +18,9 @@ import (
 // markTitles name the marks in disasm.Marks order.
 var markTitles = [...]string{"Spills", "Reloads", "Bounds checks", "Allocations", "Write barriers"}
 
+// noteTitles name the compiler note kinds in disasm.NoteKinds order.
+var noteTitles = [...]string{"Escapes", "Leaking parameters", "Inlining", "Bounds checks", "Nil checks", "Copies"}
+
 // layoutMarksPanel lists the run time cost marks of the open function,
 // with a switch per kind for showing it in the code view.
 func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
@@ -32,6 +35,34 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 			s.HiddenMarks ^= m
 			ui.applySettings(s)
 			shown = disasm.AllMarks &^ s.HiddenMarks
+		}
+	}
+
+	shownNotes := disasm.AllNotes &^ ui.Settings.HiddenNotes
+	for i, k := range disasm.NoteKinds {
+		ui.NoteToggles[i].Value = shownNotes&k != 0
+		if ui.NoteToggles[i].Update(gtx) {
+			s := ui.Settings
+			s.HiddenNotes ^= k
+			ui.applySettings(s)
+		}
+	}
+	var noteCounts [len(noteTitles)]int
+	hasNotes := false
+	if code != nil && code.Code != nil {
+		for _, src := range code.Code.Source {
+			for _, block := range src.Blocks {
+				hasNotes = hasNotes || block.Notes != nil
+				for _, notes := range block.Notes {
+					for _, n := range notes {
+						for i, k := range disasm.NoteKinds {
+							if n.Kind() == k {
+								noteCounts[i]++
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -86,6 +117,31 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 					)
 				})
 			}))
+		}
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 12, Bottom: 4, Left: 16, Right: 16}.Layout(gtx, th.Muted("COMPILER NOTES", 0.8).Layout)
+		}))
+		if !hasNotes {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted("Open a package directory to build it with the compiler's notes.", 0.9).Layout)
+			}))
+		} else {
+			for i := range disasm.NoteKinds {
+				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					return layout.Inset{Left: 16, Right: 16}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						count := th.Muted(strconv.Itoa(noteCounts[i]), 0.9)
+						count.Alignment = text.End
+						return layout.Flex{Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
+							layout.Rigid(gui.Checkbox{Theme: th, Value: &ui.NoteToggles[i], Label: noteTitles[i]}.Layout),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								gtx.Constraints.Min.X = gtx.Metric.Dp(24)
+								return count.Layout(gtx)
+							}),
+						)
+					})
+				}))
+			}
 		}
 		children = append(children,
 			layout.Rigid(layout.Spacer{Height: 8}.Layout),

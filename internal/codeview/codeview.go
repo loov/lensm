@@ -47,6 +47,9 @@ type UI struct {
 
 	// reveal is the row to scroll to on the next layout.
 	reveal *comments.Coord
+
+	// Notes are the kinds of compiler notes shown below source lines.
+	Notes disasm.NoteKind
 }
 
 // highlightCache holds the syntax highlight spans for a Code. Layout
@@ -177,7 +180,7 @@ func (ui *UI) applyReveal(gtx layout.Context, lineHeight int) {
 	}
 	if c.View == ViewSource {
 		row, rows := -1, 0
-		for r := range sourceRows(ui.Code) {
+		for r := range sourceRows(ui.Code, ui.Notes) {
 			if r.kind == sourceRowLine {
 				src := ui.Code.Source[r.file]
 				if src.File == c.File && src.Blocks[r.block].From+r.off == c.Line {

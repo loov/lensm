@@ -78,6 +78,7 @@ type FileUI struct {
 	WatchTip     gui.Tooltip
 	CommentsList gui.ClickList
 	MarkToggles  [len(markTitles)]widget.Bool
+	NoteToggles  [len(noteTitles)]widget.Bool
 	MarksList    gui.ClickList
 	// ClearComments deletes every comment on its second click in a row.
 	ClearComments      widget.Clickable
@@ -661,6 +662,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 						Alignment: layout.SE,
 					}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+							code.Notes = disasm.AllNotes &^ ui.Settings.HiddenNotes
 							return codeview.Style{
 								UI: code,
 

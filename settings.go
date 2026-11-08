@@ -26,12 +26,15 @@ type AppSettings struct {
 	HoverLinksOnly bool `json:"hover_links_only,omitempty"`
 	// HiddenMarks are the run time cost marks turned off in the
 	// Diagnostics panel.
-	HiddenMarks  disasm.Mark `json:"hidden_marks,omitempty"`
-	TextSize     int         `json:"text_size,omitempty"`
-	SidebarRatio float32     `json:"sidebar_ratio,omitempty"`
-	LastPath     string      `json:"last_path,omitempty"`
-	OpenTabs     []string    `json:"open_tabs,omitempty"`
-	ActiveTab    string      `json:"active_tab,omitempty"`
+	HiddenMarks disasm.Mark `json:"hidden_marks,omitempty"`
+	// HiddenNotes are the compiler note kinds turned off there. Not
+	// omitted when empty, since the default hides some.
+	HiddenNotes  disasm.NoteKind `json:"hidden_notes"`
+	TextSize     int             `json:"text_size,omitempty"`
+	SidebarRatio float32         `json:"sidebar_ratio,omitempty"`
+	LastPath     string          `json:"last_path,omitempty"`
+	OpenTabs     []string        `json:"open_tabs,omitempty"`
+	ActiveTab    string          `json:"active_tab,omitempty"`
 }
 
 func DefaultAppSettings() AppSettings {
@@ -43,6 +46,9 @@ func DefaultAppSettings() AppSettings {
 		ShowAsmHelp:   true,
 		TextSize:      12,
 		SidebarRatio:  0.15,
+		// Most parameters leak somewhere and most pointer uses have a
+		// nil check, so these would bury the other notes.
+		HiddenNotes: disasm.NoteLeak | disasm.NoteNil,
 	}
 }
 

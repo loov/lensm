@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"math"
 	"strconv"
+	"strings"
 
 	"gioui.org/f32"
 	"gioui.org/layout"
@@ -34,7 +35,7 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 	var highlightPath clip.PathSpec
 	var highlightColor color.NRGBA
 	related := 0
-	for row := range sourceRows(ui.Code) {
+	for row := range sourceRows(ui.Code, ui.Notes) {
 		rowTop := top
 		top += lineHeight
 		if row.kind != sourceRowLine {
@@ -251,7 +252,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 		}
 	}
 	viewHeight := gtx.Constraints.Max.Y
-	for row := range sourceRows(ui.Code) {
+	for row := range sourceRows(ui.Code, ui.Notes) {
 		rowTop := top
 		top += lineHeight
 		sourceRow++
@@ -268,6 +269,8 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 				TextHeight: ui.TextHeight,
 				Color:      ui.Theme.Colors.MutedText,
 			}.Layout(ui.Theme.Theme, gtx)
+		case sourceRowNote:
+			ui.layoutNote(gtx, c, row, rowTop)
 		case sourceRowLine:
 			src := ui.Code.Source[row.file]
 			lineNo := src.Blocks[row.block].From + row.off
@@ -308,6 +311,70 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 	}
 	sourceClip.Pop()
 	return top - int(ui.src.Offset)
+}
+
+// layoutNote draws a compiler note below its line, starting under the
+// column it is about with a connector from the line above.
+func (ui Style) layoutNote(gtx layout.Context, c codeColumns, row sourceRow, top int) {
+	note := row.note
+	line := ui.Code.Source[row.file].Blocks[row.block].Lines[row.off]
+	indent := len(line) - len(strings.TrimLeft(line, " "))
+	col := noteColumn(line, note.Col)
+	charWidth := glyphWidth(gtx, ui.Theme.Theme, sourceLine{Text: "m", TextHeight: ui.TextHeight})
+	// The drawn line starts with its line number.
+	textLeft := int(c.source.Min)
+	if spans := ui.hl.source[row.file][row.block][row.off]; len(spans) > 0 {
+		textLeft += charWidth * len(spans[0].Text)
+	}
+	// Keep the note readable when its column is far right.
+	x := textLeft + charWidth*max(min(col, len(line)), 0)
+	if minWidth := 30 * charWidth; int(c.source.Max)-x < minWidth {
+		x = max(int(c.source.Max)-minWidth, textLeft+charWidth*indent)
+	}
+
+	color := ui.noteColor(note)
+	stroke := max(gtx.Dp(1), 1)
+	mid := top + c.lineHeight/2
+	arm := charWidth
+	paint.FillShape(gtx.Ops, color, clip.Rect{Min: image.Pt(x, top), Max: image.Pt(x+stroke, mid+stroke)}.Op())
+	paint.FillShape(gtx.Ops, color, clip.Rect{Min: image.Pt(x, mid), Max: image.Pt(x+arm, mid+stroke)}.Op())
+
+	left := x + arm + charWidth/2
+	sourceLine{
+		TopLeft:    image.Pt(left, top),
+		Width:      int(c.source.Max) - left,
+		Text:       note.Text(),
+		TextHeight: ui.TextHeight * 0.9,
+		Italic:     true,
+		Color:      color,
+	}.Layout(ui.Theme.Theme, gtx)
+}
+
+// noteColumn is the 0-based column in the drawn line of the compiler's
+// 1-based column col. The source has each tab expanded to four spaces,
+// the compiler counts it once. gofmt indents with tabs and aligns with
+// spaces, so only the indentation needs converting.
+func noteColumn(line string, col int) int {
+	col--
+	tabs := (len(line) - len(strings.TrimLeft(line, " "))) / 4
+	return col + 3*min(tabs, max(col, 0))
+}
+
+// noteColor ties a note to the cost mark of the same kind.
+func (ui Style) noteColor(note *disasm.Note) color.NRGBA {
+	colors := ui.Theme.Colors
+	if note.Good() {
+		return colors.Positive
+	}
+	switch note.Kind() {
+	case disasm.NoteEscape, disasm.NoteLeak:
+		return colors.Marks.Alloc
+	case disasm.NoteBounds:
+		return colors.Marks.BoundsCheck
+	case disasm.NoteCopy:
+		return colors.Marks.Spill
+	}
+	return colors.MutedText
 }
 
 // layoutScrollbars draws and services the assembly and source scrollbars,
