@@ -27,7 +27,7 @@ func main() {
 	defaults := DefaultAppSettings()
 	textSize := flag.Int("text-size", defaults.TextSize, "default font size")
 	filter := flag.String("filter", "", "filter the functions by regexp")
-	watch := flag.Bool("watch", false, "auto reload executable")
+	watch := flag.Bool("watch", false, "auto reload executable, or rebuild a package on change")
 	context := flag.Int("context", 3, "source line context")
 	comments := flag.String("comments", "", "comments sidecar path")
 	font := flag.String("font", "", "user font")
@@ -43,7 +43,7 @@ func main() {
 	})
 
 	if flag.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "lensm [exePath]")
+		fmt.Fprintln(os.Stderr, "lensm [exePath | packageDir]")
 		flag.Usage()
 		os.Exit(2)
 	}

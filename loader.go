@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/gobuild"
 	"loov.dev/lensm/internal/goobj"
 )
 
@@ -89,17 +91,17 @@ func (l *loader) run() {
 			return
 		}
 
-		stat, err := os.Stat(path)
+		modTime, err := modTime(path)
 		if err != nil {
 			l.finish(fileLoadResult{generation: generation, err: err})
 			return
 		}
-		if !force && stat.ModTime().Equal(lastModTime) {
+		if !force && modTime.Equal(lastModTime) {
 			return
 		}
 		if !force {
-			if !stat.ModTime().Equal(pendingModTime) {
-				pendingModTime = stat.ModTime()
+			if !modTime.Equal(pendingModTime) {
+				pendingModTime = modTime
 				pendingSince = now
 				return
 			}
@@ -107,7 +109,7 @@ func (l *loader) run() {
 				return
 			}
 		}
-		lastModTime = stat.ModTime()
+		lastModTime = modTime
 		pendingModTime = time.Time{}
 
 		file, err := l.loadFile(path)
@@ -132,12 +134,55 @@ func (l *loader) run() {
 	}
 }
 
-// loadFile opens path, returning a nil interface on failure rather than
+// modTime is when path last changed, for a package directory when
+// any file of its module did.
+func modTime(path string) (time.Time, error) {
+	if gobuild.IsPackage(path) {
+		return gobuild.ModTime(path)
+	}
+	stat, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return stat.ModTime(), nil
+}
+
+// loadFile opens path, building it first when it is a package
+// directory, returning a nil interface on failure rather than
 // a nil *goobj.File that would compare non-nil.
 func loadFile(path string) (disasm.File, error) {
+	if gobuild.IsPackage(path) {
+		return loadPackage(path)
+	}
 	file, err := goobj.Load(path)
 	if err != nil {
 		return nil, err
 	}
 	return file, nil
+}
+
+func loadPackage(dir string) (disasm.File, error) {
+	build, err := gobuild.Run(context.Background(), dir)
+	if err != nil {
+		return nil, err
+	}
+	file, err := goobj.Load(build.Binary)
+	if err != nil {
+		_ = build.Close()
+		return nil, err
+	}
+	return builtFile{file, build}, nil
+}
+
+// builtFile is a binary lensm built, with the compiler diagnostics from
+// the same build. Close removes the binary.
+type builtFile struct {
+	*goobj.File
+	build *gobuild.Build
+}
+
+func (f builtFile) Close() error {
+	err := f.File.Close()
+	_ = f.build.Close()
+	return err
 }

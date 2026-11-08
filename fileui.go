@@ -176,6 +176,12 @@ func (ui *FileUI) Run(w *app.Window) error {
 		if ui.MCP != nil {
 			_ = ui.MCP.Close()
 		}
+		// A package build keeps its binary in a temporary directory
+		// until the file closes.
+		if ui.File != nil {
+			_ = ui.File.Close()
+			ui.File = nil
+		}
 	}()
 
 	ui.window = w
