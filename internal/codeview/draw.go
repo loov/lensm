@@ -13,6 +13,7 @@ import (
 	"gioui.org/op/paint"
 
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/gui"
 )
 
 // layoutRelations draws the curved bands linking source lines to the
@@ -161,6 +162,9 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		if ui.ShowGo && ix.Text != "" {
 			ui.layoutRowComment(gtx, ui.asmCoord(ViewGoAsm, ix), ";", c.goCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
+		}
+		if marks := ix.Marks & ui.Marks; marks != 0 && c.marks.Width() > 0 {
+			ui.layoutMark(gtx, c, marks, i*lineHeight+int(ui.asm.Offset))
 		}
 		if ui.ShowNative {
 			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
@@ -318,4 +322,49 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 			-overflow, float32(sourceContentHeight)+overflow)
 		stack.Pop()
 	}
+}
+
+// layoutMark draws the first of marks as a small tag in the marks lane;
+// a second one on the same row is rare and adds a "+".
+func (ui Style) layoutMark(gtx layout.Context, c codeColumns, marks disasm.Mark, top int) {
+	var first disasm.Mark
+	for _, m := range disasm.Marks {
+		if marks&m != 0 {
+			first = m
+			break
+		}
+	}
+	text := first.String()
+	if marks != first {
+		text += "+"
+	}
+	col := MarkColor(ui.Theme.Colors.Marks, first)
+	bg := col
+	bg.A = 0x28
+	inset := c.lineHeight / 8
+	rect := image.Rect(int(c.marks.Min), top+inset, int(c.marks.Max), top+c.lineHeight-inset)
+	paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, rect.Dy()/3).Op(gtx.Ops))
+	textHeight := ui.TextHeight * 0.85
+	sourceLine{
+		TopLeft:    image.Pt(int(c.marks.Min)+c.lineHeight/4, top+(c.lineHeight-codeLineHeightPx(gtx, textHeight))/2),
+		Width:      int(c.marks.Width()) - c.lineHeight/4,
+		Text:       text,
+		TextHeight: textHeight,
+		Color:      col,
+	}.Layout(ui.Theme.Theme, gtx)
+}
+
+// MarkColor is the colour of a single mark.
+func MarkColor(colors gui.MarkColors, m disasm.Mark) color.NRGBA {
+	switch m {
+	case disasm.MarkSpill:
+		return colors.Spill
+	case disasm.MarkReload:
+		return colors.Reload
+	case disasm.MarkBoundsCheck:
+		return colors.BoundsCheck
+	case disasm.MarkAlloc:
+		return colors.Alloc
+	}
+	return colors.WriteBarrier
 }

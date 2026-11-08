@@ -19,6 +19,9 @@ type codeColumns struct {
 	jump   bounds
 	asm    bounds
 	native bounds
+	// marks is the lane for the run time cost marks, right of the
+	// assembly. It has zero width when no marks are shown.
+	marks  bounds
 	gutter bounds
 	source bounds
 
@@ -62,7 +65,7 @@ type codeHover struct {
 func (ui Style) columns(gtx layout.Context) codeColumns {
 	// The layout has the following sections, hidden columns and their
 	// padding take no space:
-	// pad | Jump | pad/2 | Go asm | pad | Native asm | pad | Gutter | pad | Source | pad
+	// pad | Jump | pad/2 | Go asm | pad | Native asm | pad | Marks | pad | Gutter | pad | Source | pad
 	lineHeight := codeLineHeightPx(gtx, ui.TextHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
@@ -73,6 +76,11 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	}
 	if ui.ShowSource {
 		gutterWidth = lineHeight * 8
+	}
+	showMarks := showAsm && ui.hasMarks()
+	marksWidth := 0
+	if showMarks {
+		marksWidth = lineHeight * 3
 	}
 
 	// Each shown column gets its share of the width left after the
@@ -97,6 +105,9 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	if ui.ShowSource {
 		fixedWidth += gutterWidth + pad
 	}
+	if showMarks {
+		fixedWidth += marksWidth + pad
+	}
 	blocksWidth := max(0, gtx.Constraints.Max.X-fixedWidth)
 	width := func(i int) int {
 		if total == 0 {
@@ -119,6 +130,7 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	}
 	asm := next(width(0), ui.ShowGo, pad)
 	native := next(width(1), ui.ShowNative, pad)
+	marks := next(marksWidth, showMarks, pad)
 	gutter := next(gutterWidth, ui.ShowSource, pad)
 	source := next(width(2), ui.ShowSource, pad)
 
@@ -130,6 +142,7 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 		jump:       jump,
 		asm:        asm,
 		native:     native,
+		marks:      marks,
 		gutter:     gutter,
 		source:     source,
 	}
@@ -139,4 +152,17 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	c.sourceCol = splitColumn(int(source.Min), int(source.Max), pad, minimumCommentWidth, 70)
 
 	return c
+}
+
+// hasMarks reports whether any instruction has a mark that is shown.
+func (ui Style) hasMarks() bool {
+	if ui.Marks == 0 {
+		return false
+	}
+	for _, ix := range ui.Code.Insts {
+		if ix.Marks&ui.Marks != 0 {
+			return true
+		}
+	}
+	return false
 }

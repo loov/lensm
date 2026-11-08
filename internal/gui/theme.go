@@ -83,6 +83,13 @@ type UIColors struct {
 	Shadow   color.NRGBA
 	Scrim    color.NRGBA
 	Relation RelationColors
+	Marks    MarkColors
+}
+
+// MarkColors tells the run time costs marked in the assembly apart.
+// They are drawn as text and, translucent, as its background.
+type MarkColors struct {
+	Spill, Reload, BoundsCheck, Alloc, WriteBarrier color.NRGBA
 }
 
 // RelationColors styles the bands linking source lines to their
@@ -130,6 +137,13 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 				Saturation: 0.55, Lightness: 0.5, Alpha: 0.05,
 				Stroke: rgba(0x0a84ff, 0xa0),
 			},
+			Marks: MarkColors{
+				Spill:        rgb(0xff9f0a),
+				Reload:       rgb(0xc8a67e),
+				BoundsCheck:  rgb(0xff6961),
+				Alloc:        rgb(0xda8fff),
+				WriteBarrier: rgb(0x5de6ff),
+			},
 		}
 	} else {
 		c = UIColors{
@@ -154,6 +168,14 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 			Relation: RelationColors{
 				Saturation: 0.85, Lightness: 0.62, Alpha: 0.16,
 				Stroke: rgba(0x007aff, 0x8c),
+			},
+			// The darker system colours keep the text readable on white.
+			Marks: MarkColors{
+				Spill:        rgb(0xb35c00),
+				Reload:       rgb(0x7f6545),
+				BoundsCheck:  rgb(0xd70015),
+				Alloc:        rgb(0x8944ab),
+				WriteBarrier: rgb(0x0071a4),
 			},
 		}
 	}
