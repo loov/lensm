@@ -48,16 +48,24 @@ func (s IconStrip) Layout(gtx layout.Context) layout.Dimensions {
 }
 
 // ToolButton is a square icon button for an IconStrip. Selected tints
-// it with the accent.
+// it with the accent. With a Tip it shows Description on hover.
 type ToolButton struct {
 	Theme       *Theme
 	Clickable   *widget.Clickable
+	Tip         *Tooltip
 	Icon        *widget.Icon
 	Description string
 	Selected    bool
 }
 
 func (b ToolButton) Layout(gtx layout.Context) layout.Dimensions {
+	if b.Tip != nil {
+		return b.Tip.Layout(gtx, b.Theme, b.Description, b.layout)
+	}
+	return b.layout(gtx)
+}
+
+func (b ToolButton) layout(gtx layout.Context) layout.Dimensions {
 	c := b.Theme.Colors
 	return b.Clickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		semantic.Button.Add(gtx.Ops)

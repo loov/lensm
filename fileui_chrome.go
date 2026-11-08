@@ -295,7 +295,11 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 		ui.setWatch(!ui.Config.Watch)
 	}
 	tool := func(i int, icon *widget.Icon, description string) layout.Widget {
-		return gui.ToolButton{Theme: th, Clickable: &ui.PanelButtons[i], Icon: icon, Description: description, Selected: ui.Panel == i}.Layout
+		return gui.ToolButton{Theme: th, Clickable: &ui.PanelButtons[i], Tip: &ui.PanelTips[i], Icon: icon, Description: description, Selected: ui.Panel == i}.Layout
+	}
+	watch := "Watch for changes"
+	if ui.Config.Watch {
+		watch = "Stop watching for changes"
 	}
 	return gui.IconStrip{
 		Theme: th,
@@ -305,7 +309,7 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 			tool(panelHistory, HistoryIcon, "History"),
 		},
 		Bottom: []layout.Widget{
-			gui.ToolButton{Theme: th, Clickable: &ui.WatchButton, Icon: WatchIcon, Description: "Watch for changes", Selected: ui.Config.Watch}.Layout,
+			gui.ToolButton{Theme: th, Clickable: &ui.WatchButton, Tip: &ui.WatchTip, Icon: WatchIcon, Description: watch, Selected: ui.Config.Watch}.Layout,
 		},
 	}.Layout(gtx)
 }

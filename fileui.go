@@ -73,7 +73,9 @@ type FileUI struct {
 	// Panel is the sidebar panel picked in the icon strip.
 	Panel        int
 	PanelButtons [3]widget.Clickable
+	PanelTips    [3]gui.Tooltip
 	WatchButton  widget.Clickable
+	WatchTip     gui.Tooltip
 	CommentsList gui.ClickList
 	HistoryList  gui.ClickList
 
