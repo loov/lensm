@@ -166,7 +166,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
 		}
 		if marks := ix.Marks & ui.Marks; marks != 0 && c.marks.Width() > 0 {
-			ui.layoutMarks(gtx, c, marks, i*lineHeight+int(ui.asm.Offset))
+			ui.layoutMarks(gtx, c, int(c.marks.Min), marks, 0, i*lineHeight+int(ui.asm.Offset))
 		}
 		if ui.ShowNative {
 			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
@@ -282,6 +282,9 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 			}
 			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
 			width := ui.layoutRowComment(gtx, ui.sourceCoord(src.File, lineNo), "//", c.sourceCol, rowTop, lineHeight, selectedSource)
+			if marks := hl.lineMarks[sourcePos{src.File, lineNo}] & ui.Marks; marks != 0 && c.sourceMarks.Width() > 0 {
+				ui.layoutMarks(gtx, c, int(c.sourceMarks.Min), marks, c.sourceMarkSlots, rowTop)
+			}
 			sourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),
 				Width:      width,
@@ -326,14 +329,17 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 	}
 }
 
-// layoutMarks draws one square per mark in the marks lane, each with
-// the mark's letter.
-func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, marks disasm.Mark, top int) {
+// layoutMarks draws one square per mark from x on, each with the
+// mark's letter. Each kind in slots keeps its own column, empty when
+// the row lacks it; with no slots the squares pack together.
+func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slots disasm.Mark, top int) {
 	size := c.lineHeight
 	inset := size / 10
-	x := int(c.marks.Min)
 	for _, m := range disasm.Marks {
 		if marks&m == 0 {
+			if slots&m != 0 {
+				x += size
+			}
 			continue
 		}
 		col := MarkColor(ui.Theme.Colors.Marks, m)

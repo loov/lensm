@@ -5,6 +5,8 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/layout"
+
+	"loov.dev/lensm/internal/disasm"
 )
 
 // codeColumns is the horizontal geometry of the code view: the pixel
@@ -25,7 +27,12 @@ type codeColumns struct {
 	// assembly. It has zero width when no marks are shown.
 	marks  bounds
 	gutter bounds
-	source bounds
+	// sourceMarks is the marks lane at the right edge of the source
+	// column, zero width when no source line has a shown mark.
+	sourceMarks bounds
+	// sourceMarkSlots are the kinds that get a column in sourceMarks.
+	sourceMarkSlots disasm.Mark
+	source          bounds
 
 	// goCol, nativeCol and sourceCol split each column into text and
 	// comment regions.
@@ -152,7 +159,14 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	minimumCommentWidth := lineHeight * 4
 	c.goCol = splitColumn(int(asm.Min)+pad/2, int(asm.Max), pad, minimumCommentWidth, 62)
 	c.nativeCol = splitColumn(int(native.Min), int(native.Max), pad, minimumCommentWidth, 62)
-	c.sourceCol = splitColumn(int(source.Min), int(source.Max), pad, minimumCommentWidth, 70)
+	sourceRight := int(source.Max)
+	if slots := ui.lineMarkKinds(); ui.ShowSource && slots != 0 {
+		w := lineHeight * bits.OnesCount8(uint8(slots))
+		c.sourceMarks = boundsWidth(sourceRight-w, w)
+		c.sourceMarkSlots = slots
+		sourceRight -= w + pad/2
+	}
+	c.sourceCol = splitColumn(int(source.Min), sourceRight, pad, minimumCommentWidth, 70)
 
 	return c
 }
@@ -169,4 +183,13 @@ func (ui Style) maxMarks() int {
 		}
 	}
 	return most
+}
+
+// lineMarkKinds are the shown kinds found on any source line.
+func (ui Style) lineMarkKinds() disasm.Mark {
+	var kinds disasm.Mark
+	for _, m := range ui.hl.lineMarks {
+		kinds |= m
+	}
+	return kinds & ui.Marks
 }

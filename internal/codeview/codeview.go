@@ -65,6 +65,13 @@ type highlightCache struct {
 	perf []instPerf
 	// source is indexed by source file, block, and line within the block.
 	source [][][][]syntax.Span
+	// lineMarks joins the marks of the instructions of each source line.
+	lineMarks map[sourcePos]disasm.Mark
+}
+
+type sourcePos struct {
+	file string
+	line int
 }
 
 type instPerf struct {
@@ -91,6 +98,13 @@ func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
 		if ix.NativeText != "" {
 			p, ok := asmhelp.PerfForNative(code.Arch, ix.Mnemonic, ix.NativeText)
 			hl.perf[i] = instPerf{p, ok}
+		}
+	}
+
+	hl.lineMarks = map[sourcePos]disasm.Mark{}
+	for _, ix := range code.Insts {
+		if ix.Marks != 0 {
+			hl.lineMarks[sourcePos{ix.File, ix.Line}] |= ix.Marks
 		}
 	}
 
