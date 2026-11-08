@@ -31,7 +31,10 @@ type codeColumns struct {
 	// column, zero width when no source line has a shown mark.
 	sourceMarks bounds
 	// sourceMarkSlots are the kinds that get a column in sourceMarks.
+	// The kinds in sourceMarkWide occur more than once on a line, and
+	// their columns are wider to fit the count.
 	sourceMarkSlots disasm.Mark
+	sourceMarkWide  disasm.Mark
 	source          bounds
 
 	// goCol, nativeCol and sourceCol split each column into text and
@@ -160,10 +163,15 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	c.goCol = splitColumn(int(asm.Min)+pad/2, int(asm.Max), pad, minimumCommentWidth, 62)
 	c.nativeCol = splitColumn(int(native.Min), int(native.Max), pad, minimumCommentWidth, 62)
 	sourceRight := int(source.Max)
-	if slots := ui.lineMarkKinds(); ui.ShowSource && slots != 0 {
-		w := lineHeight * bits.OnesCount8(uint8(slots))
+	if slots, wide := ui.lineMarkKinds(); ui.ShowSource && slots != 0 {
+		c.sourceMarkSlots, c.sourceMarkWide = slots, wide
+		w := 0
+		for _, m := range disasm.Marks {
+			if slots&m != 0 {
+				w += c.markWidth(m)
+			}
+		}
 		c.sourceMarks = boundsWidth(sourceRight-w, w)
-		c.sourceMarkSlots = slots
 		sourceRight -= w + pad/2
 	}
 	c.sourceCol = splitColumn(int(source.Min), sourceRight, pad, minimumCommentWidth, 70)
@@ -185,11 +193,25 @@ func (ui Style) maxMarks() int {
 	return most
 }
 
-// lineMarkKinds are the shown kinds found on any source line.
-func (ui Style) lineMarkKinds() disasm.Mark {
-	var kinds disasm.Mark
-	for _, m := range ui.hl.lineMarks {
-		kinds |= m
+// lineMarkKinds are the shown kinds found on any source line, and the
+// ones among them that occur more than once on a line.
+func (ui Style) lineMarkKinds() (kinds, repeated disasm.Mark) {
+	for _, line := range ui.hl.lineMarks {
+		kinds |= line.marks
+		for i, n := range line.counts {
+			if n > 1 {
+				repeated |= disasm.Marks[i]
+			}
+		}
 	}
-	return kinds & ui.Marks
+	return kinds & ui.Marks, repeated & ui.Marks
+}
+
+// markWidth is the width of the source lane column for m. A count
+// after the letter needs room for two digits.
+func (c codeColumns) markWidth(m disasm.Mark) int {
+	if c.sourceMarkWide&m != 0 {
+		return c.lineHeight * 7 / 4
+	}
+	return c.lineHeight
 }

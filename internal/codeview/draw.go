@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"strconv"
 
 	"gioui.org/f32"
 	"gioui.org/layout"
@@ -166,7 +167,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
 		}
 		if marks := ix.Marks & ui.Marks; marks != 0 && c.marks.Width() > 0 {
-			ui.layoutMarks(gtx, c, int(c.marks.Min), marks, 0, i*lineHeight+int(ui.asm.Offset))
+			ui.layoutMarks(gtx, c, int(c.marks.Min), marks, 0, nil, nil, i*lineHeight+int(ui.asm.Offset))
 		}
 		if ui.ShowNative {
 			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
@@ -282,8 +283,10 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 			}
 			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
 			width := ui.layoutRowComment(gtx, ui.sourceCoord(src.File, lineNo), "//", c.sourceCol, rowTop, lineHeight, selectedSource)
-			if marks := hl.lineMarks[sourcePos{src.File, lineNo}] & ui.Marks; marks != 0 && c.sourceMarks.Width() > 0 {
-				ui.layoutMarks(gtx, c, int(c.sourceMarks.Min), marks, c.sourceMarkSlots, rowTop)
+			if line := hl.lineMarks[sourcePos{src.File, lineNo}]; line != nil && c.sourceMarks.Width() > 0 {
+				if marks := line.marks & ui.Marks; marks != 0 {
+					ui.layoutMarks(gtx, c, int(c.sourceMarks.Min), marks, c.sourceMarkSlots, c.markWidth, &line.counts, rowTop)
+				}
 			}
 			sourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),
@@ -329,31 +332,49 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 	}
 }
 
-// layoutMarks draws one square per mark from x on, each with the
-// mark's letter. Each kind in slots keeps its own column, empty when
-// the row lacks it; with no slots the squares pack together.
-func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slots disasm.Mark, top int) {
-	size := c.lineHeight
-	inset := size / 10
-	for _, m := range disasm.Marks {
+// layoutMarks draws one cell per mark from x on, each with the mark's
+// letter and, when counts has more than one of it, the count. Each
+// kind in slots keeps its own column, empty when the row lacks it;
+// with no slots the cells pack together. widthOf gives the width of
+// a cell, a square when nil.
+func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slots disasm.Mark, widthOf func(disasm.Mark) int, counts *markCounts, top int) {
+	height := c.lineHeight
+	inset := height / 10
+	for i, m := range disasm.Marks {
+		width := height
+		if widthOf != nil {
+			width = widthOf(m)
+		}
 		if marks&m == 0 {
 			if slots&m != 0 {
-				x += size
+				x += width
 			}
 			continue
 		}
 		col := MarkColor(ui.Theme.Colors.Marks, m)
 		bg := col
 		bg.A = 0x28
-		rect := image.Rect(x+inset, top+inset, x+size-inset, top+size-inset)
+		rect := image.Rect(x+inset, top+inset, x+width-inset, top+height-inset)
 		paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, rect.Dy()/4).Op(gtx.Ops))
 
-		// Measure the letter to centre it in the square.
-		line := sourceLine{Text: MarkGlyph(m), TextHeight: ui.TextHeight, Italic: true, Color: col}
-		w := glyphWidth(gtx, ui.Theme.Theme, line)
-		line.TopLeft = image.Pt(x+(size-w)/2, top)
-		line.Layout(ui.Theme.Theme, gtx)
-		x += size
+		// Measure the letter and count to centre them in the cell.
+		letter := sourceLine{Text: MarkGlyph(m), TextHeight: ui.TextHeight, Italic: true, Color: col}
+		total := glyphWidth(gtx, ui.Theme.Theme, letter)
+		var count sourceLine
+		if counts != nil && counts[i] > 1 {
+			count = sourceLine{Text: strconv.Itoa(counts[i]), TextHeight: ui.TextHeight * 0.85, Color: col}
+			total += glyphWidth(gtx, ui.Theme.Theme, count)
+		}
+		left := x + (width-total)/2
+		letter.TopLeft = image.Pt(left, top)
+		letter.Layout(ui.Theme.Theme, gtx)
+		if count.Text != "" {
+			// Share the baseline with the letter.
+			drop := codeLineHeightPx(gtx, letter.TextHeight) - codeLineHeightPx(gtx, count.TextHeight)
+			count.TopLeft = image.Pt(left+glyphWidth(gtx, ui.Theme.Theme, letter), top+drop*3/4)
+			count.Layout(ui.Theme.Theme, gtx)
+		}
+		x += width
 	}
 }
 

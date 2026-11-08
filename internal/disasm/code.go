@@ -55,6 +55,16 @@ type Inst struct {
 	Marks Mark
 }
 
+// CountedMarks are the marks of ix that count towards totals. A bounds
+// check marks its branches and its failure call, but counts once, at
+// the call.
+func (ix *Inst) CountedMarks() Mark {
+	if ix.Call == "" {
+		return ix.Marks &^ MarkBoundsCheck
+	}
+	return ix.Marks
+}
+
 // Mark is a set of run time costs found in an instruction.
 type Mark uint8
 
@@ -75,7 +85,7 @@ const (
 )
 
 // Marks lists every mark in display order.
-var Marks = []Mark{MarkSpill, MarkReload, MarkBoundsCheck, MarkAlloc, MarkWriteBarrier}
+var Marks = [...]Mark{MarkSpill, MarkReload, MarkBoundsCheck, MarkAlloc, MarkWriteBarrier}
 
 // String is a short label for a single mark.
 func (m Mark) String() string {

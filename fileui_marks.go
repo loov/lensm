@@ -39,8 +39,9 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 	var found []int
 	if code != nil && code.Code != nil {
 		for i, ix := range code.Code.Insts {
+			counted := ix.CountedMarks()
 			for k, m := range disasm.Marks {
-				if ix.Marks&m != 0 {
+				if counted&m != 0 {
 					counts[k]++
 				}
 			}

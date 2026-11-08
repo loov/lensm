@@ -65,9 +65,18 @@ type highlightCache struct {
 	perf []instPerf
 	// source is indexed by source file, block, and line within the block.
 	source [][][][]syntax.Span
-	// lineMarks joins the marks of the instructions of each source line.
-	lineMarks map[sourcePos]disasm.Mark
+	// lineMarks counts the marks of the instructions of each source line.
+	lineMarks map[sourcePos]*lineMarks
 }
+
+// lineMarks are the marks found on one source line.
+type lineMarks struct {
+	marks  disasm.Mark
+	counts markCounts
+}
+
+// markCounts counts each mark, in disasm.Marks order.
+type markCounts [len(disasm.Marks)]int
 
 type sourcePos struct {
 	file string
@@ -101,10 +110,23 @@ func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
 		}
 	}
 
-	hl.lineMarks = map[sourcePos]disasm.Mark{}
+	hl.lineMarks = map[sourcePos]*lineMarks{}
 	for _, ix := range code.Insts {
-		if ix.Marks != 0 {
-			hl.lineMarks[sourcePos{ix.File, ix.Line}] |= ix.Marks
+		if ix.Marks == 0 {
+			continue
+		}
+		pos := sourcePos{ix.File, ix.Line}
+		line := hl.lineMarks[pos]
+		if line == nil {
+			line = &lineMarks{}
+			hl.lineMarks[pos] = line
+		}
+		line.marks |= ix.Marks
+		counted := ix.CountedMarks()
+		for i, m := range disasm.Marks {
+			if counted&m != 0 {
+				line.counts[i]++
+			}
 		}
 	}
 
