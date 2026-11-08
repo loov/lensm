@@ -87,9 +87,11 @@ type UIColors struct {
 }
 
 // MarkColors tells the run time costs marked in the assembly apart.
-// They are drawn as text and, translucent, as its background.
+// They are drawn as text and, translucent, as its background. Good is
+// a compiler note about a cost avoided, such as an inlinable function.
 type MarkColors struct {
 	Spill, Reload, BoundsCheck, Alloc, WriteBarrier color.NRGBA
+	Good                                            color.NRGBA
 }
 
 // RelationColors styles the bands linking source lines to their
@@ -143,6 +145,7 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 				BoundsCheck:  rgb(0xff6961),
 				Alloc:        rgb(0xda8fff),
 				WriteBarrier: rgb(0x5de6ff),
+				Good:         rgb(0x30d158),
 			},
 		}
 	} else {
@@ -176,6 +179,7 @@ func applyPalette(th *material.Theme, dark bool) UIColors {
 				BoundsCheck:  rgb(0xd70015),
 				Alloc:        rgb(0x8944ab),
 				WriteBarrier: rgb(0x0071a4),
+				Good:         rgb(0x248a3d),
 			},
 		}
 	}

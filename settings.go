@@ -47,8 +47,9 @@ func DefaultAppSettings() AppSettings {
 		TextSize:      12,
 		SidebarRatio:  0.15,
 		// Most parameters leak somewhere and most pointer uses have a
-		// nil check, so these would bury the other notes.
-		HiddenNotes: disasm.NoteLeak | disasm.NoteNil,
+		// nil check, so these would bury the other notes. The bounds
+		// check mark already shows the remaining bounds checks.
+		HiddenNotes: disasm.NoteLeak | disasm.NoteNil | disasm.NoteBounds,
 	}
 }
 

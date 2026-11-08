@@ -364,7 +364,7 @@ func noteColumn(line string, col int) int {
 func (ui Style) noteColor(note *disasm.Note) color.NRGBA {
 	colors := ui.Theme.Colors
 	if note.Good() {
-		return colors.Positive
+		return colors.Marks.Good
 	}
 	switch note.Kind() {
 	case disasm.NoteEscape, disasm.NoteLeak:
