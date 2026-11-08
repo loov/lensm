@@ -67,3 +67,15 @@ Run `go test ./...`. The C, C++ and Rust tests in
 `rustc`. They skip when a compiler is missing, except in CI (`CI` set),
 where a missing compiler fails them. `go test -short ./...` skips every
 test that builds a program.
+
+To check a UI change without opening the app, `TestRender` draws the
+window offscreen into a PNG. It skips unless `-render` is set:
+
+```
+go test -run TestRender . -render /tmp/out.png \
+    -render.path ./testdata/testprog -render.func main.dot
+```
+
+The other `-render.*` flags pick the theme, sidebar panel, columns,
+window size, pointer position and popups; see `render_test.go`. It
+starts from the default settings and never writes the real ones.
