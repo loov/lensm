@@ -28,7 +28,9 @@ type codeColumns struct {
 	marks  bounds
 	gutter bounds
 	// sourceMarks is the marks lane at the right edge of the source
-	// column, zero width when no source line has a shown mark.
+	// column, zero width when no source line has a shown mark. The
+	// marks draw over the source text, which only lines with marks cut
+	// short.
 	sourceMarks bounds
 	// sourceMarkSlots are the kinds that get a column in sourceMarks.
 	// The kinds in sourceMarkWide occur more than once on a line, and
@@ -172,7 +174,6 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 			}
 		}
 		c.sourceMarks = boundsWidth(sourceRight-w, w)
-		sourceRight -= w + pad/2
 	}
 	c.sourceCol = splitColumn(int(source.Min), sourceRight, pad, minimumCommentWidth, 70)
 
@@ -205,6 +206,21 @@ func (ui Style) lineMarkKinds() (kinds, repeated disasm.Mark) {
 		}
 	}
 	return kinds & ui.Marks, repeated & ui.Marks
+}
+
+// sourceMarksLeft is where the first cell of marks starts in the source
+// lane, or the right edge of the source column without marks.
+func (c codeColumns) sourceMarksLeft(marks disasm.Mark) int {
+	x := int(c.sourceMarks.Min)
+	for _, m := range disasm.Marks {
+		if marks&m != 0 {
+			return x
+		}
+		if c.sourceMarkSlots&m != 0 {
+			x += c.markWidth(m)
+		}
+	}
+	return int(c.source.Max)
 }
 
 // markWidth is the width of the source lane column for m. A count

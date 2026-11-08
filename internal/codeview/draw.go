@@ -282,11 +282,19 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 				}
 			}
 			selectedSource := ui.SelectedView == ViewSource && ui.SelectedFile == src.File && ui.SelectedLine == lineNo
-			width := ui.layoutRowComment(gtx, ui.sourceCoord(src.File, lineNo), "//", c.sourceCol, rowTop, lineHeight, selectedSource)
-			if line := hl.lineMarks[sourcePos{src.File, lineNo}]; line != nil && c.sourceMarks.Width() > 0 {
-				if marks := line.marks & ui.Marks; marks != 0 {
-					ui.layoutMarks(gtx, c, int(c.sourceMarks.Min), marks, c.sourceMarkSlots, c.markWidth, &line.counts, rowTop)
-				}
+			// The text and the comment stop where this line's marks start.
+			line := hl.lineMarks[sourcePos{src.File, lineNo}]
+			var marks disasm.Mark
+			if line != nil && c.sourceMarks.Width() > 0 {
+				marks = line.marks & ui.Marks
+			}
+			right := c.sourceMarksLeft(marks)
+			col := c.sourceCol
+			col.commentWidth = min(col.commentWidth, right-col.commentLeft)
+			width := ui.layoutRowComment(gtx, ui.sourceCoord(src.File, lineNo), "//", col, rowTop, lineHeight, selectedSource)
+			width = min(width, right-int(source.Min))
+			if marks != 0 {
+				ui.layoutMarks(gtx, c, int(c.sourceMarks.Min), marks, c.sourceMarkSlots, c.markWidth, &line.counts, rowTop)
 			}
 			sourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),

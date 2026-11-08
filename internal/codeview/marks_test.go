@@ -50,8 +50,15 @@ func TestSourceMarksLane(t *testing.T) {
 	if want := float32(3 * c.lineHeight); c.sourceMarks.Width() != want {
 		t.Errorf("source lane is %v wide, want %v", c.sourceMarks.Width(), want)
 	}
-	if c.sourceMarks.Max != c.source.Max || c.sourceCol.textLeft+c.sourceCol.textWidth > int(c.sourceMarks.Min) {
-		t.Errorf("source text %+v overlaps lane %+v", c.sourceCol, c.sourceMarks)
+	if c.sourceMarks.Max != c.source.Max || c.sourceCol.textLeft+c.sourceCol.textWidth != int(c.source.Max) {
+		t.Errorf("source text %+v does not run under lane %+v", c.sourceCol, c.sourceMarks)
+	}
+	// A line with only an allocation keeps the spill and reload cells.
+	if got, want := c.sourceMarksLeft(disasm.MarkAlloc), int(c.sourceMarks.Min)+2*c.lineHeight; got != want {
+		t.Errorf("allocation cell starts at %d, want %d", got, want)
+	}
+	if got := c.sourceMarksLeft(0); got != int(c.source.Max) {
+		t.Errorf("unmarked line stops at %d, want %v", got, c.source.Max)
 	}
 	if c := columns(disasm.MarkBoundsCheck); c.sourceMarks.Width() != 0 {
 		t.Errorf("source lane is %v wide with no shown marks", c.sourceMarks.Width())
