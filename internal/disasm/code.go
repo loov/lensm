@@ -50,6 +50,48 @@ type Inst struct {
 	// This is used to make the instruction clickable and follow to the
 	// called target.
 	Call string
+
+	// Marks flags what the instruction costs at run time.
+	Marks Mark
+}
+
+// Mark is a set of run time costs found in an instruction.
+type Mark uint8
+
+const (
+	// MarkSpill stores a register to the stack.
+	MarkSpill Mark = 1 << iota
+	// MarkReload loads a register from the stack.
+	MarkReload
+	// MarkBoundsCheck branches to or calls a bounds check failure.
+	MarkBoundsCheck
+	// MarkAlloc calls a heap allocator.
+	MarkAlloc
+	// MarkWriteBarrier calls a garbage collector write barrier.
+	MarkWriteBarrier
+
+	// AllMarks is every mark.
+	AllMarks = MarkSpill | MarkReload | MarkBoundsCheck | MarkAlloc | MarkWriteBarrier
+)
+
+// Marks lists every mark in display order.
+var Marks = []Mark{MarkSpill, MarkReload, MarkBoundsCheck, MarkAlloc, MarkWriteBarrier}
+
+// String is a short label for a single mark.
+func (m Mark) String() string {
+	switch m {
+	case MarkSpill:
+		return "spill"
+	case MarkReload:
+		return "reload"
+	case MarkBoundsCheck:
+		return "bounds"
+	case MarkAlloc:
+		return "alloc"
+	case MarkWriteBarrier:
+		return "wb"
+	}
+	return "?"
 }
 
 // Source represents code from a single file.

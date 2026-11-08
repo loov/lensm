@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/loov/disasm/analysis"
 	"github.com/loov/disasm/objfile"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/source"
@@ -48,8 +49,9 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 		File: entryFile(bin, sym, decoded),
 		Arch: bin.Arch,
 	}
+	stack := analysis.StackAccesses(bin.Arch, decoded)
 	var instructions []disasm.Inst
-	for _, in := range decoded {
+	for i, in := range decoded {
 		pc := in.Addr
 		file, line := bin.PCToLine(pc)
 		var refPC uint64
@@ -66,6 +68,24 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 			refPC = in.Ref
 		}
 
+		var marks disasm.Mark
+		switch {
+		case stack[i].Regs > 0 && stack[i].Store:
+			marks |= disasm.MarkSpill
+		case stack[i].Regs > 0:
+			marks |= disasm.MarkReload
+		}
+		if in.Call && call != "" {
+			switch analysis.ClassifyCall(call) {
+			case analysis.CallBoundsCheck:
+				marks |= disasm.MarkBoundsCheck
+			case analysis.CallAlloc:
+				marks |= disasm.MarkAlloc
+			case analysis.CallWriteBarrier:
+				marks |= disasm.MarkWriteBarrier
+			}
+		}
+
 		// A jump to itself (for {}) needs no spacer before its target.
 		if refPC != 0 && refPC != pc {
 			needRefPCs[refPC] = struct{}{}
@@ -79,6 +99,7 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 			Line:       line,
 			Call:       call,
 			RefPC:      refPC,
+			Marks:      marks,
 		})
 	}
 
@@ -93,6 +114,7 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 	}
 
 	layoutJumps(code, pcToIndex)
+	markBoundsChecks(code)
 
 	// remove trailing interrupts and padding from funcs
 	for len(code.Insts) > 0 &&
@@ -109,6 +131,32 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 	code.Source = source.Load(sym.file.files, refs, code.File, opts.Context)
 
 	return code, nil
+}
+
+// markBoundsChecks marks the branches to a bounds check failure, which
+// are the checks themselves. The failure block runs straight into the
+// call, so a branch anywhere into it counts.
+func markBoundsChecks(code *disasm.Code) {
+	for c := range code.Insts {
+		if code.Insts[c].Marks&disasm.MarkBoundsCheck == 0 || code.Insts[c].Call == "" {
+			continue
+		}
+		start := c
+		for start > 0 {
+			prev := &code.Insts[start-1]
+			// A spacer, branch or call ends the block.
+			if prev.PC == 0 || prev.RefOffset != 0 || prev.Call != "" {
+				break
+			}
+			start--
+		}
+		for i := range code.Insts {
+			ix := &code.Insts[i]
+			if target := i + ix.RefOffset; ix.RefOffset != 0 && start <= target && target <= c {
+				ix.Marks |= disasm.MarkBoundsCheck
+			}
+		}
+	}
 }
 
 // layoutJumps sets each jump's RefOffset and gives it a column, so jumps

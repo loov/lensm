@@ -44,6 +44,7 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 			defer file.Close()
 
 			checkRefs(t, file)
+			checkMarks(t, file)
 
 			for _, fn := range file.Funcs() {
 				if !strings.Contains(fn.Name(), "main.sumInts") {
@@ -67,6 +68,37 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 			}
 			t.Fatal("main.sumInts not found in binary")
 		})
+	}
+}
+
+// checkMarks checks that bounds checks and heap allocations are found.
+func checkMarks(t *testing.T, file *File) {
+	t.Helper()
+	marks := func(name string) (calls, branches disasm.Mark) {
+		fn := disasm.FindFunc(file, name)
+		if fn == nil {
+			t.Fatalf("%s not found", name)
+		}
+		code, err := fn.Load(disasm.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ix := range code.Insts {
+			if ix.Call != "" {
+				calls |= ix.Marks
+			} else {
+				branches |= ix.Marks
+			}
+		}
+		return calls, branches
+	}
+	// dot indexes b with the indices of a.
+	if calls, branches := marks("main.dot"); calls&branches&disasm.MarkBoundsCheck == 0 {
+		t.Errorf("main.dot: bounds check calls %v, branches %v", calls&disasm.MarkBoundsCheck, branches&disasm.MarkBoundsCheck)
+	}
+	// newBox stores the address of its argument in a global.
+	if calls, _ := marks("main.newBox"); calls&disasm.MarkAlloc == 0 {
+		t.Error("main.newBox: no allocation marked")
 	}
 }
 

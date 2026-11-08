@@ -81,6 +81,15 @@ func normalize(v []float64) {
 	}
 }
 
+// boxed is a package level pointer, so the value newBox allocates
+// escapes to the heap.
+var boxed *int
+
+//go:noinline
+func newBox(n int) {
+	boxed = &n
+}
+
 func main() {
 	ints := []int{3, 1, 4, 1, 5, 9, 2, 6}
 	floats := []float64{2.7, 1.8, 2.8, 1.8}
@@ -93,6 +102,7 @@ func main() {
 	}
 	m := mat4Mul(&a, &b)
 	normalize(floats)
+	newBox(len(ints))
 
 	println(sumInts(ints), dot(floats, floats), popcountAll(words), collatzSteps(27), m[5])
 }
