@@ -72,11 +72,13 @@ type FileUI struct {
 	SettingsButton widget.Clickable
 	// Panel is the sidebar panel picked in the icon strip.
 	Panel        int
-	PanelButtons [3]widget.Clickable
-	PanelTips    [3]gui.Tooltip
+	PanelButtons [4]widget.Clickable
+	PanelTips    [4]gui.Tooltip
 	WatchButton  widget.Clickable
 	WatchTip     gui.Tooltip
 	CommentsList gui.ClickList
+	MarkToggles  [len(markTitles)]widget.Bool
+	MarksList    gui.ClickList
 	// ClearComments deletes every comment on its second click in a row.
 	ClearComments      widget.Clickable
 	clearCommentsArmed bool
@@ -673,6 +675,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								ShowSource:     ui.ShowSource.Value,
 								ShowHelp:       ui.ShowAsmHelp.Value,
 								HoverLinksOnly: ui.HoverLinksOnly.Value,
+								Marks:          disasm.AllMarks &^ ui.Settings.HiddenMarks,
 								TextHeight:     ui.Theme.TextSize,
 							}.Layout(gtx)
 						}),

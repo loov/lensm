@@ -10,6 +10,7 @@ import (
 
 	"loov.dev/lensm/internal/atomicfile"
 	"loov.dev/lensm/internal/comments"
+	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/syntax"
 )
 
@@ -22,12 +23,15 @@ type AppSettings struct {
 	ShowAsmHelp   bool   `json:"show_asm_help"`
 	// HoverLinksOnly draws only the hovered line's source-to-assembly
 	// link instead of all of them.
-	HoverLinksOnly bool     `json:"hover_links_only,omitempty"`
-	TextSize       int      `json:"text_size,omitempty"`
-	SidebarRatio   float32  `json:"sidebar_ratio,omitempty"`
-	LastPath       string   `json:"last_path,omitempty"`
-	OpenTabs       []string `json:"open_tabs,omitempty"`
-	ActiveTab      string   `json:"active_tab,omitempty"`
+	HoverLinksOnly bool `json:"hover_links_only,omitempty"`
+	// HiddenMarks are the run time cost marks turned off in the
+	// Diagnostics panel.
+	HiddenMarks  disasm.Mark `json:"hidden_marks,omitempty"`
+	TextSize     int         `json:"text_size,omitempty"`
+	SidebarRatio float32     `json:"sidebar_ratio,omitempty"`
+	LastPath     string      `json:"last_path,omitempty"`
+	OpenTabs     []string    `json:"open_tabs,omitempty"`
+	ActiveTab    string      `json:"active_tab,omitempty"`
 }
 
 func DefaultAppSettings() AppSettings {

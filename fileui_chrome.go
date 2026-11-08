@@ -27,6 +27,7 @@ const (
 	panelFunctions = iota
 	panelComments
 	panelHistory
+	panelMarks
 )
 
 // shortcut spells a key chord the way the platform does.
@@ -307,6 +308,7 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 			tool(panelFunctions, FunctionsIcon, "Functions"),
 			tool(panelComments, CommentsIcon, "Comments"),
 			tool(panelHistory, HistoryIcon, "History"),
+			tool(panelMarks, MarksIcon, "Diagnostics"),
 		},
 		Bottom: []layout.Widget{
 			gui.ToolButton{Theme: th, Clickable: &ui.WatchButton, Tip: &ui.WatchTip, Icon: WatchIcon, Description: watch, Selected: ui.Config.Watch}.Layout,
@@ -321,6 +323,8 @@ func (ui *FileUI) layoutPanel(gtx layout.Context) layout.Dimensions {
 		return ui.layoutCommentsPanel(gtx)
 	case panelHistory:
 		return ui.layoutHistoryPanel(gtx)
+	case panelMarks:
+		return ui.layoutMarksPanel(gtx)
 	}
 	return ui.Funcs.Layout(ui.Theme, gtx)
 }
