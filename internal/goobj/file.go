@@ -29,6 +29,42 @@ type File struct {
 	mu    sync.Mutex
 	cache map[cacheKey]cacheEntry
 	files source.Files
+	notes map[notePos][]disasm.Note
+}
+
+type notePos struct {
+	file string
+	line int
+}
+
+// SetNotes attaches compiler notes to the source lines of every
+// function loaded afterwards.
+func (file *File) SetNotes(notes []disasm.Note) {
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	file.notes = make(map[notePos][]disasm.Note)
+	for _, n := range notes {
+		pos := notePos{n.File, n.Line}
+		file.notes[pos] = append(file.notes[pos], n)
+	}
+	clear(file.cache)
+}
+
+// attachNotes fills in the notes of each source line.
+func (file *File) attachNotes(sources []disasm.Source) {
+	if len(file.notes) == 0 {
+		return
+	}
+	for i := range sources {
+		src := &sources[i]
+		for k := range src.Blocks {
+			block := &src.Blocks[k]
+			block.Notes = make([][]disasm.Note, len(block.Lines))
+			for off := range block.Lines {
+				block.Notes[off] = file.notes[notePos{src.File, block.From + off}]
+			}
+		}
+	}
 }
 
 // maxCached bounds the code cache, which holds source lines as well.

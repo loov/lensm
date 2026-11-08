@@ -118,6 +118,9 @@ type SourceBlock struct {
 	LineRange
 	// Lines are textual representation of the source starting from `LineRange.From`.
 	Lines []string
+	// Notes are the compiler's notes for each line, parallel to Lines.
+	// Only a binary that lensm built has them.
+	Notes [][]Note
 	// Related contains a set of ranges in the instructions.
 	// e.g. for source code Lines[5] there will be drawn relation shapes to each
 	// instructions `for _, r := range Related[5] { draw(Insts[r.From:r.To]) }`

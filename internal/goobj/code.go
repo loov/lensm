@@ -129,6 +129,7 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 		refs.Add(ix.File, ix.Line, i)
 	}
 	code.Source = source.Load(sym.file.files, refs, code.File, opts.Context)
+	sym.file.attachNotes(code.Source)
 
 	return code, nil
 }

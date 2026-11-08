@@ -18,31 +18,15 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"loov.dev/lensm/internal/disasm"
 )
-
-// Diagnostic is one compiler note, such as "escapes" or
-// "cannotInlineFunction". Lines and columns count from 1.
-type Diagnostic struct {
-	File      string
-	Line, Col int
-	Code      string
-	Message   string
-	// Related explains the note, for example the flow that makes a
-	// value escape.
-	Related []Related
-}
-
-type Related struct {
-	File      string
-	Line, Col int
-	Message   string
-}
 
 // Build is a built binary in a temporary directory, removed by Close.
 type Build struct {
-	Dir         string
-	Binary      string
-	Diagnostics []Diagnostic
+	Dir    string
+	Binary string
+	Notes  []disasm.Note
 }
 
 func (b *Build) Close() error { return os.RemoveAll(b.Dir) }
@@ -78,7 +62,7 @@ func Run(ctx context.Context, dir string) (*Build, error) {
 		_ = b.Close()
 		return nil, err
 	}
-	b.Diagnostics, err = readDiagnostics(diag)
+	b.Notes, err = readNotes(diag)
 	if err != nil {
 		_ = b.Close()
 		return nil, err
@@ -122,8 +106,8 @@ type lspDiagnostic struct {
 	}
 }
 
-func readDiagnostics(dir string) ([]Diagnostic, error) {
-	var diags []Diagnostic
+func readNotes(dir string) ([]disasm.Note, error) {
+	var notes []disasm.Note
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if errors.Is(err, fs.ErrNotExist) && path == dir {
 			return fs.SkipAll // the module had nothing to compile
@@ -149,7 +133,7 @@ func readDiagnostics(dir string) ([]Diagnostic, error) {
 				file = ld.File
 				continue
 			}
-			diag := Diagnostic{
+			note := disasm.Note{
 				File:    file,
 				Line:    ld.Range.Start.Line,
 				Col:     ld.Range.Start.Character,
@@ -157,17 +141,22 @@ func readDiagnostics(dir string) ([]Diagnostic, error) {
 				Message: ld.Message,
 			}
 			for _, r := range ld.RelatedInformation {
-				diag.Related = append(diag.Related, Related{
+				note.Related = append(note.Related, disasm.Note{
 					File:    uriPath(r.Location.URI),
 					Line:    r.Location.Range.Start.Line,
 					Col:     r.Location.Range.Start.Character,
 					Message: r.Message,
 				})
 			}
-			diags = append(diags, diag)
+			// The escape analysis repeats a note without a message.
+			if last := len(notes) - 1; note.Message == "" && last >= 0 &&
+				notes[last].Code == note.Code && notes[last].Line == note.Line && notes[last].Col == note.Col {
+				continue
+			}
+			notes = append(notes, note)
 		}
 	})
-	return diags, err
+	return notes, err
 }
 
 func uriPath(uri string) string {

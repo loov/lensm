@@ -171,6 +171,7 @@ func loadPackage(dir string) (disasm.File, error) {
 		_ = build.Close()
 		return nil, err
 	}
+	file.SetNotes(build.Notes)
 	return builtFile{file, build}, nil
 }
 
