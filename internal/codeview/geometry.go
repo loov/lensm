@@ -1,6 +1,8 @@
 package codeview
 
 import (
+	"math/bits"
+
 	"gioui.org/f32"
 	"gioui.org/layout"
 )
@@ -77,11 +79,12 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	if ui.ShowSource {
 		gutterWidth = lineHeight * 8
 	}
-	showMarks := showAsm && ui.hasMarks()
-	marksWidth := 0
-	if showMarks {
-		marksWidth = lineHeight * 3
+	perRow := 0
+	if showAsm {
+		perRow = ui.maxMarks()
 	}
+	showMarks := perRow > 0
+	marksWidth := lineHeight * perRow
 
 	// Each shown column gets its share of the width left after the
 	// fixed parts.
@@ -154,15 +157,16 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	return c
 }
 
-// hasMarks reports whether any instruction has a mark that is shown.
-func (ui Style) hasMarks() bool {
+// maxMarks is the most shown marks on one instruction.
+func (ui Style) maxMarks() int {
+	most := 0
 	if ui.Marks == 0 {
-		return false
+		return 0
 	}
 	for _, ix := range ui.Code.Insts {
-		if ix.Marks&ui.Marks != 0 {
-			return true
+		if m := ix.Marks & ui.Marks; m != 0 {
+			most = max(most, bits.OnesCount8(uint8(m)))
 		}
 	}
-	return false
+	return most
 }

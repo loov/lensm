@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"gioui.org/font"
 	"gioui.org/layout"
+	"gioui.org/text"
 
 	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/comments"
@@ -66,9 +68,19 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
 						layout.Rigid(gui.Checkbox{Theme: th, Value: &ui.MarkToggles[i], Label: markTitles[i]}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							label := th.Label(strconv.Itoa(counts[i]), 0.9)
-							label.Color = codeview.MarkColor(th.Colors.Marks, m)
-							return label.Layout(gtx)
+							// The letter is the legend for the code view.
+							glyph := th.Label(codeview.MarkGlyph(m)+" ", 0.95)
+							glyph.Font.Style = font.Italic
+							glyph.Color = codeview.MarkColor(th.Colors.Marks, m)
+							count := th.Muted(strconv.Itoa(counts[i]), 0.9)
+							count.Alignment = text.End
+							return layout.Flex{Alignment: layout.Baseline}.Layout(gtx,
+								layout.Rigid(glyph.Layout),
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									gtx.Constraints.Min.X = gtx.Metric.Dp(24)
+									return count.Layout(gtx)
+								}),
+							)
 						}),
 					)
 				})

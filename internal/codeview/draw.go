@@ -11,9 +11,11 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"
+	"loov.dev/lensm/internal/syntax"
 )
 
 // layoutRelations draws the curved bands linking source lines to the
@@ -164,7 +166,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
 		}
 		if marks := ix.Marks & ui.Marks; marks != 0 && c.marks.Width() > 0 {
-			ui.layoutMark(gtx, c, marks, i*lineHeight+int(ui.asm.Offset))
+			ui.layoutMarks(gtx, c, marks, i*lineHeight+int(ui.asm.Offset))
 		}
 		if ui.ShowNative {
 			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
@@ -324,34 +326,51 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 	}
 }
 
-// layoutMark draws the first of marks as a small tag in the marks lane;
-// a second one on the same row is rare and adds a "+".
-func (ui Style) layoutMark(gtx layout.Context, c codeColumns, marks disasm.Mark, top int) {
-	var first disasm.Mark
+// layoutMarks draws one square per mark in the marks lane, each with
+// the mark's letter.
+func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, marks disasm.Mark, top int) {
+	size := c.lineHeight
+	inset := size / 10
+	x := int(c.marks.Min)
 	for _, m := range disasm.Marks {
-		if marks&m != 0 {
-			first = m
-			break
+		if marks&m == 0 {
+			continue
 		}
+		col := MarkColor(ui.Theme.Colors.Marks, m)
+		bg := col
+		bg.A = 0x28
+		rect := image.Rect(x+inset, top+inset, x+size-inset, top+size-inset)
+		paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, rect.Dy()/4).Op(gtx.Ops))
+
+		// Measure the letter to centre it in the square.
+		line := sourceLine{Text: MarkGlyph(m), TextHeight: ui.TextHeight, Italic: true, Color: col}
+		w := glyphWidth(gtx, ui.Theme.Theme, line)
+		line.TopLeft = image.Pt(x+(size-w)/2, top)
+		line.Layout(ui.Theme.Theme, gtx)
+		x += size
 	}
-	text := first.String()
-	if marks != first {
-		text += "+"
-	}
-	col := MarkColor(ui.Theme.Colors.Marks, first)
-	bg := col
-	bg.A = 0x28
-	inset := c.lineHeight / 8
-	rect := image.Rect(int(c.marks.Min), top+inset, int(c.marks.Max), top+c.lineHeight-inset)
-	paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, rect.Dy()/3).Op(gtx.Ops))
-	textHeight := ui.TextHeight * 0.85
-	sourceLine{
-		TopLeft:    image.Pt(int(c.marks.Min)+c.lineHeight/4, top+(c.lineHeight-codeLineHeightPx(gtx, textHeight))/2),
-		Width:      int(c.marks.Width()) - c.lineHeight/4,
-		Text:       text,
-		TextHeight: textHeight,
-		Color:      col,
-	}.Layout(ui.Theme.Theme, gtx)
+}
+
+// glyphWidth measures the width of a short line of text.
+func glyphWidth(gtx layout.Context, th *material.Theme, line sourceLine) int {
+	macro := op.Record(gtx.Ops)
+	defer macro.Stop()
+	gtx.Constraints = layout.Constraints{Max: image.Pt(gui.MaxLineWidth, gui.MaxLineWidth)}
+	return layoutSourceSpan(th, gtx, line, syntax.Span{Text: line.Text}, 0).Size.X
+}
+
+// markGlyphs are the letters drawn for each mark.
+var markGlyphs = map[disasm.Mark]string{
+	disasm.MarkSpill:        "σ",
+	disasm.MarkReload:       "ρ",
+	disasm.MarkBoundsCheck:  "β",
+	disasm.MarkAlloc:        "α",
+	disasm.MarkWriteBarrier: "ω",
+}
+
+// MarkGlyph is the letter drawn for a single mark.
+func MarkGlyph(m disasm.Mark) string {
+	return markGlyphs[m]
 }
 
 // MarkColor is the colour of a single mark.
