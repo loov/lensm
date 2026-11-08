@@ -77,7 +77,10 @@ type FileUI struct {
 	WatchButton  widget.Clickable
 	WatchTip     gui.Tooltip
 	CommentsList gui.ClickList
-	HistoryList  gui.ClickList
+	// ClearComments deletes every comment on its second click in a row.
+	ClearComments      widget.Clickable
+	clearCommentsArmed bool
+	HistoryList        gui.ClickList
 
 	// Column toggles and settings.
 	ShowGoAsm      widget.Bool

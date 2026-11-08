@@ -325,14 +325,26 @@ func (ui *FileUI) layoutPanel(gtx layout.Context) layout.Dimensions {
 	return ui.Funcs.Layout(ui.Theme, gtx)
 }
 
-// panelFrame draws the sidebar background and a muted title above w.
-func (ui *FileUI) panelFrame(gtx layout.Context, title string, w layout.Widget) layout.Dimensions {
+// panelFrame draws the sidebar background and a muted title above w,
+// with action, if any, at the right of the title.
+func (ui *FileUI) panelFrame(gtx layout.Context, title string, action, w layout.Widget) layout.Dimensions {
 	paint.FillShape(gtx.Ops, ui.Theme.Colors.Sidebar, clip.Rect{Max: gtx.Constraints.Max}.Op())
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			label := ui.Theme.Muted(title, 0.85)
 			label.Font.Weight = font.SemiBold
-			return layout.Inset{Top: 12, Bottom: 8, Left: 16, Right: 16}.Layout(gtx, label.Layout)
+			return layout.Inset{Top: 12, Bottom: 8, Left: 16, Right: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Constraints.Max.X
+				return layout.Flex{Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
+					layout.Rigid(label.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						if action == nil {
+							return layout.Dimensions{}
+						}
+						return action(gtx)
+					}),
+				)
+			})
 		}),
 		layout.Flexed(1, w),
 	)
@@ -346,7 +358,28 @@ func (ui *FileUI) layoutCommentsPanel(gtx layout.Context) layout.Dimensions {
 			gtx.Execute(op.InvalidateCmd{})
 		}
 	}
-	return ui.panelFrame(gtx, "COMMENTS", func(gtx layout.Context) layout.Dimensions {
+	// Clearing takes two clicks; moving off the button cancels.
+	if !ui.ClearComments.Hovered() {
+		ui.clearCommentsArmed = false
+	}
+	for ui.ClearComments.Clicked(gtx) {
+		if ui.clearCommentsArmed {
+			for _, rec := range records {
+				ui.setBufferedComment(rec.Coord, "")
+			}
+			records = nil
+		}
+		ui.clearCommentsArmed = !ui.clearCommentsArmed
+	}
+	var clear layout.Widget
+	if len(records) > 0 {
+		text := "Clear all"
+		if ui.clearCommentsArmed {
+			text = "Click again to clear"
+		}
+		clear = gui.Button{Theme: ui.Theme, Clickable: &ui.ClearComments, Text: text}.Layout
+	}
+	return ui.panelFrame(gtx, "COMMENTS", clear, func(gtx layout.Context) layout.Dimensions {
 		if len(records) == 0 {
 			return layout.Inset{Left: 16, Right: 16}.Layout(gtx,
 				ui.Theme.Muted("No comments yet. Double-click a line in the code to add one.", 0.9).Layout)
@@ -375,7 +408,7 @@ func (ui *FileUI) layoutHistoryPanel(gtx layout.Context) layout.Dimensions {
 			ui.navigateHistoryEntry(name)
 		}
 	}
-	return ui.panelFrame(gtx, "HISTORY", func(gtx layout.Context) layout.Dimensions {
+	return ui.panelFrame(gtx, "HISTORY", nil, func(gtx layout.Context) layout.Dimensions {
 		if len(entries) == 0 {
 			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, ui.Theme.Muted("Functions you visit show up here.", 0.9).Layout)
 		}
