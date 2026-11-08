@@ -44,6 +44,9 @@ type UI struct {
 	// the comment editor on the row.
 	lastClickRow string
 	lastClickAt  time.Time
+
+	// reveal is the row to scroll to on the next layout.
+	reveal *comments.Coord
 }
 
 // highlightCache holds the syntax highlight spans for a Code. Layout
@@ -122,6 +125,47 @@ func (ui *UI) KeepView(prev *UI) {
 	ui.SelectedFile, ui.SelectedLine = prev.SelectedFile, prev.SelectedLine
 }
 
+// Reveal selects the row at c and scrolls it to the middle of the view
+// on the next layout, which may come after the code finishes loading.
+func (ui *UI) Reveal(c comments.Coord) {
+	ui.reveal = &c
+}
+
+func (ui *UI) applyReveal(gtx layout.Context, lineHeight int) {
+	c := ui.reveal
+	ui.reveal = nil
+	middle := func(region *scrollRegion, row, rows int) {
+		region.Anim.Stop()
+		region.Offset = float32(gtx.Constraints.Max.Y/2 - row*lineHeight - lineHeight/2)
+		region.Clamp(gtx, 0, float32(rows*lineHeight))
+	}
+	if c.View == ViewSource {
+		row, rows := -1, 0
+		for r := range sourceRows(ui.Code) {
+			if r.kind == sourceRowLine {
+				src := ui.Code.Source[r.file]
+				if src.File == c.File && src.Blocks[r.block].From+r.off == c.Line {
+					row = rows
+				}
+			}
+			rows++
+		}
+		if row >= 0 {
+			ui.SelectedAsm, ui.SelectedView = -1, ViewSource
+			ui.SelectedFile, ui.SelectedLine = c.File, c.Line
+			middle(&ui.src, row, rows)
+		}
+		return
+	}
+	for i, ix := range ui.Code.Insts {
+		if ix.PC == c.PC {
+			ui.SelectedAsm, ui.SelectedView = i, c.View
+			middle(&ui.asm, i, len(ui.Code.Insts))
+			return
+		}
+	}
+}
+
 type Style struct {
 	*UI
 
@@ -163,6 +207,9 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
 	c := ui.columns(gtx)
+	if ui.reveal != nil {
+		ui.applyReveal(gtx, c.lineHeight)
+	}
 	mouseClicked := ui.handleInput(gtx, c)
 
 	// draw gutter

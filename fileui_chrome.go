@@ -341,8 +341,9 @@ func (ui *FileUI) panelFrame(gtx layout.Context, title string, w layout.Widget) 
 func (ui *FileUI) layoutCommentsPanel(gtx layout.Context) layout.Dimensions {
 	records := ui.Comments.All()
 	if i, ok := ui.CommentsList.Clicked(gtx); ok && i < len(records) {
-		if fn := ui.findFunc(records[i].Function); fn != nil {
-			ui.openTab(fn, false)
+		if tab := ui.openTab(ui.findFunc(records[i].Function), false); tab != nil {
+			tab.Code.Reveal(records[i].Coord)
+			gtx.Execute(op.InvalidateCmd{})
 		}
 	}
 	return ui.panelFrame(gtx, "COMMENTS", func(gtx layout.Context) layout.Dimensions {
