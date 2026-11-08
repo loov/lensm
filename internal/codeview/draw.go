@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -35,7 +36,7 @@ func (ui Style) layoutRelations(gtx layout.Context, c codeColumns, hover codeHov
 	var highlightPath clip.PathSpec
 	var highlightColor color.NRGBA
 	related := 0
-	for row := range sourceRows(ui.Code, ui.Notes) {
+	for row := range sourceRows(ui.Code, ui.noteRows()) {
 		rowTop := top
 		top += lineHeight
 		if row.kind != sourceRowLine {
@@ -252,7 +253,10 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 		}
 	}
 	viewHeight := gtx.Constraints.Max.Y
-	for row := range sourceRows(ui.Code, ui.Notes) {
+	// flow is the hovered note, whose explanation pops up.
+	var flow *disasm.Note
+	var flowLeft, flowTop int
+	for row := range sourceRows(ui.Code, ui.noteRows()) {
 		rowTop := top
 		top += lineHeight
 		sourceRow++
@@ -270,7 +274,10 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 				Color:      ui.Theme.Colors.MutedText,
 			}.Layout(ui.Theme.Theme, gtx)
 		case sourceRowNote:
-			ui.layoutNote(gtx, c, row, rowTop)
+			left := ui.layoutNote(gtx, c, row, rowTop)
+			if mouseInSource && float32(rowTop) <= mousePosition.Y && mousePosition.Y < float32(rowTop+lineHeight) {
+				flow, flowLeft, flowTop = row.note, left, rowTop
+			}
 		case sourceRowLine:
 			src := ui.Code.Source[row.file]
 			lineNo := src.Blocks[row.block].From + row.off
@@ -310,54 +317,97 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 		}
 	}
 	sourceClip.Pop()
+	if flow != nil {
+		ui.layoutNoteFlow(gtx, c, flow, flowLeft, flowTop)
+	}
 	return top - int(ui.src.Offset)
 }
 
-// layoutNote draws a compiler note below its line, starting under the
-// column it is about with a connector from the line above.
-func (ui Style) layoutNote(gtx layout.Context, c codeColumns, row sourceRow, top int) {
-	note := row.note
-	line := ui.Code.Source[row.file].Blocks[row.block].Lines[row.off]
-	indent := len(line) - len(strings.TrimLeft(line, " "))
-	col := noteColumn(line, note.Col)
-	charWidth := glyphWidth(gtx, ui.Theme.Theme, sourceLine{Text: "m", TextHeight: ui.TextHeight})
-	// The drawn line starts with its line number.
-	textLeft := int(c.source.Min)
-	if spans := ui.hl.source[row.file][row.block][row.off]; len(spans) > 0 {
-		textLeft += charWidth * len(spans[0].Text)
+// layoutNote draws one row of a compiler note below its line. The
+// first row starts under the column the note is about, with a
+// connector from the line above; it returns where the text starts.
+func (ui Style) layoutNote(gtx layout.Context, c codeColumns, row sourceRow, top int) int {
+	x := int(c.source.Min) + row.noteX
+	arm := c.lineHeight / 2
+	color := ui.noteColor(row.note)
+	if row.noteFirst {
+		stroke := max(gtx.Dp(1), 1)
+		mid := top + c.lineHeight/2
+		paint.FillShape(gtx.Ops, color, clip.Rect{Min: image.Pt(x, top), Max: image.Pt(x+stroke, mid+stroke)}.Op())
+		paint.FillShape(gtx.Ops, color, clip.Rect{Min: image.Pt(x, mid), Max: image.Pt(x+arm, mid+stroke)}.Op())
 	}
-	// Keep the note readable when its column is far right.
-	x := textLeft + charWidth*max(min(col, len(line)), 0)
-	if minWidth := 30 * charWidth; int(c.source.Max)-x < minWidth {
-		x = max(int(c.source.Max)-minWidth, textLeft+charWidth*indent)
-	}
-
-	color := ui.noteColor(note)
-	stroke := max(gtx.Dp(1), 1)
-	mid := top + c.lineHeight/2
-	arm := charWidth
-	paint.FillShape(gtx.Ops, color, clip.Rect{Min: image.Pt(x, top), Max: image.Pt(x+stroke, mid+stroke)}.Op())
-	paint.FillShape(gtx.Ops, color, clip.Rect{Min: image.Pt(x, mid), Max: image.Pt(x+arm, mid+stroke)}.Op())
-
-	left := x + arm + charWidth/2
+	left := x + noteGap(c)
 	sourceLine{
 		TopLeft:    image.Pt(left, top),
 		Width:      int(c.source.Max) - left,
-		Text:       note.Text(),
-		TextHeight: ui.TextHeight * 0.9,
+		Text:       row.noteText,
+		TextHeight: ui.TextHeight * noteScale,
 		Italic:     true,
 		Color:      color,
 	}.Layout(ui.Theme.Theme, gtx)
+	return left
 }
 
-// noteColumn is the 0-based column in the drawn line of the compiler's
-// 1-based column col. The source has each tab expanded to four spaces,
-// the compiler counts it once. gofmt indents with tabs and aligns with
-// spaces, so only the indentation needs converting.
-func noteColumn(line string, col int) int {
-	col--
-	tabs := (len(line) - len(strings.TrimLeft(line, " "))) / 4
-	return col + 3*min(tabs, max(col, 0))
+// flowStep is one step of a note's explanation and where it happens.
+type flowStep struct{ at, text string }
+
+// noteFlow is the explanation of a note, such as how a value escapes.
+func noteFlow(note *disasm.Note) []flowStep {
+	var steps []flowStep
+	for _, r := range note.Related {
+		// An inlineLoc names where the previous step was inlined from.
+		if r.Message == "inlineLoc" {
+			continue
+		}
+		text := strings.TrimPrefix(r.Message, "escflow:")
+		text = strings.TrimPrefix(text, "    ")
+		steps = append(steps, flowStep{fmt.Sprintf("%s:%d  ", filepath.Base(r.File), r.Line), text})
+	}
+	return steps
+}
+
+// layoutNoteFlow shows the explanation of the hovered note in a popup
+// below its row, or above when there is no room below.
+func (ui Style) layoutNoteFlow(gtx layout.Context, c codeColumns, note *disasm.Note, left, top int) {
+	steps := noteFlow(note)
+	if len(steps) == 0 {
+		return
+	}
+	colors := ui.Theme.Colors
+	pad := gtx.Dp(8)
+	lines := make([]sourceLine, len(steps))
+	width := 0
+	for i, step := range steps {
+		// A flow names a step, the rows under it say why.
+		color := ui.noteColor(note)
+		if strings.HasPrefix(step.text, "flow:") {
+			color = colors.Text
+		}
+		lines[i] = sourceLine{
+			TextHeight: ui.TextHeight * noteScale,
+			Spans: []syntax.Span{
+				{Text: step.at, Color: colors.MutedText},
+				{Text: step.text, Color: color},
+			},
+		}
+		width = max(width, glyphWidth(gtx, ui.Theme.Theme, sourceLine{Text: step.at + step.text, TextHeight: lines[i].TextHeight}))
+	}
+	size := image.Pt(width+2*pad, len(steps)*c.lineHeight+2*pad)
+	pos := image.Pt(left, top+c.lineHeight)
+	pos.X = max(min(pos.X, gtx.Constraints.Max.X-size.X), 0)
+	if pos.Y+size.Y > gtx.Constraints.Max.Y {
+		pos.Y = max(top-size.Y, 0)
+	}
+
+	macro := op.Record(gtx.Ops)
+	trans := op.Offset(pos).Push(gtx.Ops)
+	gui.Panel(gtx, ui.Theme, size, gtx.Dp(5))
+	for i, line := range lines {
+		line.TopLeft = image.Pt(pad, pad+i*c.lineHeight)
+		line.Layout(ui.Theme.Theme, gtx)
+	}
+	trans.Pop()
+	op.Defer(gtx.Ops, macro.Stop())
 }
 
 // noteColor ties a note to the cost mark of the same kind.

@@ -50,6 +50,18 @@ type UI struct {
 
 	// Notes are the kinds of compiler notes shown below source lines.
 	Notes disasm.NoteKind
+	// notePlaces caches where the shown notes go for noteKey.
+	notePlaces map[*disasm.Note]notePlace
+	noteKey    notePlaceKey
+}
+
+func (ui *UI) noteRows() noteLayout {
+	return noteLayout{kinds: ui.Notes, places: ui.notePlaces}
+}
+
+// SelectedText is the selected rows as text.
+func (ui *UI) SelectedText() string {
+	return ui.Selection.Text(ui.Code, ui.noteRows())
 }
 
 // highlightCache holds the syntax highlight spans for a Code. Layout
@@ -180,7 +192,7 @@ func (ui *UI) applyReveal(gtx layout.Context, lineHeight int) {
 	}
 	if c.View == ViewSource {
 		row, rows := -1, 0
-		for r := range sourceRows(ui.Code, ui.Notes) {
+		for r := range sourceRows(ui.Code, ui.noteRows()) {
 			if r.kind == sourceRowLine {
 				src := ui.Code.Source[r.file]
 				if src.File == c.File && src.Blocks[r.block].From+r.off == c.Line {
@@ -248,6 +260,7 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
 	c := ui.columns(gtx)
+	ui.placeNotes(gtx, c)
 	if ui.reveal != nil {
 		ui.applyReveal(gtx, c.lineHeight)
 	}

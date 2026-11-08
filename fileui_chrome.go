@@ -63,7 +63,7 @@ const (
 func (ui *FileUI) appMenuItems() []gui.MenuItem {
 	selection := ""
 	if code := ui.activeCode(); code != nil && code.Code != nil {
-		selection = code.Selection.Text(code.Code, code.Notes)
+		selection = code.SelectedText()
 	}
 	return []gui.MenuItem{
 		menuOpen:     {Label: "Open…", Shortcut: shortcut("O")},
@@ -94,7 +94,7 @@ func (ui *FileUI) handleAppMenu(gtx layout.Context) {
 		ui.setWatch(!ui.Config.Watch)
 	case menuCopy:
 		if code := ui.activeCode(); code != nil && code.Code != nil {
-			ui.writeClipboardText(gtx, code.Selection.Text(code.Code, code.Notes), "Copied selection")
+			ui.writeClipboardText(gtx, code.SelectedText(), "Copied selection")
 		}
 	case menuBack:
 		ui.navigateBack()

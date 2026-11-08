@@ -13,11 +13,11 @@ func TestTextSelectionAssembly(t *testing.T) {
 		{Text: "RET", NativeText: "ret"},
 	}}
 	selection := TextSelection{View: ViewGoAsm, Anchor: 1, Head: 0, Active: true}
-	if got, want := selection.Text(code, 0), "MOV (R2), R1\nADDQ $1, R1\n"; got != want {
+	if got, want := selection.Text(code, noteLayout{}), "MOV (R2), R1\nADDQ $1, R1\n"; got != want {
 		t.Fatalf("Text() = %q, want %q", got, want)
 	}
 	selection.View = ViewNativeAsm
-	if got, want := selection.Text(code, 0), "MOV (%R2), %R1\nADDQ $1, %R1\n"; got != want {
+	if got, want := selection.Text(code, noteLayout{}), "MOV (%R2), %R1\nADDQ $1, %R1\n"; got != want {
 		t.Fatalf("native Text() = %q, want %q", got, want)
 	}
 }
@@ -28,17 +28,17 @@ func TestTextSelectionSource(t *testing.T) {
 		Blocks: []disasm.SourceBlock{{Lines: []string{"func main() {", "}"}}},
 	}}}
 	selection := TextSelection{View: ViewSource, Anchor: 0, Head: 2, Active: true}
-	if got, want := selection.Text(code, 0), "// main.go\nfunc main() {\n}\n"; got != want {
+	if got, want := selection.Text(code, noteLayout{}), "// main.go\nfunc main() {\n}\n"; got != want {
 		t.Fatalf("Text() = %q, want %q", got, want)
 	}
 }
 
 func TestSourceRowAtYRejectsSpaceAboveContent(t *testing.T) {
 	code := &disasm.Code{Source: []disasm.Source{{File: "main.go"}}}
-	if got := sourceRowAtY(code, 0, 10, 20, 9); got != -1 {
+	if got := sourceRowAtY(code, noteLayout{}, 10, 20, 9); got != -1 {
 		t.Fatalf("sourceRowAtY() = %d, want -1", got)
 	}
-	if got := sourceRowAtY(code, 0, 10, 20, 10); got != 0 {
+	if got := sourceRowAtY(code, noteLayout{}, 10, 20, 10); got != 0 {
 		t.Fatalf("sourceRowAtY() = %d, want 0", got)
 	}
 }
