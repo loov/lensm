@@ -201,6 +201,14 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.TextSizeEditor.Submit = true
 	ui.TextSizeEditor.SetText(strconv.Itoa(settings.TextSize))
 	ui.Comments = comments.NewMemory("")
+	ui.QuickOpen.Lookup = func(pattern string) (disasm.Func, bool) {
+		pc, ok := parseAddress(pattern)
+		if !ok {
+			return nil, false
+		}
+		fn := ui.findPC(pc)
+		return fn, fn != nil
+	}
 	return ui
 }
 
@@ -439,6 +447,24 @@ func (ui *FileUI) findFunc(name string) disasm.Func {
 	return disasm.FindFunc(ui.File, name)
 }
 
+func (ui *FileUI) findPC(pc uint64) disasm.Func {
+	if ui.File == nil {
+		return nil
+	}
+	return disasm.FindPC(ui.File, pc)
+}
+
+// parseAddress reads a hex address such as 0x4a2f10, as stack traces
+// and profiles print them.
+func parseAddress(s string) (uint64, bool) {
+	s, ok := strings.CutPrefix(strings.TrimSpace(s), "0x")
+	if !ok {
+		return 0, false
+	}
+	pc, err := strconv.ParseUint(s, 16, 64)
+	return pc, err == nil
+}
+
 func (ui *FileUI) Layout(gtx layout.Context) {
 	colors := ui.Theme.Colors
 	paint.FillShape(gtx.Ops, colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
@@ -462,7 +488,14 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 	)
 
 	if fn, ok := ui.QuickOpen.Update(gtx); ok {
-		ui.openTab(fn, false)
+		tab := ui.openTab(fn, false)
+		if pc, ok := parseAddress(ui.QuickOpen.Editor.Text()); ok && tab != nil && fn == ui.findPC(pc) {
+			view := comments.ViewGoAsm
+			if !ui.ShowGoAsm.Value {
+				view = comments.ViewNativeAsm
+			}
+			tab.Code.Reveal(comments.Coord{View: view, PC: pc})
+		}
 		// The arrows step through the opened code at once.
 		if code := ui.activeCode(); code != nil {
 			gtx.Execute(key.FocusCmd{Tag: code})

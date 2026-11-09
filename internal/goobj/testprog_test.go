@@ -136,6 +136,11 @@ func checkIndex(t *testing.T, file *File) {
 	if index == nil {
 		t.Fatal("Index = nil")
 	}
+	dot := disasm.FindFunc(file, "main.dot")
+	addr, size := dot.(disasm.Ranged).Range()
+	if got := disasm.FindPC(file, addr+size-1); got != dot {
+		t.Errorf("FindPC(end of main.dot) = %v", got)
+	}
 	if got := index.Callers["main.dot"]; !slices.Contains(got, "main.main") {
 		t.Errorf("callers of main.dot = %q, want main.main", got)
 	}

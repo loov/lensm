@@ -29,6 +29,9 @@ type QuickOpen[T FilterListItem] struct {
 	Editor   widget.Editor
 	Results  []T
 	Selected int
+	// Lookup, if set, finds an item the pattern names exactly, such as
+	// by address, and puts it first.
+	Lookup func(pattern string) (T, bool)
 
 	all     []T
 	list    widget.List
@@ -145,6 +148,11 @@ func (q *QuickOpen[T]) search() {
 	}
 	slices.SortStableFunc(matches, func(a, b match) int { return b.score - a.score })
 	q.Results = q.Results[:0]
+	if q.Lookup != nil {
+		if item, ok := q.Lookup(q.pattern); ok {
+			q.Results = append(q.Results, item)
+		}
+	}
 	for _, m := range matches[:min(len(matches), quickOpenLimit)] {
 		q.Results = append(q.Results, m.item)
 	}

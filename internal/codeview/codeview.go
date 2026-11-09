@@ -205,12 +205,17 @@ func (ui *UI) applyReveal(gtx layout.Context, lineHeight int) {
 		}
 		return
 	}
+	// The instruction that holds the PC: a return address from a stack
+	// trace points past the start of the call's successor.
+	at := -1
 	for i, ix := range ui.Code.Insts {
-		if ix.PC == c.PC {
-			ui.SelectedAsm, ui.SelectedView = i, c.View
-			middle(&ui.asm, i, len(ui.Code.Insts))
-			return
+		if ix.Text != "" && ix.PC <= c.PC {
+			at = i
 		}
+	}
+	if at >= 0 {
+		ui.SelectedAsm, ui.SelectedView = at, c.View
+		middle(&ui.asm, at, len(ui.Code.Insts))
 	}
 }
 

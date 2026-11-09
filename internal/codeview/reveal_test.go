@@ -14,6 +14,7 @@ func TestReveal(t *testing.T) {
 	insts := make([]disasm.Inst, 100)
 	for i := range insts {
 		insts[i].PC = uint64(0x1000 + 4*i)
+		insts[i].Text = "NOP"
 	}
 	lines := make([]string, 100)
 	ui := &UI{Code: &disasm.Code{
@@ -26,6 +27,13 @@ func TestReveal(t *testing.T) {
 	ui.applyReveal(gtx, 10)
 	if ui.SelectedAsm != 50 || ui.SelectedView != ViewNativeAsm || ui.asm.Offset != 100-500-5 {
 		t.Errorf("asm reveal: selected %d %q, offset %v", ui.SelectedAsm, ui.SelectedView, ui.asm.Offset)
+	}
+
+	// A PC inside an instruction, as a return address can be, selects it.
+	ui.Reveal(comments.Coord{View: comments.ViewNativeAsm, PC: 0x1000 + 4*60 + 2})
+	ui.applyReveal(gtx, 10)
+	if ui.SelectedAsm != 60 {
+		t.Errorf("reveal inside an instruction: selected %d, want 60", ui.SelectedAsm)
 	}
 
 	// Row 0 is the file header, so line 10 is row 1. Near the top the

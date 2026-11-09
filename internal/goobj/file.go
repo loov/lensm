@@ -95,6 +95,15 @@ type Func struct {
 
 func (fn *Func) Name() string { return fn.fn.Name }
 
+// Range is where the function's code lies. Wasm functions have no
+// addresses that the code view shows, so they report none.
+func (fn *Func) Range() (addr, size uint64) {
+	if fn.file.bin.Arch == "wasm" {
+		return 0, 0
+	}
+	return fn.fn.Addr, fn.fn.Size
+}
+
 // Close releases the binary. It waits for a disassembly in flight, since
 // Func.Code aliases the file mapping that Close unmaps.
 func (file *File) Close() error {

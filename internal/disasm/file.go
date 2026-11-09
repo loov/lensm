@@ -34,3 +34,21 @@ type Options struct {
 	// This can often contain function documentation.
 	Context int
 }
+
+// Ranged is a Func that knows where its code lies.
+type Ranged interface {
+	// Range is the address of the function's first byte and its size.
+	Range() (addr, size uint64)
+}
+
+// FindPC returns the function whose code holds pc, or nil.
+func FindPC(file File, pc uint64) Func {
+	for _, fn := range file.Funcs() {
+		if r, ok := fn.(Ranged); ok {
+			if addr, size := r.Range(); addr <= pc && pc-addr < size {
+				return fn
+			}
+		}
+	}
+	return nil
+}
