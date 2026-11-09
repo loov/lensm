@@ -58,6 +58,10 @@ type Session struct {
 	Path   string       `json:"path"`
 	Tabs   []TabSession `json:"tabs,omitempty"`
 	Active string       `json:"active,omitempty"`
+	// Profile is the pprof profile shown with the binary, and
+	// ProfileSample the value of it shown.
+	Profile       string `json:"profile,omitempty"`
+	ProfileSample string `json:"profile_sample,omitempty"`
 }
 
 // TabSession is one open tab and the row selected in it, shown again

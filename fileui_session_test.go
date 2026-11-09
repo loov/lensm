@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 
 	"gioui.org/widget/material"
@@ -11,7 +12,7 @@ import (
 )
 
 // TestSessionPerBinary checks that each binary gets its own tabs back,
-// with the row selected in them.
+// with the row selected in them, and its own profile.
 func TestSessionPerBinary(t *testing.T) {
 	functions := []disasm.Func{navigationTestFunc("main.A"), navigationTestFunc("main.B"), navigationTestFunc("main.C")}
 	ui := &FileUI{
@@ -27,10 +28,20 @@ func TestSessionPerBinary(t *testing.T) {
 	ui.openTab(functions[1], false)
 	code := &ui.activeTab().Code
 	code.SelectedView, code.SelectedFile, code.SelectedLine = codeview.ViewSource, "b.go", 7
+	ui.Config.ProfilePath, ui.Config.ProfileSample = "/p/a.pprof", "alloc_space bytes"
 
 	ui.Config.Path = "/bin/b"
 	ui.SetFile(navigationTestFile{funcs: functions})
 	ui.openTab(functions[2], false)
+	if ui.Config.ProfilePath != "" {
+		t.Errorf("b has a's profile %q", ui.Config.ProfilePath)
+	}
+	// Going back to a loads its profile, which fails here for want of
+	// the file, so check what was kept for it.
+	want, _ := filepath.Abs("/p/a.pprof")
+	if s, _ := ui.Settings.session("/bin/a"); s.Profile != want || s.ProfileSample != "alloc_space bytes" {
+		t.Errorf("a's profile kept as %q %q", s.Profile, s.ProfileSample)
+	}
 
 	ui.Config.Path = "/bin/a"
 	ui.SetFile(navigationTestFile{funcs: functions})

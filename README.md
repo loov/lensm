@@ -95,7 +95,8 @@ Keys:
   `-profile`, to see each instruction's and source line's share of the
   samples in a lane beside them (click the profile in the status bar to
   pick which of its values to show, such as allocated bytes instead of
-  in-use ones), and to rank functions by samples in
+  in-use ones; each binary remembers its profile, and with Watch on a
+  rewritten profile reloads), and to rank functions by samples in
   the Summary panel. A call's row shows the time spent below it, marked
   ↳, and a source line counts the time in its calls too, as pprof's
   list does. With a profile the Callers panel puts the callers that

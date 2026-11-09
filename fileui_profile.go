@@ -3,8 +3,10 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"gioui.org/layout"
 
@@ -18,8 +20,12 @@ import (
 // on the UI goroutine; move it to the loader if one is ever slow.
 func (ui *FileUI) loadProfile() {
 	ui.Profile, ui.ProfileFlat = nil, nil
+	defer ui.saveSessionState()
 	if ui.Config.ProfilePath == "" || ui.File == nil {
 		return
+	}
+	if info, err := os.Stat(ui.Config.ProfilePath); err == nil {
+		ui.profileModTime = info.ModTime()
 	}
 	funcs := ui.File.Funcs()
 	type span struct {
@@ -74,6 +80,20 @@ func (ui *FileUI) loadProfile() {
 			ui.ProfileFlat[spans[k].i] += v
 		}
 	}
+}
+
+// profileChanged reports whether, while watching, the profile file
+// changed and has been left alone for a moment, so it isn't read while
+// it is still being written.
+func (ui *FileUI) profileChanged() bool {
+	if !ui.Config.Watch || ui.Profile == nil {
+		return false
+	}
+	info, err := os.Stat(ui.Config.ProfilePath)
+	if err != nil {
+		return false
+	}
+	return !info.ModTime().Equal(ui.profileModTime) && time.Since(info.ModTime()) > 500*time.Millisecond
 }
 
 // layoutProfileStatus names the loaded profile in the status bar; a

@@ -6,6 +6,7 @@ import (
 	"image"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -135,7 +136,9 @@ type FileUI struct {
 	GraphFullBtn widget.Clickable
 	GraphFullTip gui.Tooltip
 	// ProfileMenu picks the profile value to show.
-	ProfileMenu    gui.Menu
+	ProfileMenu gui.Menu
+	// profileModTime is when the loaded profile file last changed.
+	profileModTime time.Time
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -290,6 +293,8 @@ func (ui *FileUI) Run(w *app.Window) error {
 	indexResults := make(chan indexResult)
 	ui.indexResults = indexResults
 	ui.exited = exited
+	profileTick := time.NewTicker(time.Second)
+	defer profileTick.Stop()
 	flushTimer := time.NewTimer(time.Hour)
 	flushTimer.Stop()
 	ui.flushTimer = flushTimer
@@ -363,6 +368,11 @@ func (ui *FileUI) Run(w *app.Window) error {
 		case res := <-codeResults:
 			ui.setTabCode(res)
 			w.Invalidate()
+		case <-profileTick.C:
+			if ui.profileChanged() {
+				ui.loadProfile()
+				w.Invalidate()
+			}
 		case <-flushTimer.C:
 			ui.flushPending()
 			w.Invalidate()
@@ -419,6 +429,14 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		ui.Navigation.Reset()
 		// Keep the rows selected in the binary being left.
 		ui.saveSessionState()
+	}
+	if !reload {
+		// Each binary has its own profile. The first binary keeps one
+		// given on the command line.
+		session, _ := ui.Settings.session(path)
+		if ui.File != nil || ui.Config.ProfilePath == "" {
+			ui.Config.ProfilePath, ui.Config.ProfileSample = session.Profile, session.ProfileSample
+		}
 	}
 	ui.loadedPath = path
 	// A reload keeps each tab where it was, matched by function name.
@@ -991,7 +1009,10 @@ func (ui *FileUI) saveSessionState() {
 	for _, tab := range old.Tabs {
 		oldRows[tab.Func] = tab
 	}
-	session := Session{Path: ui.loadedPath}
+	session := Session{Path: ui.loadedPath, ProfileSample: ui.Config.ProfileSample}
+	if ui.Config.ProfilePath != "" {
+		session.Profile, _ = filepath.Abs(ui.Config.ProfilePath)
+	}
 	for _, tab := range ui.CodeTabs {
 		if tab.Name == "" || tab.Preview {
 			continue
@@ -1007,7 +1028,8 @@ func (ui *FileUI) saveSessionState() {
 	if tab := ui.activeTab(); tab != nil && !tab.Preview {
 		session.Active = tab.Name
 	}
-	if ui.Settings.LastPath == ui.loadedPath && old.Active == session.Active && slices.Equal(old.Tabs, session.Tabs) {
+	if ui.Settings.LastPath == ui.loadedPath && old.Active == session.Active && slices.Equal(old.Tabs, session.Tabs) &&
+		old.Profile == session.Profile && old.ProfileSample == session.ProfileSample {
 		return
 	}
 
