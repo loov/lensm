@@ -246,9 +246,9 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 	case prof.Funcs[tab.Name].Cum == 0:
 		empty = "The profile has no samples in this function."
 	}
-	return ui.panelFrame(gtx, "CALL GRAPH", nil, func(gtx layout.Context) layout.Dimensions {
+	return gui.PanelFrame{Theme: ui.Theme, Title: "CALL GRAPH"}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		if empty != "" {
-			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted(empty, 0.9).Layout)
+			return gui.PanelNote(th, empty)(gtx)
 		}
 		g := &ui.Graph
 		g.build(gtx, th, prof, tab.Name)

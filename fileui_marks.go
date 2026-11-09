@@ -87,7 +87,7 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 		ui.keepActiveTab()
 	}
 
-	return ui.panelFrame(gtx, "DIAGNOSTICS", nil, func(gtx layout.Context) layout.Dimensions {
+	return gui.PanelFrame{Theme: ui.Theme, Title: "DIAGNOSTICS"}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{}
 		for i, m := range disasm.Marks {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -119,7 +119,7 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 		}))
 		if !hasNotes {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted("Open a package directory to build it with the compiler's notes.", 0.9).Layout)
+				return gui.PanelNote(th, "Open a package directory to build it with the compiler's notes.")(gtx)
 			}))
 		} else {
 			for i := range disasm.NoteKinds {
@@ -143,7 +143,7 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 			layout.Rigid(layout.Spacer{Height: 8}.Layout),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				if code == nil || code.Code == nil {
-					return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted("Open a function to see its spills, bounds checks and allocations.", 0.9).Layout)
+					return gui.PanelNote(th, "Open a function to see its spills, bounds checks and allocations.")(gtx)
 				}
 				return ui.MarksList.Layout(gtx, th, len(found), -1, func(i int) (string, string) {
 					ix := code.Code.Insts[found[i]]

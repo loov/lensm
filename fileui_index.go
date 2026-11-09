@@ -67,7 +67,7 @@ func (ui *FileUI) layoutCallersPanel(gtx layout.Context) layout.Dimensions {
 		ui.openTab(ui.findFunc(callers[i]), true)
 		gtx.Execute(op.InvalidateCmd{})
 	}
-	return ui.panelFrame(gtx, "CALLERS", nil, func(gtx layout.Context) layout.Dimensions {
+	return gui.PanelFrame{Theme: ui.Theme, Title: "CALLERS"}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		var empty string
 		switch {
 		case tab == nil:
@@ -78,7 +78,7 @@ func (ui *FileUI) layoutCallersPanel(gtx layout.Context) layout.Dimensions {
 			empty = "No function calls this one directly."
 		}
 		if empty != "" {
-			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted(empty, 0.9).Layout)
+			return gui.PanelNote(th, empty)(gtx)
 		}
 		return ui.CallersList.Layout(gtx, th, len(callers), -1, func(i int) (string, string) {
 			pkg, name := gui.SplitPackage(callers[i])
@@ -151,9 +151,9 @@ func (ui *FileUI) layoutSummaryPanel(gtx layout.Context) layout.Dimensions {
 	sortBy := func(gtx layout.Context) layout.Dimensions {
 		return ui.SummarySelect.Layout(gtx, th, keys, ui.summaryKey)
 	}
-	return ui.panelFrame(gtx, "SUMMARY", sortBy, func(gtx layout.Context) layout.Dimensions {
+	return gui.PanelFrame{Theme: ui.Theme, Title: "SUMMARY", Action: sortBy}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		if index == nil {
-			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted("Scanning the functions...", 0.9).Layout)
+			return gui.PanelNote(th, "Scanning the functions...")(gtx)
 		}
 		return ui.SummaryList.Layout(gtx, th, len(ui.summary), -1, func(i int) (string, string) {
 			k := ui.summary[i]
