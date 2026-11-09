@@ -1,6 +1,7 @@
 package codeview
 
 import (
+	"math"
 	"testing"
 
 	"loov.dev/lensm/internal/disasm"
@@ -33,17 +34,32 @@ func TestScrollAnchors(t *testing.T) {
 		}
 	}
 
+	// A narrow average lands on each anchor and keeps one to one
+	// past the ends.
 	for _, tc := range []struct{ asm, src float32 }{
-		{-1, 1},  // before the first anchor, one to one
-		{0, 2},   // on an anchor
-		{2, 3.5}, // halfway between instructions 1 and 3
-		{5, 6},   // past the last anchor, one to one
+		{-1, 1}, // before the first anchor
+		{0, 2},  // on anchors
+		{1, 3},
+		{3, 4},
+		{6, 7}, // past the last anchor
 	} {
-		if got := followRow(got, anchorAsm, anchorSrc, tc.asm); got != tc.src {
+		if got := followRow(got, anchorAsm, anchorSrc, tc.asm, 0.3); math.Abs(float64(got-tc.src)) > 0.01 {
 			t.Errorf("asm row %v follows to source row %v, want %v", tc.asm, got, tc.src)
 		}
-		if back := followRow(got, anchorSrc, anchorAsm, tc.src); back != tc.asm {
+		if back := followRow(got, anchorSrc, anchorAsm, tc.src, 0.3); math.Abs(float64(back-tc.asm)) > 0.01 {
 			t.Errorf("source row %v follows to asm row %v, want %v", tc.src, back, tc.asm)
 		}
+	}
+
+	// A wide average moves steadily: each row down in the assembly
+	// moves the source down, by no more than the anchors' steepest
+	// step, without jumps.
+	prev := followRow(got, anchorAsm, anchorSrc, -2, 3)
+	for y := float32(-1.9); y < 6; y += 0.1 {
+		next := followRow(got, anchorAsm, anchorSrc, y, 3)
+		if step := next - prev; step <= 0 || step > 0.2 {
+			t.Fatalf("source moved by %v rows at asm row %v", step, y)
+		}
+		prev = next
 	}
 }
