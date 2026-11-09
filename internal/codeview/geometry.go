@@ -223,11 +223,12 @@ func (c codeColumns) sourceMarksLeft(marks disasm.Mark) int {
 	return int(c.source.Max)
 }
 
-// markWidth is the width of the source lane column for m. A count
-// after the letter needs room for two digits.
+// markWidth is the width of the source lane column for m, a narrow
+// cell around the letter. A count after the letter needs room for two
+// digits.
 func (c codeColumns) markWidth(m disasm.Mark) int {
 	if c.sourceMarkWide&m != 0 {
-		return c.lineHeight * 7 / 4
+		return c.lineHeight * 5 / 4
 	}
-	return c.lineHeight
+	return c.lineHeight * 3 / 4
 }

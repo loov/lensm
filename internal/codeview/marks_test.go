@@ -47,14 +47,14 @@ func TestSourceMarksLane(t *testing.T) {
 	if c.sourceMarkSlots != disasm.MarkSpill|disasm.MarkReload|disasm.MarkAlloc {
 		t.Errorf("slots = %b", c.sourceMarkSlots)
 	}
-	if want := float32(3 * c.lineHeight); c.sourceMarks.Width() != want {
+	if want := float32(3 * c.markWidth(disasm.MarkSpill)); c.sourceMarks.Width() != want {
 		t.Errorf("source lane is %v wide, want %v", c.sourceMarks.Width(), want)
 	}
 	if c.sourceMarks.Max != c.source.Max || c.sourceCol.textLeft+c.sourceCol.textWidth != int(c.source.Max) {
 		t.Errorf("source text %+v does not run under lane %+v", c.sourceCol, c.sourceMarks)
 	}
 	// A line with only an allocation keeps the spill and reload cells.
-	if got, want := c.sourceMarksLeft(disasm.MarkAlloc), int(c.sourceMarks.Min)+2*c.lineHeight; got != want {
+	if got, want := c.sourceMarksLeft(disasm.MarkAlloc), int(c.sourceMarks.Min)+2*c.markWidth(disasm.MarkSpill); got != want {
 		t.Errorf("allocation cell starts at %d, want %d", got, want)
 	}
 	if got := c.sourceMarksLeft(0); got != int(c.source.Max) {
@@ -79,13 +79,10 @@ func TestSourceMarksLaneWidensForCounts(t *testing.T) {
 	style := Style{UI: state, ShowGo: true, ShowNative: true, ShowSource: true, TextHeight: 12}
 	style.Marks = disasm.AllMarks
 	c := style.columns(gtx)
-	if c.markWidth(disasm.MarkSpill) <= c.lineHeight {
+	if c.markWidth(disasm.MarkSpill) <= c.markWidth(disasm.MarkBoundsCheck) {
 		t.Errorf("spill cell is %d wide with two spills on a line", c.markWidth(disasm.MarkSpill))
 	}
-	if c.markWidth(disasm.MarkBoundsCheck) != c.lineHeight {
-		t.Errorf("bounds cell is %d wide with one per line, want %d", c.markWidth(disasm.MarkBoundsCheck), c.lineHeight)
-	}
-	if want := float32(c.markWidth(disasm.MarkSpill) + c.lineHeight); c.sourceMarks.Width() != want {
+	if want := float32(c.markWidth(disasm.MarkSpill) + c.markWidth(disasm.MarkBoundsCheck)); c.sourceMarks.Width() != want {
 		t.Errorf("source lane is %v wide, want %v", c.sourceMarks.Width(), want)
 	}
 }

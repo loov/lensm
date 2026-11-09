@@ -466,6 +466,7 @@ func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slo
 	height := c.lineHeight
 	inset := height / 10
 	for i, m := range disasm.Marks {
+		insetX := inset
 		width := height
 		if widthOf != nil {
 			width = widthOf(m)
@@ -479,7 +480,10 @@ func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slo
 		col := MarkColor(ui.Theme.Colors.Marks, m)
 		bg := col
 		bg.A = 0x28
-		rect := image.Rect(x+inset, top+inset, x+width-inset, top+height-inset)
+		if width < height {
+			insetX = height / 20 // a narrow source cell
+		}
+		rect := image.Rect(x+insetX, top+inset, x+width-insetX, top+height-inset)
 		paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, rect.Dy()/4).Op(gtx.Ops))
 
 		// Measure the letter and count to centre them in the cell.
