@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"loov.dev/lensm/internal/atomicfile"
 	"loov.dev/lensm/internal/comments"
@@ -38,8 +37,55 @@ type AppSettings struct {
 	TextSize        int      `json:"text_size,omitempty"`
 	SidebarRatio    float32  `json:"sidebar_ratio,omitempty"`
 	LastPath        string   `json:"last_path,omitempty"`
-	OpenTabs        []string `json:"open_tabs,omitempty"`
-	ActiveTab       string   `json:"active_tab,omitempty"`
+	// Sessions are the tabs left open in each binary, most recent first.
+	Sessions []Session `json:"sessions,omitempty"`
+
+	// OpenTabs and ActiveTab are the single session of older versions,
+	// read once into Sessions.
+	OpenTabs  []string `json:"open_tabs,omitempty"`
+	ActiveTab string   `json:"active_tab,omitempty"`
+}
+
+// maxSessions is how many binaries keep their tabs.
+const maxSessions = 20
+
+// Session is the tabs open in one binary.
+type Session struct {
+	Path   string       `json:"path"`
+	Tabs   []TabSession `json:"tabs,omitempty"`
+	Active string       `json:"active,omitempty"`
+}
+
+// TabSession is one open tab and the row selected in it, shown again
+// when the tab reopens.
+type TabSession struct {
+	Func string        `json:"func"`
+	View comments.View `json:"view,omitempty"`
+	File string        `json:"file,omitempty"`
+	Line int           `json:"line,omitempty"`
+	PC   uint64        `json:"pc,omitempty"`
+}
+
+// session returns the session kept for path.
+func (settings AppSettings) session(path string) (Session, bool) {
+	for _, s := range settings.Sessions {
+		if s.Path == path {
+			return s, true
+		}
+	}
+	return Session{}, false
+}
+
+// withSession puts s first, replacing the one for its path.
+func (settings AppSettings) withSession(s Session) AppSettings {
+	sessions := []Session{s}
+	for _, old := range settings.Sessions {
+		if old.Path != s.Path && len(sessions) < maxSessions {
+			sessions = append(sessions, old)
+		}
+	}
+	settings.Sessions = sessions
+	return settings
 }
 
 func DefaultAppSettings() AppSettings {
@@ -95,10 +141,36 @@ func (settings AppSettings) normalized() AppSettings {
 		settings.SidebarRatio = defaults.SidebarRatio
 	}
 	settings.LastPath = comments.CleanPath(settings.LastPath)
-	settings.OpenTabs = cleanFuncNames(settings.OpenTabs)
-	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
-		settings.ActiveTab = ""
+	if len(settings.OpenTabs) > 0 && settings.LastPath != "" {
+		if _, ok := settings.session(settings.LastPath); !ok {
+			s := Session{Path: settings.LastPath, Active: settings.ActiveTab}
+			for _, name := range settings.OpenTabs {
+				s.Tabs = append(s.Tabs, TabSession{Func: name})
+			}
+			settings = settings.withSession(s)
+		}
 	}
+	settings.OpenTabs, settings.ActiveTab = nil, ""
+	sessions := settings.Sessions[:0:0]
+	for _, s := range settings.Sessions {
+		s.Path = comments.CleanPath(s.Path)
+		seen := map[string]bool{}
+		tabs := s.Tabs[:0:0]
+		for _, tab := range s.Tabs {
+			if tab.Func != "" && !seen[tab.Func] {
+				seen[tab.Func] = true
+				tabs = append(tabs, tab)
+			}
+		}
+		s.Tabs = tabs
+		if !seen[s.Active] {
+			s.Active = ""
+		}
+		if s.Path != "" && len(sessions) < maxSessions {
+			sessions = append(sessions, s)
+		}
+	}
+	settings.Sessions = sessions
 	return settings
 }
 

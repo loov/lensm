@@ -248,7 +248,11 @@ func (ui *FileUI) Run(w *app.Window) error {
 	flushTimer := time.NewTimer(time.Hour)
 	flushTimer.Stop()
 	ui.flushTimer = flushTimer
-	defer ui.flushPending()
+	defer func() {
+		// The selected rows change without a save; keep them too.
+		ui.saveSessionState()
+		ui.flushPending()
+	}()
 	defer func() {
 		ui.window = nil
 		ui.picker = nil
@@ -363,6 +367,8 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	reload := ui.File != nil && path == ui.loadedPath
 	if !reload {
 		ui.Navigation.Reset()
+		// Keep the rows selected in the binary being left.
+		ui.saveSessionState()
 	}
 	ui.loadedPath = path
 	// A reload keeps each tab where it was, matched by function name.
@@ -373,7 +379,6 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		}
 	}
 
-	initialLoad := ui.File == nil
 	if ui.File != nil {
 		_ = ui.File.Close()
 	}
@@ -386,10 +391,19 @@ func (ui *FileUI) SetFile(file disasm.File) {
 	if tab := ui.activeTab(); tab != nil {
 		activeName = tab.Name
 	}
-	if initialLoad && comments.CleanPath(ui.Config.Path) == ui.Settings.LastPath && len(ui.Settings.OpenTabs) > 0 {
-		openNames = append(openNames[:0], ui.Settings.OpenTabs...)
-		activeName = ui.Settings.ActiveTab
-		if activeName == "" && len(openNames) > 0 {
+	// A binary opened before gets its own tabs back, each at the row
+	// that was selected.
+	rows := map[string]comments.Coord{}
+	if session, ok := ui.Settings.session(path); ok && !reload && len(session.Tabs) > 0 {
+		openNames = openNames[:0]
+		for _, tab := range session.Tabs {
+			openNames = append(openNames, tab.Func)
+			if tab.View != "" {
+				rows[tab.Func] = comments.Coord{View: tab.View, File: tab.File, Line: tab.Line, PC: tab.PC}
+			}
+		}
+		activeName = session.Active
+		if activeName == "" {
 			activeName = openNames[0]
 		}
 	}
@@ -415,6 +429,8 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		if old, ok := previous[name]; ok {
 			tab.Code.KeepView(&old.Code)
 			tab.Preview = old.Preview
+		} else if row, ok := rows[name]; ok {
+			tab.Code.Reveal(row)
 		}
 		if name == activeName {
 			ui.ActiveTab = len(ui.CodeTabs) - 1
@@ -860,41 +876,52 @@ func (ui *FileUI) afterFileLoaded() {
 }
 
 func (ui *FileUI) saveSessionState() {
-	if ui.File == nil {
+	if ui.File == nil || ui.loadedPath == "" {
 		return
 	}
-	path := comments.CleanPath(ui.Config.Path)
-	if path == "" {
-		return
+	old, _ := ui.Settings.session(ui.loadedPath)
+	oldRows := map[string]TabSession{}
+	for _, tab := range old.Tabs {
+		oldRows[tab.Func] = tab
 	}
-
-	openTabs := make([]string, 0, len(ui.CodeTabs))
+	session := Session{Path: ui.loadedPath}
 	for _, tab := range ui.CodeTabs {
-		if tab.Name != "" && !tab.Preview {
-			openTabs = append(openTabs, tab.Name)
+		if tab.Name == "" || tab.Preview {
+			continue
 		}
+		saved, ok := selectedRow(tab)
+		if !ok {
+			// Not shown since it reopened, or nothing selected.
+			saved = oldRows[tab.Name]
+		}
+		saved.Func = tab.Name
+		session.Tabs = append(session.Tabs, saved)
 	}
-	activeTab := ""
-	if tab := ui.activeTab(); tab != nil {
-		activeTab = tab.Name
+	if tab := ui.activeTab(); tab != nil && !tab.Preview {
+		session.Active = tab.Name
 	}
-
-	settings := ui.Settings
-	settings.LastPath = path
-	settings.OpenTabs = cleanFuncNames(openTabs)
-	settings.ActiveTab = activeTab
-	if settings.ActiveTab != "" && !slices.Contains(settings.OpenTabs, settings.ActiveTab) {
-		settings.ActiveTab = ""
-	}
-	if ui.Settings.LastPath == settings.LastPath &&
-		slices.Equal(ui.Settings.OpenTabs, settings.OpenTabs) &&
-		ui.Settings.ActiveTab == settings.ActiveTab {
+	if ui.Settings.LastPath == ui.loadedPath && old.Active == session.Active && slices.Equal(old.Tabs, session.Tabs) {
 		return
 	}
 
+	settings := ui.Settings.withSession(session)
+	settings.LastPath = ui.loadedPath
 	ui.Settings = settings
 	ui.sessionDirty = true
 	ui.scheduleFlush()
+}
+
+// selectedRow is the row selected in tab, if any.
+func selectedRow(tab *CodeTab) (TabSession, bool) {
+	code := &tab.Code
+	switch {
+	case code.Code == nil:
+	case code.SelectedView == codeview.ViewSource && code.SelectedLine > 0:
+		return TabSession{View: code.SelectedView, File: code.SelectedFile, Line: code.SelectedLine}, true
+	case 0 <= code.SelectedAsm && code.SelectedAsm < len(code.Code.Insts):
+		return TabSession{View: code.SelectedView, PC: code.Code.Insts[code.SelectedAsm].PC}, true
+	}
+	return TabSession{}, false
 }
 
 func (ui *FileUI) writeClipboardText(gtx layout.Context, text, status string) {
