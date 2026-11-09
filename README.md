@@ -2,7 +2,7 @@
 
 A tool for viewing assembly and source.
 
-![Screenshot](./screenshot.gif)
+![Screenshot](./screenshot.webp)
 
 Install with the usual Go commands:
 
