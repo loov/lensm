@@ -67,7 +67,7 @@ type FileUI struct {
 	// Active code view.
 	CodeTabs  []*CodeTab
 	ActiveTab int
-	Tabs      widget.List
+	Tabs      gui.Tabs
 
 	// split divides the function list from the code view.
 	split gui.Split
@@ -231,7 +231,6 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.Funcs = gui.NewFilterList[disasm.Func]()
 	ui.ActiveTab = -1
 	ui.Navigation.Reset()
-	ui.Tabs.List.Axis = layout.Horizontal
 	ui.ShowGoAsm.Value = settings.ShowGoAsm
 	ui.ShowNativeAsm.Value = settings.ShowNativeAsm
 	ui.ShowDiagnostics.Value = !settings.HideDiagnostics
@@ -873,11 +872,11 @@ func (ui *FileUI) layoutMain(gtx layout.Context, colors gui.UIColors) layout.Dim
 							if ui.File == nil {
 								return layout.Dimensions{}
 							}
-							return ui.layoutCodeTabs(gtx, colors)
+							return ui.layoutCodeTabs(gtx)
 						}),
 					)
 				}
-				return ui.layoutCodeTabs(gtx, colors)
+				return ui.layoutCodeTabs(gtx)
 			}),
 			layout.Rigid(ui.layoutCrumbs),
 			layout.Rigid(ui.layoutFind),

@@ -1,15 +1,8 @@
 package main
 
 import (
-	"image"
-
-	"gioui.org/font"
 	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
 	"gioui.org/widget"
-	"gioui.org/widget/material"
 
 	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/disasm"
@@ -248,7 +241,7 @@ func (ui *FileUI) closeTab(index int) {
 	ui.saveSessionState()
 }
 
-func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
+func (ui *FileUI) layoutCodeTabs(gtx layout.Context) layout.Dimensions {
 	for i := 0; i < len(ui.CodeTabs); i++ {
 		tab := ui.CodeTabs[i]
 		for tab.Tab.Clicked(gtx) {
@@ -264,102 +257,9 @@ func (ui *FileUI) layoutCodeTabs(gtx layout.Context, colors gui.UIColors) layout
 		}
 	}
 
-	if len(ui.CodeTabs) == 0 {
-		return layout.Dimensions{}
+	tabs := make([]gui.Tab, len(ui.CodeTabs))
+	for i, tab := range ui.CodeTabs {
+		tabs[i] = gui.Tab{Tab: &tab.Tab, Close: &tab.Close, Label: gui.ShortName(tab.Name), Italic: tab.Preview}
 	}
-
-	// 32 dp at the default 12 sp, growing with the text size.
-	height := gtx.Metric.Sp(ui.Theme.TextSize) + gtx.Metric.Dp(20)
-	availableWidth := gtx.Constraints.Max.X
-	gtx.Constraints = layout.Exact(image.Pt(availableWidth, height))
-	paint.FillShape(gtx.Ops, colors.SecondaryBackground, clip.Rect{Max: gtx.Constraints.Max}.Op())
-	paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{Min: image.Pt(0, height-gtx.Metric.Dp(1)), Max: gtx.Constraints.Max}.Op())
-
-	tabWidth := gtx.Metric.Dp(220)
-	minTabWidth := gtx.Metric.Dp(120)
-	if len(ui.CodeTabs) <= 3 && availableWidth > 0 {
-		tabWidth = min(tabWidth, max(minTabWidth, availableWidth/len(ui.CodeTabs)))
-	}
-	if tabWidth < minTabWidth {
-		tabWidth = minTabWidth
-	}
-
-	list := material.List(ui.Theme.Theme, &ui.Tabs)
-	list.AnchorStrategy = material.Overlay
-	ui.Theme.StyleScrollbar(&list.ScrollbarStyle)
-	list.Indicator.MinorWidth = 3
-	return list.Layout(gtx, len(ui.CodeTabs), func(gtx layout.Context, index int) layout.Dimensions {
-		gtx.Constraints = layout.Exact(image.Pt(tabWidth, height))
-		return ui.layoutCodeTab(gtx, colors, ui.CodeTabs[index], index == ui.ActiveTab)
-	})
-}
-
-func (ui *FileUI) layoutCodeTab(gtx layout.Context, colors gui.UIColors, tab *CodeTab, active bool) layout.Dimensions {
-	size := gtx.Constraints.Max
-	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
-
-	hovered := tab.Tab.Hovered() || tab.Close.Hovered()
-	bg := colors.SecondaryBackground
-	if active {
-		bg = colors.Background
-	} else if hovered {
-		bg = colors.Hover
-	}
-	paint.FillShape(gtx.Ops, bg, clip.Rect{Max: size}.Op())
-	if active {
-		paint.FillShape(gtx.Ops, colors.Accent, clip.Rect{Max: image.Pt(size.X, gtx.Metric.Dp(2))}.Op())
-	} else {
-		// Inactive tabs sit on the strip's bottom border.
-		paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{Min: image.Pt(0, size.Y-gtx.Metric.Dp(1)), Max: size}.Op())
-	}
-	paint.FillShape(gtx.Ops, colors.Divider, clip.Rect{
-		Min: image.Pt(size.X-1, 0),
-		Max: size,
-	}.Op())
-
-	layout.Inset{Right: 6, Left: 14}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints = layout.Exact(gtx.Constraints.Max)
-				return tab.Tab.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					size := gtx.Constraints.Max
-					defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
-
-					label := ui.Theme.Label(gui.ShortName(tab.Name), 0.92)
-					label.MaxLines = 1
-					if !active {
-						label.Color = colors.MutedText
-					}
-					if tab.Preview {
-						label.Font.Style = font.Italic
-					}
-					dims := gui.Start(gtx, label.Layout)
-					return layout.Dimensions{Size: size, Baseline: dims.Baseline}
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				// The close button shows on the active and hovered tabs
-				// only, but keeps its space so names don't shift.
-				side := gtx.Metric.Dp(20)
-				gtx.Constraints = layout.Exact(image.Pt(side, gtx.Constraints.Max.Y))
-				return tab.Close.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					size := gtx.Constraints.Max
-					if !active && !hovered {
-						return layout.Dimensions{Size: size}
-					}
-					box := image.Rectangle{Min: image.Pt(0, (size.Y-side)/2), Max: image.Pt(side, (size.Y+side)/2)}
-					if tab.Close.Hovered() {
-						paint.FillShape(gtx.Ops, colors.Hover, clip.UniformRRect(box, gtx.Metric.Dp(3)).Op(gtx.Ops))
-					}
-					icon := gtx.Metric.Dp(12)
-					defer op.Offset(image.Pt((side-icon)/2, (size.Y-icon)/2)).Push(gtx.Ops).Pop()
-					gtx.Constraints = layout.Exact(image.Pt(icon, icon))
-					CloseIcon.Layout(gtx, colors.MutedText)
-					return layout.Dimensions{Size: size}
-				})
-			}),
-		)
-	})
-
-	return layout.Dimensions{Size: size}
+	return ui.Tabs.Layout(gtx, ui.Theme, tabs, ui.ActiveTab)
 }

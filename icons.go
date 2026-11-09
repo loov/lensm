@@ -15,7 +15,6 @@ func mustIcon(data []byte) *widget.Icon {
 
 var (
 	SettingsIcon       = mustIcon(icons.ImageTune)
-	CloseIcon          = mustIcon(icons.NavigationClose)
 	FunctionsIcon      = mustIcon(icons.EditorFormatListBulleted)
 	CommentsIcon       = mustIcon(icons.CommunicationComment)
 	HistoryIcon        = mustIcon(icons.ActionHistory)

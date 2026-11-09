@@ -17,4 +17,5 @@ var (
 	CheckIcon      = mustIcon(icons.NavigationCheck)
 	SearchIcon     = mustIcon(icons.ActionSearch)
 	ExpandMoreIcon = mustIcon(icons.NavigationExpandMore)
+	CloseIcon      = mustIcon(icons.NavigationClose)
 )
