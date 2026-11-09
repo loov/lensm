@@ -277,6 +277,8 @@ func (ui *FileUI) Run(w *app.Window) error {
 			w.Invalidate()
 		case <-invalidate:
 			w.Invalidate()
+		case <-windowClosed:
+			return nil
 		case item := <-menuActions:
 			ui.menuQueue = append(ui.menuQueue, item)
 			w.Invalidate()

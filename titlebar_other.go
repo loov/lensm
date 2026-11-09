@@ -13,6 +13,9 @@ const customTitleBar = false
 
 var overTitleDrag atomic.Bool
 
+// windowClosed never receives: Gio's DestroyEvent reports the close.
+var windowClosed chan struct{}
+
 type titleBar struct{}
 
 func (*titleBar) event(event.Event) {}

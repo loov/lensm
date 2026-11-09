@@ -6,7 +6,10 @@
 
 #include "_cgo_export.h"
 
-static NSWindow *window;
+// window is weak: a strong reference kept the closed window, and with
+// it Gio's view, alive, so Gio never sent DestroyEvent and lensm kept
+// running.
+static __weak NSWindow *window;
 static CGFloat barHeight;
 static CGFloat buttonsLeft;
 
@@ -70,6 +73,11 @@ void lensmTitleBar(uintptr_t view, double height, double left) {
 					dispatch_async(dispatch_get_main_queue(), ^{ placeButtons(); });
 				}];
 			}
+			// Gio reports the close only once the view is freed, which
+			// can wait for AppKit, so tell lensm when the window closes.
+			[center addObserverForName:NSWindowWillCloseNotification object:w queue:nil usingBlock:^(NSNotification *n) {
+				lensmWindowClosed();
+			}];
 			// A double-click on empty toolbar space does what the
 			// user set for title bars: zoom, minimize or nothing. Gio
 			// starts a window drag on the press and never sees it.

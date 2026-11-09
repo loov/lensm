@@ -30,6 +30,18 @@ func lensmOverTitleDrag() C.int {
 	return 0
 }
 
+// windowClosed receives when the window closes, so Run returns
+// without waiting for Gio's DestroyEvent.
+var windowClosed = make(chan struct{}, 1)
+
+//export lensmWindowClosed
+func lensmWindowClosed() {
+	select {
+	case windowClosed <- struct{}{}:
+	default:
+	}
+}
+
 // titleBar places the window buttons in the toolbar once the view
 // exists, and again after Gio configures the window, which hides them.
 type titleBar struct{ view uintptr }
