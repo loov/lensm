@@ -526,7 +526,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		paint.FillShape(gtx.Ops, col, clip.Stroke{Path: path.End(), Width: width}.Op())
 		arrowHead(gtx, at(e.Path[len(e.Path)-2]), at(e.Path[len(e.Path)-1]), float32(gtx.Metric.Dp(7))*scale/gtx.Metric.PxPerDp, col)
 		if e.LabelSize != (glayout.Vector{}) {
-			drawText(gtx, th, ge.Label, at(e.LabelCenter), unit.Sp(float32(e.FontSize)*scale/gtx.Metric.PxPerDp), c.MutedText, font.Normal)
+			drawText(gtx, th, ge.Label, at(e.LabelCenter), unit.Sp(float32(e.FontSize)*scale/gtx.Metric.PxPerDp), c.Text, font.Normal)
 		}
 	}
 
@@ -560,7 +560,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		for k, line := range lines {
 			col, weight := c.Text, font.Medium
 			if strings.ContainsRune(line, '%') {
-				col, weight = c.MutedText, font.Normal
+				col, weight = c.Text, font.Normal
 			}
 			drawText(gtx, th, line, f32.Pt(center.X, top+float32(k)*lineHeight), size, col, weight)
 		}
