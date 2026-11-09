@@ -21,8 +21,9 @@ type expr struct {
 	prec int
 	// not is the comparison's negation, for eqz to use.
 	not string
-	// bits marks a shift or an and, which Go binds tighter than + and
-	// C looser, so it gets parentheses inside arithmetic either way.
+	// bits marks a shift or a bitwise operator, which Go and C bind
+	// differently against arithmetic and comparisons, so it gets
+	// parentheses inside those either way.
 	bits bool
 	// narrow is the 32-bit value an extension widened, which wrapping
 	// gives back.
@@ -137,9 +138,9 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 		// cases is set for a block that a switch's case goes to: its end
 		// starts that case.
 		cases string
-		// selector is the local a switch right inside the loop picks
-		// its case by, plus one; 0 when there is none.
-		selector uint32
+		// selector is the switch right inside a loop, nil when there is
+		// none.
+		selector *wasmSelector
 		loop     bool
 		// cond marks an if, and adj is where l1 pointed when it started.
 		cond     bool
@@ -245,12 +246,17 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 	push := func(text string, prec int) { pushExpr(expr{text: text, prec: prec}) }
 	// wrap puts e in parentheses when it binds looser than prec.
 	wrap := func(e expr, prec int) string {
-		if e.prec < prec || e.bits && (prec == 4 || prec == 5) {
+		if e.prec < prec || e.bits && prec >= 3 && prec <= 5 {
 			return "(" + e.text + ")"
 		}
 		return e.text
 	}
 	frames = []block{{label: "", result: len(ftype.Results)}}
+	// cut drops the values of the current block: the code after a
+	// branch or trap doesn't run until the block ends.
+	cut := func() {
+		stack = stack[:min(len(stack), frames[len(frames)-1].height)]
+	}
 	// leftover spells the values a block leaves as an assignment to its
 	// label, so they show before the block's end.
 	leftover := func(b *block) string {
@@ -283,15 +289,17 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 			if op == "if" {
 				cond = pop().text
 			}
+			// A call waiting on the stack ran before the block.
+			settle(readsCall)
 			b.height = len(stack)
 			frames = append(frames, b)
 			switch {
 			case b.cases != "":
 				// The switch spells it.
 			case op == "if":
-				text = "if (" + cond + ") {"
+				text = strings.TrimSpace("if "+b.label) + " (" + cond + ") {"
 			case op == "try_table":
-				text = "try " + b.label + " {"
+				text = strings.TrimSpace("try "+b.label) + " {"
 			default:
 				text = strings.TrimSpace(op+" "+b.label) + " {"
 			}
@@ -328,6 +336,7 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 			if op != "br" {
 				cond = pop().text
 			}
+			settle(readsCall)
 			target := func(depth uint32) string {
 				if int(depth) >= len(frames) {
 					return "?"
@@ -335,6 +344,9 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 				b := frames[len(frames)-1-int(depth)]
 				switch {
 				case int(depth) == len(frames)-1:
+					if len(ftype.Results) > 0 && len(stack) > 0 {
+						return "return " + stack[len(stack)-1].text
+					}
 					return "return"
 				case b.cases != "":
 					return "goto " + b.cases
@@ -356,14 +368,21 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 				return b.label + " = " + stack[len(stack)-1].text + "; "
 			}
 			// Setting a switch's local to a constant and going back to its
-			// loop goes to a case: Go jumps that way inside a function.
+			// loop goes to a case. Go jumps that way inside a function and
+			// never reads PC_B after, so there the write goes unsaid.
 			if op == "br" && i >= 2 && int(in.BranchDepth) < len(frames) {
 				b := frames[len(frames)-1-int(in.BranchDepth)]
-				set, value := &body[i-1], insts[i-2].Text
-				if b.loop && b.selector > 0 && set.Kind == wasmir.InstrLocalSet && set.LocalIndex == b.selector-1 && strings.HasPrefix(value, "i32.const ") {
-					insts[i-1].NativeText = ""
-					text = "goto case " + strings.TrimPrefix(value, "i32.const ")
-					stack = stack[:0:0]
+				set := &body[i-1]
+				value, err := strconv.Atoi(strings.TrimPrefix(insts[i-2].Text, "i32.const "))
+				if b.loop && b.selector != nil && set.Kind == wasmir.InstrLocalSet && set.LocalIndex == b.selector.local && err == nil && strings.HasPrefix(insts[i-2].Text, "i32.const ") {
+					if goWasm && !strings.Contains(insts[i-1].NativeText, ";") {
+						insts[i-1].NativeText = ""
+					}
+					text = "goto case " + strconv.Itoa(value)
+					if value < 0 || value >= b.selector.cases {
+						text = "goto default"
+					}
+					cut()
 					break
 				}
 			}
@@ -379,25 +398,31 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 			case switches[i]:
 				text = "switch (" + cond + ")"
 			default:
+				var carried []string
+				for _, d := range append(slices.Clone(in.BranchTable), in.BranchDefault) {
+					if c := carry(d); c != "" && !slices.Contains(carried, c) {
+						carried = append(carried, c)
+					}
+				}
 				var cases []string
 				for _, d := range in.BranchTable {
 					cases = append(cases, strings.TrimPrefix(strings.TrimPrefix(target(d), "break "), "continue "))
 				}
 				def := strings.TrimPrefix(strings.TrimPrefix(target(in.BranchDefault), "break "), "continue ")
-				text = "switch (" + cond + ") " + strings.Join(cases, ", ") + " else " + def
+				text = strings.Join(carried, "") + "switch (" + cond + ") " + strings.Join(cases, ", ") + " else " + def
 			}
 			if op != "br_if" {
 				// What follows is unreachable until the block ends.
-				stack = stack[:0:0]
+				cut()
 			}
 		case op == "return":
 			text = strings.TrimSpace("return " + strings.Join(popN(len(ftype.Results)), ", "))
 		case op == "unreachable":
 			text = "unreachable"
-			stack = stack[:0:0]
+			cut()
 		case op == "nop":
 		case op == "drop":
-			// Only a call does something worth showing.
+			// Only a call or memory.grow does something worth showing.
 			if v := pop(); v.reads.call && v.row >= 0 {
 				text = v.text
 			}
@@ -483,7 +508,8 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 		case op == "memory.grow":
 			n := pop()
 			settle(readsMemory)
-			own.memory = true
+			// It changes memory as a call might, and drop shows it.
+			own.memory, own.call = true, true
 			push("memory_grow("+n.text+")", 9)
 		case op == "memory.copy" || op == "memory.fill":
 			args := popN(3)
@@ -496,7 +522,7 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 				push(short+"("+a.text+", "+b.text+")", 9)
 				break
 			}
-			e := expr{text: wrap(a, o.prec) + " " + o.text + " " + wrap(b, o.prec+1), prec: o.prec, bits: strings.HasPrefix(short, "sh") || short == "and"}
+			e := expr{text: wrap(a, o.prec) + " " + o.text + " " + wrap(b, o.prec+1), prec: o.prec, bits: strings.HasPrefix(short, "sh") || short == "and" || short == "or" || short == "xor"}
 			// An address on Go's stack stays one past an offset.
 			switch {
 			case short == "add" && a.sp && b.konst:
@@ -542,9 +568,9 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 			pushExpr(e)
 		default:
 			// An instruction this doesn't know the operands of: show it
-			// and start over with an unknown stack.
+			// and start the block over with an unknown stack.
 			text = insts[i].Text
-			stack = stack[:0:0]
+			cut()
 		}
 		insts[i].NativeText = text
 	}
@@ -643,7 +669,11 @@ func address(base expr, offset uint64) string {
 	case base.text == "0":
 		return strconv.FormatUint(offset, 10)
 	}
-	return base.text + " + " + strconv.FormatUint(offset, 10)
+	text := base.text
+	if base.prec < 4 || base.bits {
+		text = "(" + text + ")"
+	}
+	return text + " + " + strconv.FormatUint(offset, 10)
 }
 
 func typeOf(m *wasmir.Module, i uint32) wasmir.TypeDef {
@@ -693,6 +723,13 @@ func wasmTargets(body []wasmir.Instruction) map[int]bool {
 	return targeted
 }
 
+// wasmSelector is a switch on a local: the value of local picks one
+// of its cases, or the default from cases on.
+type wasmSelector struct {
+	local uint32
+	cases int
+}
+
 // wasmSwitches finds the br_tables that pick a case: blocks opened one
 // right after another, then the value to switch on, then a br_table
 // whose every target is one of those blocks. Each such block's end
@@ -701,8 +738,8 @@ func wasmTargets(body []wasmir.Instruction) map[int]bool {
 //
 // When the switch is on a local, right inside a loop, selectors holds
 // that local plus one by the loop's row.
-func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.Inst) (cases map[int]string, switches map[int]bool, selectors map[int]uint32) {
-	cases, switches, selectors = map[int]string{}, map[int]bool{}, map[int]uint32{}
+func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.Inst) (cases map[int]string, switches map[int]bool, selectors map[int]*wasmSelector) {
+	cases, switches, selectors = map[int]string{}, map[int]bool{}, map[int]*wasmSelector{}
 	for j, in := range body {
 		if in.Kind != wasmir.InstrBrTable {
 			continue
@@ -738,7 +775,7 @@ func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.In
 		}
 		switches[j] = true
 		if int(deepest)+1 < len(run) && body[run[deepest+1]].Kind == wasmir.InstrLoop && j-1 == run[0]+1 && body[j-1].Kind == wasmir.InstrLocalGet {
-			selectors[run[deepest+1]] = body[j-1].LocalIndex + 1
+			selectors[run[deepest+1]] = &wasmSelector{local: body[j-1].LocalIndex, cases: len(in.BranchTable)}
 		}
 		for d := uint32(0); d <= deepest; d++ {
 			text := "default"
