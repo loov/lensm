@@ -5,11 +5,13 @@ import (
 	"hash/fnv"
 	"image"
 	"image/color"
+	"math"
 	"slices"
 	"strings"
 
 	"gioui.org/f32"
 	"gioui.org/io/event"
+	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -94,11 +96,34 @@ type flameGraph struct {
 	// zoom is the path of the frame drawn full width.
 	zoom []string
 
-	offset  float32 // vertical scroll, in px
+	offset float32 // vertical scroll, in px
+	// view0 and view1 are the part of the zoomed frame's width shown,
+	// as fractions of it; view1 0 means 1, the whole.
+	view0, view1 float64
+
 	hover   *flameNode
 	pointer f32.Point
 	inside  bool
 	press   bool
+	// drag is where the pointer was when last dragged, and moved
+	// whether the press moved far enough to pan instead of click.
+	drag  f32.Point
+	moved bool
+}
+
+// view is the shown part of the zoomed frame, as fractions.
+func (f *flameGraph) view() (float64, float64) {
+	if f.view1 <= f.view0 {
+		return 0, 1
+	}
+	return f.view0, f.view1
+}
+
+// setView shows [v0, v0+w) of the zoomed frame, kept inside it.
+func (f *flameGraph) setView(v0, w float64) {
+	w = min(max(w, 1e-4), 1)
+	v0 = min(max(v0, 0), 1-w)
+	f.view0, f.view1 = v0, v0+w
 }
 
 // flameBox is a frame placed on screen.
@@ -135,11 +160,12 @@ func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) []flameB
 		boxes = append(boxes, flameBox{image.Rect(0, y, size.X, y+row-1), n})
 		y += row
 	}
-	scale := float64(size.X) / float64(max(zoomed.value, 1))
+	v0, v1 := f.view()
+	scale := float64(size.X) / float64(max(zoomed.value, 1)) / (v1 - v0)
 	var place func(n *flameNode, x0 float64, y int)
 	place = func(n *flameNode, x0 float64, y int) {
 		w := float64(n.value) * scale
-		if w < 1 {
+		if w < 1 || x0 > float64(size.X) || x0+w < 0 {
 			return
 		}
 		boxes = append(boxes, flameBox{image.Rect(int(x0), y, int(x0+w)-1, y+row-1), n})
@@ -149,7 +175,7 @@ func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) []flameB
 			x += float64(c.value) * scale
 		}
 	}
-	place(zoomed, 0, y)
+	place(zoomed, -v0*float64(zoomed.value)*scale, y)
 	return boxes
 }
 
@@ -179,7 +205,8 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
 			Target:  f,
-			Kinds:   pointer.Move | pointer.Press | pointer.Release | pointer.Leave | pointer.Scroll,
+			Kinds:   pointer.Move | pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Leave | pointer.Scroll,
+			ScrollX: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
 			ScrollY: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
 		})
 		if !ok {
@@ -191,21 +218,44 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 		}
 		switch e.Kind {
 		case pointer.Scroll:
-			f.offset += e.Scroll.Y
+			v0, v1 := f.view()
+			w := v1 - v0
+			if e.Modifiers.Contain(key.ModShortcut) {
+				// Zoom about the pointer.
+				at := float64(e.Position.X) / float64(size.X)
+				nw := w * math.Exp(float64(e.Scroll.Y)/200)
+				f.setView(v0+at*w-at*min(max(nw, 1e-4), 1), nw)
+			} else {
+				f.setView(v0+float64(e.Scroll.X)/float64(size.X)*w, w)
+				f.offset += e.Scroll.Y
+			}
+			boxes = f.layoutFrames(gtx, size)
 		case pointer.Move:
 			f.hover, f.pointer, f.inside = at(e.Position), e.Position, true
 		case pointer.Leave:
 			f.hover, f.inside = nil, false
 		case pointer.Press:
-			f.press = true
+			f.press, f.moved, f.drag = true, false, e.Position
+		case pointer.Drag:
+			// Drag to pan, once past a click's slop.
+			if d := e.Position.Sub(f.drag); f.moved || d.X*d.X+d.Y*d.Y > float32(gtx.Dp(4)*gtx.Dp(4)) {
+				f.moved = true
+				v0, v1 := f.view()
+				f.setView(v0-float64(d.X)/float64(size.X)*(v1-v0), v1-v0)
+				f.offset -= d.Y
+				f.drag = e.Position
+				boxes = f.layoutFrames(gtx, size)
+			}
 		case pointer.Release:
-			if n := at(e.Position); f.press && n != nil {
+			if n := at(e.Position); f.press && !f.moved && n != nil {
 				f.zoom = n.path()
-				f.offset = 0
+				f.offset, f.view0, f.view1 = 0, 0, 0
 				if n.parent != nil {
 					clicked = n.name
 				}
 			}
+			f.press = false
+		case pointer.Cancel:
 			f.press = false
 		}
 	}
@@ -251,7 +301,8 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 			label.TextSize = textSize
 			label.MaxLines = 1
 			label.Color = c.Text
-			inner := b.rect.Inset(gtx.Dp(4))
+			// Keep the name in view when the frame runs off an edge.
+			inner := b.rect.Intersect(image.Rect(0, b.rect.Min.Y, size.X, b.rect.Max.Y)).Inset(gtx.Dp(4))
 			gtx := gtx
 			gtx.Constraints = layout.Exact(image.Pt(max(inner.Dx(), 0), b.rect.Dy()))
 			stack := clip.Rect(b.rect).Push(gtx.Ops)
