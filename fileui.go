@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"image"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,7 +23,6 @@ import (
 	"gioui.org/text"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
-	"gioui.org/x/component"
 	"gioui.org/x/explorer"
 
 	"loov.dev/lensm/internal/codeview"
@@ -72,11 +70,11 @@ type FileUI struct {
 	Tabs      widget.List
 
 	// split divides the function list from the code view.
-	split component.Resize
+	split gui.Split
 	// graphSplit divides the code from the profile graph on its right.
-	graphSplit component.Resize
+	graphSplit gui.Split
 	// belowSplit divides the sidebar and code from a graph below them.
-	belowSplit component.Resize
+	belowSplit gui.Split
 
 	// Window chrome.
 	AppMenu        gui.Menu
@@ -849,19 +847,15 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 	}
 	// Below the sidebar and the code the graph gets the whole width,
 	// which suits the flame graph, wide rather than tall.
-	total := float32(gtx.Constraints.Max.Y)
-	least := float32(gtx.Metric.Dp(160))
-	ui.belowSplit.Ratio = min(max(ui.belowSplit.Ratio, least/total), 1-least/total)
-	defer func() {
-		if ui.belowSplit.Ratio != ui.Settings.BelowRatio {
-			settings := ui.Settings
-			settings.BelowRatio = ui.belowSplit.Ratio
-			ui.saveSettings(settings)
-		}
-	}()
-	return ui.belowSplit.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	dims, moved := ui.belowSplit.Layout(gtx, ui.Theme, 160, 160, func(gtx layout.Context) layout.Dimensions {
 		return ui.layoutMain(gtx, colors)
-	}, ui.layoutProfileGraph, ui.rowHandle)
+	}, ui.layoutProfileGraph)
+	if moved {
+		settings := ui.Settings
+		settings.BelowRatio = ui.belowSplit.Ratio
+		ui.saveSettings(settings)
+	}
+	return dims
 }
 
 // graphBelow reports whether the profile graph shown goes below the
@@ -883,21 +877,6 @@ func (ui *FileUI) layoutMain(gtx layout.Context, colors gui.UIColors) layout.Dim
 			ui.previewTab(selected)
 		}
 	}
-
-	// Keep both panes usable at any window size; the ratio from a drag
-	// or from settings is clamped, not trusted.
-	total := float32(gtx.Constraints.Max.X)
-	minSidebar := float32(gtx.Metric.Dp(120))
-	minContent := float32(gtx.Metric.Dp(240))
-	ui.split.Ratio = min(max(ui.split.Ratio, minSidebar/total), 1-minContent/total)
-
-	defer func() {
-		if ui.split.Ratio != ui.Settings.SidebarRatio {
-			settings := ui.Settings
-			settings.SidebarRatio = ui.split.Ratio
-			ui.saveSettings(settings)
-		}
-	}()
 
 	content := ui.withGraph(func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -988,27 +967,13 @@ func (ui *FileUI) layoutMain(gtx layout.Context, colors gui.UIColors) layout.Dim
 	if ui.Settings.HideSidebar {
 		return content(gtx)
 	}
-	return ui.split.Layout(gtx, ui.layoutPanel, content, ui.splitHandle)
-}
-
-// splitHandle is the line between two resizable panes.
-func (ui *FileUI) splitHandle(gtx layout.Context) layout.Dimensions {
-	size := image.Pt(gtx.Metric.Dp(8), gtx.Constraints.Max.Y)
-	paint.FillShape(gtx.Ops, ui.Theme.Colors.Splitter, clip.Rect{
-		Min: image.Pt(size.X/2, 0),
-		Max: image.Pt(size.X/2+1, size.Y),
-	}.Op())
-	return layout.Dimensions{Size: size}
-}
-
-// rowHandle is the line between a pane and the one below it.
-func (ui *FileUI) rowHandle(gtx layout.Context) layout.Dimensions {
-	size := image.Pt(gtx.Constraints.Max.X, gtx.Metric.Dp(8))
-	paint.FillShape(gtx.Ops, ui.Theme.Colors.Splitter, clip.Rect{
-		Min: image.Pt(0, size.Y/2),
-		Max: image.Pt(size.X, size.Y/2+1),
-	}.Op())
-	return layout.Dimensions{Size: size}
+	dims, moved := ui.split.Layout(gtx, ui.Theme, 120, 240, ui.layoutPanel, content)
+	if moved {
+		settings := ui.Settings
+		settings.SidebarRatio = ui.split.Ratio
+		ui.saveSettings(settings)
+	}
+	return dims
 }
 
 // withGraph puts the profile graph, when shown, right of content.
@@ -1017,17 +982,13 @@ func (ui *FileUI) withGraph(content layout.Widget) layout.Widget {
 		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil || ui.graphBelow() {
 			return content(gtx)
 		}
-		total := float32(gtx.Constraints.Max.X)
-		least := float32(gtx.Metric.Dp(240))
-		ui.graphSplit.Ratio = min(max(ui.graphSplit.Ratio, least/total), 1-least/total)
-		defer func() {
-			if ui.graphSplit.Ratio != ui.Settings.GraphRatio {
-				settings := ui.Settings
-				settings.GraphRatio = ui.graphSplit.Ratio
-				ui.saveSettings(settings)
-			}
-		}()
-		return ui.graphSplit.Layout(gtx, content, ui.layoutProfileGraph, ui.splitHandle)
+		dims, moved := ui.graphSplit.Layout(gtx, ui.Theme, 240, 240, content, ui.layoutProfileGraph)
+		if moved {
+			settings := ui.Settings
+			settings.GraphRatio = ui.graphSplit.Ratio
+			ui.saveSettings(settings)
+		}
+		return dims
 	}
 }
 
