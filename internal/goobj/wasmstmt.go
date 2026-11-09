@@ -84,10 +84,15 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 	}
 	ftype := typeOf(m, fn.TypeIdx)
 	params := len(ftype.Params)
+	goWasm := isGoWasm(m)
 	name := func(i uint32) string {
 		if int(i) < params {
 			if int(i) < len(fn.ParamNames) && fn.ParamNames[i] != "" {
 				return strings.TrimPrefix(fn.ParamNames[i], "$")
+			}
+			if i == 0 && goWasm {
+				// The resume point the function continues from.
+				return "PC_B"
 			}
 			return fmt.Sprint("p", i)
 		}
@@ -97,7 +102,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 		return fmt.Sprint("l", i)
 	}
 	globals := wasmGlobalNames(m)
-	if isGoWasm(m) {
+	if goWasm {
 		for i, name := range goWasmGlobals {
 			if i < len(globals) && globals[i] == "" {
 				globals[i] = name
@@ -113,12 +118,19 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 
 	// Name the blocks that branches go to, in order.
 	type block struct {
-		label  string
+		label string
+		// cases is set for a block that a switch's case goes to: its end
+		// starts that case.
+		cases string
+		// selector is the local a switch right inside the loop picks
+		// its case by, plus one; 0 when there is none.
+		selector uint32
 		loop   bool
 		height int // the stack's height when the block started
 		result int // the values the block leaves
 	}
 	targeted := wasmTargets(body)
+	cases, switches, selectors := wasmSwitches(m, body, insts)
 	labels := 0
 
 	var stack []expr
@@ -205,8 +217,8 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 		text := ""
 		switch {
 		case op == "block" || op == "loop" || op == "if" || op == "try_table":
-			b := block{loop: op == "loop", result: blockResults(m, in)}
-			if targeted[i] || b.result > 0 {
+			b := block{loop: op == "loop", result: blockResults(m, in), cases: cases[i], selector: selectors[i]}
+			if b.cases == "" && (targeted[i] || b.result > 0) {
 				labels++
 				b.label = fmt.Sprint("L", labels)
 			}
@@ -216,10 +228,12 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 			}
 			b.height = len(stack)
 			frames = append(frames, b)
-			switch op {
-			case "if":
+			switch {
+			case b.cases != "":
+				// The switch spells it.
+			case op == "if":
 				text = "if (" + cond + ") {"
-			case "try_table":
+			case op == "try_table":
 				text = "try " + b.label + " {"
 			default:
 				text = strings.TrimSpace(op+" "+b.label) + " {"
@@ -233,6 +247,9 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 			}
 			b := frames[len(frames)-1]
 			text = leftover(&b) + "}"
+			if b.cases != "" {
+				text = b.cases + ":"
+			}
 			frames = frames[:len(frames)-1]
 			if b.result > 0 {
 				push(b.label, 9)
@@ -250,6 +267,8 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 				switch {
 				case int(depth) == len(frames)-1:
 					return "return"
+				case b.cases != "":
+					return "goto " + b.cases
 				case b.loop:
 					return "continue " + b.label
 				}
@@ -267,15 +286,29 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 				}
 				return b.label + " = " + stack[len(stack)-1].text + "; "
 			}
-			switch op {
-			case "br":
+			// Setting a switch's local to a constant and going back to its
+			// loop goes to a case: Go jumps that way inside a function.
+			if op == "br" && i >= 2 && int(in.BranchDepth) < len(frames) {
+				b := frames[len(frames)-1-int(in.BranchDepth)]
+				set, value := &body[i-1], insts[i-2].Text
+				if b.loop && b.selector > 0 && set.Kind == wasmir.InstrLocalSet && set.LocalIndex == b.selector-1 && strings.HasPrefix(value, "i32.const ") {
+					insts[i-1].NativeText = ""
+					text = "goto case " + strings.TrimPrefix(value, "i32.const ")
+					stack = stack[:0:0]
+					break
+				}
+			}
+			switch {
+			case op == "br":
 				text = carry(in.BranchDepth) + target(in.BranchDepth)
-			case "br_if":
+			case op == "br_if":
 				if c := carry(in.BranchDepth); c != "" {
 					text = "if (" + cond + ") { " + c + target(in.BranchDepth) + " }"
 				} else {
 					text = "if (" + cond + ") " + target(in.BranchDepth)
 				}
+			case switches[i]:
+				text = "switch (" + cond + ")"
 			default:
 				var cases []string
 				for _, d := range in.BranchTable {
@@ -585,6 +618,89 @@ func isGoWasm(m *wasmir.Module) bool {
 		if c.Name == "go:buildid" {
 			return true
 		}
+	}
+	return false
+}
+
+// wasmSwitches finds the br_tables that pick a case: blocks opened one
+// right after another, then the value to switch on, then a br_table
+// whose every target is one of those blocks. Each such block's end
+// starts a case, which cases spells by its row, as in "case 2, 3",
+// and switches marks the br_tables.
+//
+// When the switch is on a local, right inside a loop, selectors holds
+// that local plus one by the loop's row.
+func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.Inst) (cases map[int]string, switches map[int]bool, selectors map[int]uint32) {
+	cases, switches, selectors = map[int]string{}, map[int]bool{}, map[int]uint32{}
+	for j, in := range body {
+		if in.Kind != wasmir.InstrBrTable {
+			continue
+		}
+		// Between the blocks and the br_table only the value is
+		// computed, with nothing a statement would show.
+		k := j - 1
+		for k >= 0 && !isOpener(body[k].Kind) && pure(insts[k].Text) {
+			k--
+		}
+		if k < 0 || !isOpener(body[k].Kind) {
+			continue
+		}
+		// run holds the blocks opened one after another, innermost first.
+		var run []int
+		for ; k >= 0 && isOpener(body[k].Kind); k-- {
+			run = append(run, k)
+		}
+		values := map[uint32][]string{}
+		deepest := in.BranchDefault
+		for v, d := range in.BranchTable {
+			values[d] = append(values[d], strconv.Itoa(v))
+			deepest = max(deepest, d)
+		}
+		ok := int(deepest) < len(run)
+		for d := uint32(0); ok && d <= deepest; d++ {
+			b := &body[run[d]]
+			ok = b.Kind == wasmir.InstrBlock && blockResults(m, b) == 0 &&
+				(len(values[d]) > 0 || d == in.BranchDefault)
+		}
+		if !ok {
+			continue
+		}
+		switches[j] = true
+		if int(deepest)+1 < len(run) && body[run[deepest+1]].Kind == wasmir.InstrLoop && j-1 == run[0]+1 && body[j-1].Kind == wasmir.InstrLocalGet {
+			selectors[run[deepest+1]] = body[j-1].LocalIndex + 1
+		}
+		for d := uint32(0); d <= deepest; d++ {
+			text := "default"
+			if len(values[d]) > 0 {
+				text = "case " + strings.Join(values[d], ", ")
+				if d == in.BranchDefault {
+					text += ", default"
+				}
+			}
+			cases[run[d]] = text
+		}
+	}
+	return cases, switches, selectors
+}
+
+func isOpener(k wasmir.InstrKind) bool {
+	switch k {
+	case wasmir.InstrBlock, wasmir.InstrLoop, wasmir.InstrIf, wasmir.InstrTryTable:
+		return true
+	}
+	return false
+}
+
+// pure reports whether an instruction only computes a value from
+// others, so it shows no statement of its own.
+func pure(text string) bool {
+	op, _, _ := strings.Cut(text, " ")
+	typ, short, _ := strings.Cut(op, ".")
+	switch typ {
+	case "local", "global":
+		return short == "get"
+	case "i32", "i64", "f32", "f64":
+		return !strings.HasPrefix(short, "store") && !strings.HasPrefix(short, "atomic")
 	}
 	return false
 }

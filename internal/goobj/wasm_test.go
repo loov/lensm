@@ -148,6 +148,23 @@ func TestLoadGoWasm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Go jumps inside a function by setting PC_B and going back to the
+	// loop around its switch, which reads as a goto.
+	dot, err := disasm.FindFunc(file, "main.dot").Load(disasm.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stmts []string
+	for _, in := range dot.Insts {
+		stmts = append(stmts, in.NativeText)
+	}
+	for _, want := range []string{"switch (PC_B)", "case 0, 1:", "goto case 3", "SP = l1"} {
+		if !slices.Contains(stmts, want) {
+			t.Errorf("main.dot has no %q:\n%s", want, strings.Join(stmts, "\n"))
+		}
+	}
+
 	for _, fn := range file.Funcs() {
 		if !strings.HasPrefix(fn.Name(), "main.main") {
 			continue
