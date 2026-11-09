@@ -386,16 +386,17 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
 	for i := range ui.PanelButtons {
 		for ui.PanelButtons[i].Clicked(gtx) {
-			// The open panel's button hides the sidebar, for room.
-			ui.showSidebar(ui.Panel != i || ui.Settings.HideSidebar)
-			ui.Panel = i
+			// The open panel's button hides the sidebar, for room. With
+			// the graph filling the window, any shows the panel again.
+			ui.showSidebar(ui.Panel != i || ui.Settings.HideSidebar || ui.GraphFull)
+			ui.Panel, ui.GraphFull = i, false
 		}
 	}
 	for ui.WatchButton.Clicked(gtx) {
 		ui.setWatch(!ui.Config.Watch)
 	}
 	tool := func(i int, icon *widget.Icon, description string) layout.Widget {
-		return gui.ToolButton{Theme: th, Clickable: &ui.PanelButtons[i], Tip: &ui.PanelTips[i], Icon: icon, Description: description, Selected: ui.Panel == i && !ui.Settings.HideSidebar}.Layout
+		return gui.ToolButton{Theme: th, Clickable: &ui.PanelButtons[i], Tip: &ui.PanelTips[i], Icon: icon, Description: description, Selected: ui.Panel == i && !ui.Settings.HideSidebar && !(ui.GraphFull && ui.ShowGraph)}.Layout
 	}
 	watch := "Watch for changes"
 	if ui.Config.Watch {

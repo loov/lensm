@@ -124,8 +124,13 @@ type FileUI struct {
 	ShowGraph    bool
 	ProfileGraph callGraph
 	// GraphButton on the right strip shows and hides the profile graph.
-	GraphButton    widget.Clickable
-	GraphTip       gui.Tooltip
+	GraphButton widget.Clickable
+	GraphTip    gui.Tooltip
+	// GraphFull gives the profile graph the room of the sidebar and the
+	// code as well.
+	GraphFull      bool
+	GraphFullBtn   widget.Clickable
+	GraphFullTip   gui.Tooltip
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -786,6 +791,9 @@ func (ui *FileUI) pick(kind pickKind) {
 }
 
 func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
+	if ui.ShowGraph && ui.GraphFull && ui.Profile != nil && ui.File != nil {
+		return ui.layoutProfileGraph(gtx)
+	}
 	active := ui.activeTab()
 	if active == nil || (!active.Code.Loaded() && !active.loading) || active.Name != ui.Funcs.Selected {
 		selected := ui.Funcs.SelectedItem

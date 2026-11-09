@@ -373,6 +373,9 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	g := &ui.ProfileGraph
 	g.full = true
 	g.build(gtx, th, ui.Profile, focus)
+	for ui.GraphFullBtn.Clicked(gtx) {
+		ui.GraphFull = !ui.GraphFull
+	}
 	size := gtx.Constraints.Max
 	// The sidebar's darker tone and a shadow along the left edge set
 	// the pane apart from the code.
@@ -391,6 +394,14 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	}.Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
 	stack.Pop()
+
+	icon, description := FullscreenIcon, "Fill the window"
+	if ui.GraphFull {
+		icon, description = FullscreenExitIcon, "Back beside the code"
+	}
+	layout.NE.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.UniformInset(8).Layout(gtx, gui.IconButton{Theme: th, Clickable: &ui.GraphFullBtn, Tip: &ui.GraphFullTip, Icon: icon, Description: description}.Layout)
+	})
 	return layout.Dimensions{Size: size}
 }
 

@@ -29,25 +29,26 @@ import (
 //
 //	go test -run TestRender . -render /tmp/out.png -render.path ./testdata/testprog -render.func main.dot
 var (
-	renderOut      = flag.String("render", "", "render the window to this PNG file")
-	renderCompare  = flag.String("render.compare", "", "binary to compare the open one with")
-	renderGraph    = flag.Bool("render.graph", false, "show the whole profile's graph")
-	renderProfile  = flag.String("render.profile", "", "pprof profile to show")
-	renderPath     = flag.String("render.path", "", "binary or package directory to open")
-	renderFunc     = flag.String("render.func", "", "function to open in a tab")
-	renderFilter   = flag.String("render.filter", "", "function list filter")
-	renderDark     = flag.Bool("render.dark", false, "use the dark theme")
-	renderPanel    = flag.String("render.panel", "functions", "sidebar panel: functions, comments, history or diagnostics")
-	renderCols     = flag.String("render.cols", "gnsd", "columns to show: g for Go asm, n for native asm, s for source, d for diagnostics")
-	renderSyntax   = flag.String("render.syntax", "xcode", "syntax style")
-	renderSize     = flag.String("render.size", "1400x900", "window size in dp")
-	renderScale    = flag.Float64("render.scale", 2, "pixels per dp")
-	renderHover    = flag.String("render.hover", "", "pointer position in dp, as x,y")
-	renderFind     = flag.String("render.find", "", "open the find bar with this query")
-	renderQuick    = flag.String("render.quick", "", "open the go-to-function popup with this query")
-	renderKeys     = flag.Bool("render.shortcuts", false, "open the keyboard shortcut sheet")
-	renderMenu     = flag.Bool("render.menu", false, "open the app menu, drawn in the window except on macOS")
-	renderSettings = flag.Int("render.settings", -1, "open the settings on this page")
+	renderOut       = flag.String("render", "", "render the window to this PNG file")
+	renderCompare   = flag.String("render.compare", "", "binary to compare the open one with")
+	renderGraph     = flag.Bool("render.graph", false, "show the whole profile's graph")
+	renderGraphFull = flag.Bool("render.graphfull", false, "show the profile's graph filling the window")
+	renderProfile   = flag.String("render.profile", "", "pprof profile to show")
+	renderPath      = flag.String("render.path", "", "binary or package directory to open")
+	renderFunc      = flag.String("render.func", "", "function to open in a tab")
+	renderFilter    = flag.String("render.filter", "", "function list filter")
+	renderDark      = flag.Bool("render.dark", false, "use the dark theme")
+	renderPanel     = flag.String("render.panel", "functions", "sidebar panel: functions, comments, history or diagnostics")
+	renderCols      = flag.String("render.cols", "gnsd", "columns to show: g for Go asm, n for native asm, s for source, d for diagnostics")
+	renderSyntax    = flag.String("render.syntax", "xcode", "syntax style")
+	renderSize      = flag.String("render.size", "1400x900", "window size in dp")
+	renderScale     = flag.Float64("render.scale", 2, "pixels per dp")
+	renderHover     = flag.String("render.hover", "", "pointer position in dp, as x,y")
+	renderFind      = flag.String("render.find", "", "open the find bar with this query")
+	renderQuick     = flag.String("render.quick", "", "open the go-to-function popup with this query")
+	renderKeys      = flag.Bool("render.shortcuts", false, "open the keyboard shortcut sheet")
+	renderMenu      = flag.Bool("render.menu", false, "open the app menu, drawn in the window except on macOS")
+	renderSettings  = flag.Int("render.settings", -1, "open the settings on this page")
 )
 
 // TestRender is skipped unless -render names an output file. It starts
@@ -97,7 +98,8 @@ func TestRender(t *testing.T) {
 		ui.SetFile(file)
 		defer ui.File.Close()
 	}
-	ui.ShowGraph = *renderGraph
+	ui.ShowGraph = *renderGraph || *renderGraphFull
+	ui.GraphFull = *renderGraphFull
 	if *renderCompare != "" {
 		other, err := loadFile(*renderCompare)
 		if err != nil {
