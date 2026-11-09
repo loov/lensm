@@ -92,13 +92,16 @@ type FileUI struct {
 	ShowAsmHelp    widget.Bool
 	HoverLinksOnly widget.Bool
 	SyncScroll     widget.Bool
-	SettingsNav    gui.NavList
-	ThemeSelect    gui.Select
-	SyntaxSelect   gui.Select
-	SettingsOK     widget.Clickable
-	SettingsCancel widget.Clickable
-	Comment        codeview.CommentEditor
-	TextSizeEditor widget.Editor
+	// SyncScrollSetting is the same switch in the settings, a widget of
+	// its own since both can be on screen.
+	SyncScrollSetting widget.Bool
+	SettingsNav       gui.NavList
+	ThemeSelect       gui.Select
+	SyntaxSelect      gui.Select
+	SettingsOK        widget.Clickable
+	SettingsCancel    widget.Clickable
+	Comment           codeview.CommentEditor
+	TextSizeEditor    widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
 	// settingsPath is where Settings are saved, empty for none.
@@ -160,6 +163,7 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
 	ui.HoverLinksOnly.Value = settings.HoverLinksOnly
 	ui.SyncScroll.Value = settings.SyncScroll
+	ui.SyncScrollSetting.Value = settings.SyncScroll
 	ui.split.Axis = layout.Horizontal
 	ui.split.Ratio = settings.SidebarRatio
 	ui.Comment.SingleLine = true

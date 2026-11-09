@@ -47,6 +47,7 @@ func (ui *FileUI) applySettings(s AppSettings) {
 	ui.ShowAsmHelp.Value = s.ShowAsmHelp
 	ui.HoverLinksOnly.Value = s.HoverLinksOnly
 	ui.SyncScroll.Value = s.SyncScroll
+	ui.SyncScrollSetting.Value = s.SyncScroll
 	ui.saveSettings(s)
 	ui.invalidateMain()
 }
@@ -123,6 +124,8 @@ func (ui *FileUI) codeViewPage() []layout.Widget {
 		gui.Checkbox{Theme: th, Value: &ui.ShowAsmHelp, Label: "Show instruction help on hover"}.Layout,
 		gui.Checkbox{Theme: th, Value: &ui.HoverLinksOnly, Label: "Link only the hovered line"}.Layout,
 		gui.FormHint(th, "Draws the band between source and assembly for the line under the pointer only."),
+		gui.Checkbox{Theme: th, Value: &ui.SyncScrollSetting, Label: "Sync scroll"}.Layout,
+		gui.FormHint(th, "Scrolls the assembly and the source together."),
 		gui.FormHeading(th, "Columns"),
 		gui.FormHint(th, "Pick the Go asm, Native and Source columns from the toolbar."),
 	}
@@ -169,6 +172,9 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 	}
 	for ui.HoverLinksOnly.Update(gtx) {
 		s.HoverLinksOnly, changed = ui.HoverLinksOnly.Value, true
+	}
+	for ui.SyncScrollSetting.Update(gtx) {
+		s.SyncScroll, changed = ui.SyncScrollSetting.Value, true
 	}
 	if value, ok := ui.updateTextSize(gtx); ok {
 		s.TextSize, changed = value, true
