@@ -147,9 +147,9 @@ func TestWasmStatements(t *testing.T) {
 			(block (result i32) i32.const 4 local.get 0 br_table 0 0))`,
 		want: []string{"block L1 {", "L1 = 4; switch (p0) L1 else L1", "} return L1"},
 	}, {
-		name: "a dropped memory.grow shows",
+		name:   "a dropped memory.grow shows",
 		module: `(memory 1) (func $f i32.const 1 memory.grow drop)`,
-		want: []string{"memory_grow(1)"},
+		want:   []string{"memory_grow(1)"},
 	}, {
 		name: "an address's base binds as a sum",
 		module: `(memory 1) (func $f (param i32 i32 i32) (result i32)
@@ -169,6 +169,22 @@ func TestWasmStatements(t *testing.T) {
 		module: `(func $f (param i32) (result i32)
 			local.get 0 ` + strings.Repeat("i32.const 1234567 i32.add ", 20) + `)`,
 		want: []string{"t1 = p0" + strings.Repeat(" + 1234567", 20) + " return t1"},
+	}, {
+		name: "an if's parameters, for either branch",
+		module: `(func $f (param i32 i32) (result i32)
+			local.get 0 local.get 1
+			(if (param i32) (result i32) (then i32.const 1 i32.add) (else i32.const 2 i32.mul)))`,
+		want: []string{"if L1 (p1) {", "L1 = p0 + 1; } else {", "L1 = p0 * 2; } return L1"},
+	}, {
+		name: "several values from a block",
+		module: `(func $f (result i32)
+			(block (result i32 i32) i32.const 1 i32.const 2) i32.add)`,
+		want: []string{"block L1 {", "L1.0, L1.1 = 1, 2; }", "return L1.0 + L1.1"},
+	}, {
+		name: "several values from a call",
+		module: `(func $g (result i32 i32) i32.const 1 i32.const 2)
+		(func $f (result i32) call $g i32.add)`,
+		want: []string{"t1, t2 = g()", "return t1 + t2"},
 	}, {
 		name: "a br_table that isn't a switch",
 		module: `(func $f (param i32)

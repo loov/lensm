@@ -12,19 +12,25 @@ import (
 	"loov.dev/lensm/internal/disasm"
 )
 
-// expr is an expression on the wasm value stack and how tightly it
-// binds, as in Go: 5 for * / % << >> &, 4 for + - | ^, 3 for
-// comparisons, 1 for the conditional and 9 for anything that needs no
-// parentheses.
+// How tightly an expression binds, as in Go.
+const (
+	precCond = 1 // c ? a : b
+	precCmp  = 3 // == != < <= > >=
+	precAdd  = 4 // + - | ^
+	precMul  = 5 // * / % << >> &
+	precAtom = 9 // anything that needs no parentheses
+)
+
+// expr is an expression on the wasm value stack.
 type expr struct {
 	text string
 	prec int
 	// not is the comparison's negation, for eqz to use.
 	not string
-	// bits marks a shift or a bitwise operator, which Go and C bind
+	// bitwise marks a shift or a bitwise operator, which Go and C bind
 	// differently against arithmetic and comparisons, so it gets
 	// parentheses inside those either way.
-	bits bool
+	bitwise bool
 	// narrow is the 32-bit value an extension widened, which wrapping
 	// gives back.
 	narrow string
@@ -36,9 +42,9 @@ type expr struct {
 	sp       bool
 	spOff    int64
 	spGlobal bool
-	// row is the instruction that completed it, and reads what its
-	// value depends on, so a statement that changes that first can
-	// give the value a name on its own row.
+	// row is the instruction that completed it, -1 for a temporary,
+	// and reads what its value depends on, so a statement that changes
+	// that first can give the value a name on its own row.
 	row   int
 	reads reads
 }
@@ -54,6 +60,27 @@ func (r *reads) add(o reads) {
 	r.globals = append(r.globals, o.globals...)
 	r.memory = r.memory || o.memory
 	r.call = r.call || o.call
+}
+
+// What a statement about to run changes, for settle.
+func readsLocal(n uint32) func(reads) bool {
+	return func(r reads) bool { return slices.Contains(r.locals, n) }
+}
+
+func readsGlobal(n uint32) func(reads) bool {
+	return func(r reads) bool { return r.call || slices.Contains(r.globals, n) }
+}
+
+func readsCall(r reads) bool   { return r.call }
+func readsMemory(r reads) bool { return r.memory || r.call }
+func readsAny(r reads) bool    { return r.memory || r.call || len(r.globals) > 0 }
+
+// wrap puts e in parentheses when it binds looser than prec.
+func wrap(e expr, prec int) string {
+	if e.prec < prec || e.bitwise && prec >= precCmp && prec <= precMul {
+		return "(" + e.text + ")"
+	}
+	return e.text
 }
 
 // wasmModule reads the module once, on first use. It is nil for a
@@ -73,13 +100,14 @@ func (file *File) wasmModule() *wasmInfo {
 // in the module, the imports counted, as statements: each instruction
 // that completes one gets its text, such as "l2 = l2 + i32[p0 + l1]",
 // and the instructions feeding it get none. insts are the function's
-// rows, in the order of its body.
+// rows, in the order of its body, and targeted marks the blocks that
+// branches go to, by their row.
 //
 // goArgs names a Go function's arguments and results by their offset
 // from the first, for the loads and stores that reach them.
-func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int64]string) {
-	m, funcs, imported := info.m, info.funcTypes, info.imported
-	if idx < imported || idx >= len(funcs) {
+func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, targeted map[int]bool, goArgs map[int64]string) {
+	k := idx - info.imported
+	if k < 0 || k >= len(info.m.Funcs) {
 		return
 	}
 	defer func() {
@@ -90,507 +118,668 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 			}
 		}
 	}()
-	fn := &m.Funcs[idx-imported]
-	body := info.body(idx - imported)
+	body := info.body(k)
 	if len(body) > 0 && body[len(body)-1].Kind == wasmir.InstrEnd {
 		body = body[:len(body)-1]
 	}
 	if len(body) != len(insts) {
 		return
 	}
-	locals := info.locals[idx-imported]
-	ftype := typeOf(m, fn.TypeIdx)
-	params := len(ftype.Params)
-	goWasm := info.goWasm
-	name := func(i uint32) string {
-		if int(i) < params {
-			if int(i) < len(fn.ParamNames) && fn.ParamNames[i] != "" {
-				return strings.TrimPrefix(fn.ParamNames[i], "$")
-			}
-			if n := locals[i]; n != "" {
-				return n
-			}
-			if i == 0 && goWasm {
-				// The resume point the function continues from.
-				return "PC_B"
-			}
-			return fmt.Sprint("p", i)
-		}
-		if k := int(i) - params; k < len(fn.LocalNames) && fn.LocalNames[k] != "" {
-			return strings.TrimPrefix(fn.LocalNames[k], "$")
-		}
-		if n := locals[i]; n != "" {
-			return n
-		}
-		return fmt.Sprint("l", i)
+	fn := &info.m.Funcs[k]
+	w := &stmtWriter{
+		info: info, fn: fn, ftype: typeOf(info.m, fn.TypeIdx),
+		body: body, insts: insts, locals: info.locals[k],
+		targeted: targeted,
+		sp:       goSP{args: goArgs},
 	}
-	globals := info.globals
-	global := func(i uint32) string {
-		if int(i) < len(globals) && globals[i] != "" {
-			return globals[i]
-		}
-		return fmt.Sprint("g", i)
-	}
-
-	// block is an open block, loop or if.
-	type block struct {
-		label string
-		// cases is set for a block that a switch's case goes to: its end
-		// starts that case.
-		cases string
-		// selector is the switch right inside a loop, nil when there is
-		// none.
-		selector *wasmSelector
-		loop     bool
-		// cond marks an if, and adj is where l1 pointed when it started.
-		cond     bool
-		adj      int64
-		adjKnown bool
-		height   int // the stack's height when the block started
-		result   int // the values the block leaves
-	}
-	// The blocks that branches go to get labels, in order.
-	targeted := wasmTargets(body)
-	cases, switches, selectors := wasmSwitches(m, body, insts)
-	labels := 0
-
-	// Go's wasm port keeps SP in local 1. adj is where it points, from
-	// SP at the function's start, while adjKnown; frameAdj is where it
-	// points once the function has made its frame.
-	var adj, frameAdj int64
-	adjKnown, frameKnown := false, false
-	var frames []block
-	inIf := func() bool {
-		return slices.ContainsFunc(frames[1:], func(b block) bool { return b.cond })
-	}
-	// moveSP follows a store to local 1.
-	moveSP := func(local uint32, v expr) {
-		switch {
-		case goArgs == nil || local != 1:
-		case v.sp:
-			adj, adjKnown = v.spOff, true
-		case v.spGlobal && frameKnown:
-			// After a call SP is back at the frame.
-			adj, adjKnown = frameAdj, true
-		case v.spGlobal:
-			// The function's start, before it makes its frame.
-			adj, adjKnown = 0, true
-		default:
-			adjKnown = false
-		}
-	}
-	// argName is the argument or result a Go stack address reaches.
-	argName := func(base expr, offset uint64) (string, bool) {
-		if !base.sp {
-			return "", false
-		}
-		// The arguments start past the return address.
-		n, ok := goArgs[base.spOff+int64(offset)-8]
-		return n, ok
-	}
-
-	var stack []expr
-	current := 0
-	// popped gathers what the instruction's operands read, and own what
-	// the instruction itself does, for the value it pushes.
-	var popped, own reads
-	pop := func() expr {
-		if len(stack) == 0 {
-			return expr{text: "?", prec: 9}
-		}
-		e := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		popped.add(e.reads)
-		return e
-	}
-	temps := 0
-	// settle names the values waiting on the stack that what is about
-	// to happen would change, on the rows that computed them, so the
-	// statements keep their order.
-	settle := func(changes func(r reads) bool) {
-		for k := range stack {
-			e := &stack[k]
-			if !changes(e.reads) || e.row < 0 {
-				continue
-			}
-			temps++
-			t := fmt.Sprint("t", temps)
-			assign := t + " = " + e.text
-			if insts[e.row].NativeText != "" {
-				assign = insts[e.row].NativeText + "; " + assign
-			}
-			insts[e.row].NativeText = assign
-			*e = expr{text: t, prec: 9, row: -1}
-		}
-	}
-	readsLocal := func(n uint32) func(reads) bool {
-		return func(r reads) bool { return slices.Contains(r.locals, n) }
-	}
-	readsGlobal := func(n uint32) func(reads) bool {
-		return func(r reads) bool { return r.call || slices.Contains(r.globals, n) }
-	}
-	readsCall := func(r reads) bool { return r.call }
-	readsMemory := func(r reads) bool { return r.memory || r.call }
-	readsAny := func(r reads) bool { return r.memory || r.call || len(r.globals) > 0 }
-	popN := func(n int) []string {
-		args := make([]string, n)
-		for i := n - 1; i >= 0; i-- {
-			args[i] = pop().text
-		}
-		return args
-	}
-	pushExpr := func(e expr) {
-		e.row, e.reads = current, popped
-		e.reads.add(own)
-		stack = append(stack, e)
-	}
-	push := func(text string, prec int) { pushExpr(expr{text: text, prec: prec}) }
-	// wrap puts e in parentheses when it binds looser than prec.
-	wrap := func(e expr, prec int) string {
-		if e.prec < prec || e.bits && prec >= 3 && prec <= 5 {
-			return "(" + e.text + ")"
-		}
-		return e.text
-	}
-	frames = []block{{label: "", result: len(ftype.Results)}}
-	// cut drops the values of the current block: the code after a
-	// branch or trap doesn't run until the block ends.
-	cut := func() {
-		stack = stack[:min(len(stack), frames[len(frames)-1].height)]
-	}
-	// leftover spells the values a block leaves as an assignment to its
-	// label, so they show before the block's end.
-	leftover := func(b *block) string {
-		if len(stack) <= b.height || b.result == 0 {
-			stack = stack[:min(len(stack), b.height)]
-			return ""
-		}
-		v := pop().text
-		stack = stack[:min(len(stack), b.height)]
-		return b.label + " = " + v + "; "
-	}
-
+	w.cases, w.switches, w.selectors = wasmSwitches(info.m, body, insts)
+	w.frames = []wasmBlock{{results: len(w.ftype.Results)}}
 	for i := range body {
-		in := &body[i]
-		current, popped, own = i, reads{}, reads{}
-		for k := len(stack) - 1; k >= max(len(stack)-maxStack, 0); k-- {
-			t := stack[k].text
-			if len(t) > maxExpr {
-				t = t[:maxExpr] + "…"
-			}
-			insts[i].Stack = append(insts[i].Stack, t)
-		}
-		op, arg, _ := strings.Cut(insts[i].Text, " ")
-		typ, short, _ := strings.Cut(op, ".")
-		text := ""
-		switch {
-		case op == "block" || op == "loop" || op == "if" || op == "try_table":
-			b := block{loop: op == "loop", result: blockResults(m, in), cases: cases[i], selector: selectors[i], cond: op == "if", adj: adj, adjKnown: adjKnown}
-			if b.cases == "" && (targeted[i] || b.result > 0) {
-				labels++
-				b.label = fmt.Sprint("L", labels)
-			}
-			cond := ""
-			if op == "if" {
-				cond = pop().text
-			}
-			// A call waiting on the stack ran before the block.
-			settle(readsCall)
-			b.height = len(stack)
-			frames = append(frames, b)
-			switch {
-			case b.cases != "":
-				// The switch spells it.
-			case op == "if":
-				text = strings.TrimSpace("if "+b.label) + " (" + cond + ") {"
-			case op == "try_table":
-				text = strings.TrimSpace("try "+b.label) + " {"
-			default:
-				text = strings.TrimSpace(op+" "+b.label) + " {"
-			}
-		case op == "else":
-			b := &frames[len(frames)-1]
-			text = leftover(b) + "} else {"
-			adj, adjKnown = b.adj, b.adjKnown
-		case op == "end":
-			if len(frames) == 1 {
-				break
-			}
-			b := frames[len(frames)-1]
-			text = leftover(&b) + "}"
-			if b.cases != "" {
-				text = b.cases + ":"
-				// Go enters case 0 at the function's start and any other
-				// to resume, with its frame made.
-				if b.cases == "case 0" || strings.HasPrefix(b.cases, "case 0,") {
-					adj, adjKnown = 0, true
-				} else {
-					adj, adjKnown = frameAdj, frameKnown
-				}
-			}
-			if b.cond {
-				// Go only moves SP inside an if on its way out.
-				adj, adjKnown = b.adj, b.adjKnown
-			}
-			frames = frames[:len(frames)-1]
-			if b.result > 0 {
-				push(b.label, 9)
-			}
-		case op == "br" || op == "br_if" || op == "br_table":
-			cond := ""
-			if op != "br" {
-				cond = pop().text
-			}
-			settle(readsCall)
-			target := func(depth uint32) string {
-				if int(depth) >= len(frames) {
-					return "?"
-				}
-				b := frames[len(frames)-1-int(depth)]
-				switch {
-				case int(depth) == len(frames)-1:
-					if len(ftype.Results) > 0 && len(stack) > 0 {
-						return "return " + stack[len(stack)-1].text
-					}
-					return "return"
-				case b.cases != "":
-					return "goto " + b.cases
-				case b.loop:
-					return "continue " + b.label
-				}
-				return "break " + b.label
-			}
-			// A branch to a block that gives a value carries it, the top
-			// of the stack, and br_if leaves it there when not taken.
-			carry := func(depth uint32) string {
-				if int(depth) >= len(frames)-1 || len(stack) == 0 {
-					return ""
-				}
-				b := frames[len(frames)-1-int(depth)]
-				if b.loop || b.result == 0 {
-					return ""
-				}
-				return b.label + " = " + stack[len(stack)-1].text + "; "
-			}
-			// Setting a switch's local to a constant and going back to its
-			// loop goes to a case. Go jumps that way inside a function and
-			// never reads PC_B after, so there the write goes unsaid.
-			if op == "br" && i >= 2 && int(in.BranchDepth) < len(frames) {
-				b := frames[len(frames)-1-int(in.BranchDepth)]
-				set := &body[i-1]
-				value, err := strconv.Atoi(strings.TrimPrefix(insts[i-2].Text, "i32.const "))
-				if b.loop && b.selector != nil && set.Kind == wasmir.InstrLocalSet && set.LocalIndex == b.selector.local && err == nil && strings.HasPrefix(insts[i-2].Text, "i32.const ") {
-					if goWasm && !strings.Contains(insts[i-1].NativeText, ";") {
-						insts[i-1].NativeText = ""
-					}
-					text = "goto case " + strconv.Itoa(value)
-					if value < 0 || value >= b.selector.cases {
-						text = "goto default"
-					}
-					cut()
-					break
-				}
-			}
-			switch {
-			case op == "br":
-				text = carry(in.BranchDepth) + target(in.BranchDepth)
-			case op == "br_if":
-				if c := carry(in.BranchDepth); c != "" {
-					text = "if (" + cond + ") { " + c + target(in.BranchDepth) + " }"
-				} else {
-					text = "if (" + cond + ") " + target(in.BranchDepth)
-				}
-			case switches[i]:
-				text = "switch (" + cond + ")"
-			default:
-				var carried []string
-				for _, d := range append(slices.Clone(in.BranchTable), in.BranchDefault) {
-					if c := carry(d); c != "" && !slices.Contains(carried, c) {
-						carried = append(carried, c)
-					}
-				}
-				var cases []string
-				for _, d := range in.BranchTable {
-					cases = append(cases, strings.TrimPrefix(strings.TrimPrefix(target(d), "break "), "continue "))
-				}
-				def := strings.TrimPrefix(strings.TrimPrefix(target(in.BranchDefault), "break "), "continue ")
-				text = strings.Join(carried, "") + "switch (" + cond + ") " + strings.Join(cases, ", ") + " else " + def
-			}
-			if op != "br_if" {
-				// What follows is unreachable until the block ends.
-				cut()
-			}
-		case op == "return":
-			text = strings.TrimSpace("return " + strings.Join(popN(len(ftype.Results)), ", "))
-		case op == "unreachable":
-			text = "unreachable"
-			cut()
-		case op == "nop":
-		case op == "drop":
-			// Only a call or memory.grow does something worth showing.
-			if v := pop(); v.reads.call && v.row >= 0 {
-				text = v.text
-			}
-		case op == "select":
-			c, b, a := pop(), pop(), pop()
-			push(wrap(c, 3)+" ? "+wrap(a, 2)+" : "+wrap(b, 2), 1)
-		case op == "local.get":
-			own.locals = []uint32{in.LocalIndex}
-			pushExpr(expr{text: name(in.LocalIndex), prec: 9, sp: goArgs != nil && in.LocalIndex == 1 && adjKnown, spOff: adj})
-		case op == "local.set":
-			v := pop()
-			settle(readsLocal(in.LocalIndex))
-			moveSP(in.LocalIndex, v)
-			text = name(in.LocalIndex) + " = " + v.text
-		case op == "local.tee":
-			v := pop()
-			settle(readsLocal(in.LocalIndex))
-			moveSP(in.LocalIndex, v)
-			text = name(in.LocalIndex) + " = " + v.text
-			popped, own = reads{}, reads{locals: []uint32{in.LocalIndex}}
-			pushExpr(expr{text: name(in.LocalIndex), prec: 9, sp: v.sp, spOff: v.spOff, spGlobal: v.spGlobal})
-		case op == "global.get":
-			settle(readsCall)
-			own.globals = []uint32{in.GlobalIndex}
-			pushExpr(expr{text: global(in.GlobalIndex), prec: 9, spGlobal: goArgs != nil && in.GlobalIndex == 0})
-		case op == "global.set":
-			v := pop()
-			if goArgs != nil && in.GlobalIndex == 0 && v.sp && !frameKnown && !inIf() {
-				// The function's first SP outside the stack check makes
-				// its frame.
-				frameAdj, frameKnown = v.spOff, true
-			}
-			settle(readsGlobal(in.GlobalIndex))
-			text = global(in.GlobalIndex) + " = " + v.text
-		case op == "call" || op == "call_indirect" || op == "return_call":
-			var t wasmir.TypeDef
-			callee := strings.TrimPrefix(arg, "$")
-			if op == "call_indirect" {
-				t = typeOf(m, in.CallTypeIndex)
-				callee = "table[" + pop().text + "]"
-			} else if int(in.FuncIndex) < len(funcs) {
-				t = funcs[in.FuncIndex]
-			}
-			call := callee + "(" + strings.Join(popN(len(t.Params)), ", ") + ")"
-			settle(readsAny)
-			own.call = true
-			switch {
-			case op == "return_call":
-				text = "return " + call
-			case len(t.Results) == 1:
-				push(call, 9)
-			default:
-				text = call
-				for range t.Results {
-					push("?", 9)
-				}
-			}
-		case short == "const":
-			v, err := strconv.ParseInt(arg, 0, 64)
-			pushExpr(expr{text: arg, prec: 9, konst: err == nil, val: v})
-		case strings.HasPrefix(short, "load"):
-			settle(readsCall)
-			own.memory = true
-			base := pop()
-			if n, ok := argName(base, in.MemoryOffset); ok {
-				push(n, 9)
-				break
-			}
-			push(memType(typ, short)+"["+address(base, in.MemoryOffset)+"]", 9)
-		case strings.HasPrefix(short, "store"):
-			v := pop()
-			base := pop()
-			a := memType(typ, short) + "[" + address(base, in.MemoryOffset) + "]"
-			if n, ok := argName(base, in.MemoryOffset); ok {
-				a = n
-			}
-			settle(readsMemory)
-			text = a + " = " + v.text
-		case op == "memory.size":
-			settle(readsCall)
-			own.memory = true
-			push("memory_size()", 9)
-		case op == "memory.grow":
-			n := pop()
-			settle(readsMemory)
-			// It changes memory as a call might, and drop shows it.
-			own.memory, own.call = true, true
-			push("memory_grow("+n.text+")", 9)
-		case op == "memory.copy" || op == "memory.fill":
-			args := popN(3)
-			settle(readsMemory)
-			text = strings.ReplaceAll(op, ".", "_") + "(" + strings.Join(args, ", ") + ")"
-		case binaryOps[short] != (binaryOp{}):
-			o := binaryOps[short]
-			b, a := pop(), pop()
-			if o.fn {
-				push(short+"("+a.text+", "+b.text+")", 9)
-				break
-			}
-			e := expr{text: wrap(a, o.prec) + " " + o.text + " " + wrap(b, o.prec+1), prec: o.prec, bits: strings.HasPrefix(short, "sh") || short == "and" || short == "or" || short == "xor"}
-			// An address on Go's stack stays one past an offset.
-			switch {
-			case short == "add" && a.sp && b.konst:
-				e.sp, e.spOff = true, a.spOff+b.val
-			case short == "add" && b.sp && a.konst:
-				e.sp, e.spOff = true, b.spOff+a.val
-			case short == "sub" && a.sp && b.konst:
-				e.sp, e.spOff = true, a.spOff-b.val
-			}
-			// A float comparison is false either way for NaN, so only an
-			// integer one turns around.
-			if not, ok := negations[o.text]; ok && typ[0] == 'i' {
-				e.not = wrap(a, o.prec) + " " + not + " " + wrap(b, o.prec+1)
-			}
-			pushExpr(e)
-		case short == "eqz":
-			a := pop()
-			if a.not != "" {
-				pushExpr(expr{text: a.not, prec: 3, not: a.text})
-				break
-			}
-			pushExpr(expr{text: wrap(a, 9) + " == 0", prec: 3, not: wrap(a, 9) + " != 0"})
-		case short == "neg":
-			push("-"+wrap(pop(), 9), 9)
-		case isUnary(short):
-			a := pop()
-			if a.not != "" && strings.HasPrefix(short, "extend_i32") {
-				// A comparison is 0 or 1 at any width.
-				pushExpr(expr{text: a.text, prec: a.prec, not: a.not})
-				break
-			}
-			if short == "wrap_i64" && a.narrow != "" {
-				pushExpr(expr{text: a.narrow, prec: 9, sp: a.sp, spOff: a.spOff})
-				break
-			}
-			e := expr{text: convert(typ, short) + "(" + a.text + ")", prec: 9}
-			if short == "wrap_i64" || strings.HasPrefix(short, "extend_i32") {
-				e.sp, e.spOff = a.sp, a.spOff
-			}
-			if strings.HasPrefix(short, "extend_i32") {
-				e.narrow = wrap(a, 9)
-			}
-			pushExpr(e)
-		default:
-			// An instruction this doesn't know the operands of: show it
-			// and start the block over with an unknown stack.
-			text = insts[i].Text
-			cut()
-		}
+		w.row, w.operandReads, w.selfReads = i, reads{}, reads{}
+		w.keepStack()
+		text := w.step(i)
 		// A value grown too long to read gets a name on its own row.
-		if n := len(stack); n > 0 && stack[n-1].row == i && len(stack[n-1].text) > maxExpr {
-			temps++
-			t := fmt.Sprint("t", temps)
-			text = strings.TrimSpace(text + " " + t + " = " + stack[n-1].text)
-			stack[n-1] = expr{text: t, prec: 9, row: -1}
+		if n := len(w.stack); n > 0 && w.stack[n-1].row == i && len(w.stack[n-1].text) > maxExpr {
+			t := w.temp()
+			text = strings.TrimSpace(text + " " + t + " = " + w.stack[n-1].text)
+			w.stack[n-1] = expr{text: t, prec: precAtom, row: -1}
 		}
 		insts[i].NativeText = text
 	}
 	// The values left at the end are the function's results.
-	if last := len(insts) - 1; last >= 0 && len(ftype.Results) > 0 && len(stack) > 0 {
-		ret := "return " + strings.Join(popN(min(len(ftype.Results), len(stack))), ", ")
+	if last := len(insts) - 1; last >= 0 && len(w.ftype.Results) > 0 && len(w.stack) > 0 {
+		ret := "return " + strings.Join(w.popN(min(len(w.ftype.Results), len(w.stack))), ", ")
 		insts[last].NativeText = strings.TrimSpace(insts[last].NativeText + " " + ret)
 	}
+}
+
+// stmtWriter follows a function's value stack and blocks, spelling
+// each instruction that completes a statement.
+type stmtWriter struct {
+	info   *wasmInfo
+	fn     *wasmir.Function
+	ftype  wasmir.TypeDef
+	body   []wasmir.Instruction
+	insts  []disasm.Inst
+	locals map[uint32]string // names from DWARF
+
+	targeted  map[int]bool
+	cases     map[int]string
+	switches  map[int]bool
+	selectors map[int]*wasmSelector
+
+	stack  []expr
+	frames []wasmBlock
+	sp     goSP
+
+	// row is the instruction being spelled. operandReads gathers what
+	// its operands read and selfReads what it reads itself, which
+	// pushExpr gives the value it pushes.
+	row                     int
+	operandReads, selfReads reads
+
+	temps, labels int
+}
+
+// wasmBlock is an open block, loop or if; the function body is the
+// outermost.
+type wasmBlock struct {
+	label string
+	// cases is set for a block that a switch's case goes to: its end
+	// starts that case.
+	cases string
+	// selector is the switch right inside a loop, nil when there is
+	// none.
+	selector *wasmSelector
+	loop     bool
+	// cond marks an if, and sp is where Go's SP pointed when it started.
+	cond bool
+	sp   goSPState
+	// height is the stack's height under the block's values, and
+	// results how many it leaves. params are the values an if takes,
+	// which its else branch starts from again.
+	height, results int
+	params          []expr
+}
+
+// keepStack records the top of the stack before the row runs, for the
+// view to show.
+func (w *stmtWriter) keepStack() {
+	for k := len(w.stack) - 1; k >= max(len(w.stack)-maxStack, 0); k-- {
+		t := w.stack[k].text
+		if len(t) > maxExpr {
+			t = t[:maxExpr] + "…"
+		}
+		w.insts[w.row].Stack = append(w.insts[w.row].Stack, t)
+	}
+}
+
+func (w *stmtWriter) localName(i uint32) string {
+	params := uint32(len(w.ftype.Params))
+	if i < params {
+		if int(i) < len(w.fn.ParamNames) && w.fn.ParamNames[i] != "" {
+			return strings.TrimPrefix(w.fn.ParamNames[i], "$")
+		}
+		if n := w.locals[i]; n != "" {
+			return n
+		}
+		if i == 0 && w.info.goWasm {
+			// The resume point the function continues from.
+			return "PC_B"
+		}
+		return fmt.Sprint("p", i)
+	}
+	if k := int(i - params); k < len(w.fn.LocalNames) && w.fn.LocalNames[k] != "" {
+		return strings.TrimPrefix(w.fn.LocalNames[k], "$")
+	}
+	if n := w.locals[i]; n != "" {
+		return n
+	}
+	return fmt.Sprint("l", i)
+}
+
+func (w *stmtWriter) globalName(i uint32) string {
+	if int(i) < len(w.info.globals) && w.info.globals[i] != "" {
+		return w.info.globals[i]
+	}
+	return fmt.Sprint("g", i)
+}
+
+func (w *stmtWriter) pop() expr {
+	if len(w.stack) == 0 {
+		return expr{text: "?", prec: precAtom}
+	}
+	e := w.stack[len(w.stack)-1]
+	w.stack = w.stack[:len(w.stack)-1]
+	w.operandReads.add(e.reads)
+	return e
+}
+
+// popN pops n values, in the order they were pushed.
+func (w *stmtWriter) popN(n int) []string {
+	args := make([]string, n)
+	for i := n - 1; i >= 0; i-- {
+		args[i] = w.pop().text
+	}
+	return args
+}
+
+// pushExpr pushes the row's value, which reads what the row's
+// operands and the row itself read.
+func (w *stmtWriter) pushExpr(e expr) {
+	e.row, e.reads = w.row, w.operandReads
+	e.reads.add(w.selfReads)
+	w.stack = append(w.stack, e)
+}
+
+func (w *stmtWriter) push(text string, prec int) { w.pushExpr(expr{text: text, prec: prec}) }
+
+func (w *stmtWriter) temp() string {
+	w.temps++
+	return fmt.Sprint("t", w.temps)
+}
+
+// settle names the values waiting on the stack that what is about to
+// happen would change, on the rows that computed them, so the
+// statements keep their order.
+func (w *stmtWriter) settle(changes func(r reads) bool) {
+	for k := range w.stack {
+		e := &w.stack[k]
+		if !changes(e.reads) || e.row < 0 {
+			continue
+		}
+		t := w.temp()
+		assign := t + " = " + e.text
+		if w.insts[e.row].NativeText != "" {
+			assign = w.insts[e.row].NativeText + "; " + assign
+		}
+		w.insts[e.row].NativeText = assign
+		*e = expr{text: t, prec: precAtom, row: -1}
+	}
+}
+
+func (w *stmtWriter) top() *wasmBlock { return &w.frames[len(w.frames)-1] }
+
+// cut drops the values of the current block: the code after a branch
+// or trap doesn't run until the block ends.
+func (w *stmtWriter) cut() {
+	w.stack = w.stack[:min(len(w.stack), w.top().height)]
+}
+
+// resultNames are the names a block's values get after it ends: its
+// label, or with several, the label and an index.
+func resultNames(label string, n int) []string {
+	if n == 1 {
+		return []string{label}
+	}
+	names := make([]string, n)
+	for i := range names {
+		names[i] = fmt.Sprintf("%s.%d", label, i)
+	}
+	return names
+}
+
+// leftover spells the values a block leaves as an assignment to its
+// label, so they show before the block's end.
+func (w *stmtWriter) leftover(b *wasmBlock) string {
+	defer func() { w.stack = w.stack[:min(len(w.stack), b.height)] }()
+	if len(w.stack) < b.height+b.results || b.results == 0 {
+		return ""
+	}
+	values := w.popN(b.results)
+	return strings.Join(resultNames(b.label, b.results), ", ") + " = " + strings.Join(values, ", ") + "; "
+}
+
+func (w *stmtWriter) inIf() bool {
+	return slices.ContainsFunc(w.frames[1:], func(b wasmBlock) bool { return b.cond })
+}
+
+// target spells where a branch depth blocks out goes.
+func (w *stmtWriter) target(depth uint32) string {
+	if int(depth) >= len(w.frames) {
+		return "?"
+	}
+	b := w.frames[len(w.frames)-1-int(depth)]
+	switch {
+	case int(depth) == len(w.frames)-1:
+		if n := min(len(w.ftype.Results), len(w.stack)); n > 0 {
+			return "return " + strings.Join(w.peek(n), ", ")
+		}
+		return "return"
+	case b.cases != "":
+		return "goto " + b.cases
+	case b.loop:
+		return "continue " + b.label
+	}
+	return "break " + b.label
+}
+
+// peek spells the top n values, in the order they were pushed.
+func (w *stmtWriter) peek(n int) []string {
+	var texts []string
+	for _, e := range w.stack[len(w.stack)-n:] {
+		texts = append(texts, e.text)
+	}
+	return texts
+}
+
+// carry spells the values a branch to a block that gives them takes:
+// the top of the stack, which br_if leaves there when not taken.
+func (w *stmtWriter) carry(depth uint32) string {
+	if int(depth) >= len(w.frames)-1 {
+		return ""
+	}
+	b := w.frames[len(w.frames)-1-int(depth)]
+	if b.loop || b.results == 0 || len(w.stack) < b.results {
+		return ""
+	}
+	return strings.Join(resultNames(b.label, b.results), ", ") + " = " + strings.Join(w.peek(b.results), ", ") + "; "
+}
+
+// step spells row i, empty when it completes no statement.
+func (w *stmtWriter) step(i int) string {
+	in := &w.body[i]
+	op, arg, _ := strings.Cut(w.insts[i].Text, " ")
+	typ, short, _ := strings.Cut(op, ".")
+	switch {
+	case isWasmOpener(op):
+		return w.open(i, op, in)
+	case op == "else":
+		b := w.top()
+		text := w.leftover(b) + "} else {"
+		w.sp.state = b.sp
+		// The else branch starts from the if's parameters again.
+		w.stack = append(w.stack, b.params...)
+		return text
+	case op == "end":
+		return w.end()
+	case op == "br" || op == "br_if" || op == "br_table":
+		return w.branch(i, op, in)
+	case op == "return":
+		return strings.TrimSpace("return " + strings.Join(w.popN(len(w.ftype.Results)), ", "))
+	case op == "unreachable":
+		w.cut()
+		return "unreachable"
+	case op == "nop":
+		return ""
+	case op == "drop":
+		// Only a call or memory.grow does something worth showing.
+		if v := w.pop(); v.reads.call && v.row >= 0 {
+			return v.text
+		}
+		return ""
+	case op == "select":
+		c, b, a := w.pop(), w.pop(), w.pop()
+		w.push(wrap(c, precCmp)+" ? "+wrap(a, precCond+1)+" : "+wrap(b, precCond+1), precCond)
+		return ""
+	case op == "local.get":
+		w.selfReads.locals = []uint32{in.LocalIndex}
+		sp, off := w.sp.read(in.LocalIndex)
+		w.pushExpr(expr{text: w.localName(in.LocalIndex), prec: precAtom, sp: sp, spOff: off})
+		return ""
+	case op == "local.set" || op == "local.tee":
+		v := w.pop()
+		w.settle(readsLocal(in.LocalIndex))
+		w.sp.set(in.LocalIndex, v)
+		text := w.localName(in.LocalIndex) + " = " + v.text
+		if op == "local.tee" {
+			w.operandReads, w.selfReads = reads{}, reads{locals: []uint32{in.LocalIndex}}
+			w.pushExpr(expr{text: w.localName(in.LocalIndex), prec: precAtom, sp: v.sp, spOff: v.spOff, spGlobal: v.spGlobal})
+		}
+		return text
+	case op == "global.get":
+		w.settle(readsCall)
+		w.selfReads.globals = []uint32{in.GlobalIndex}
+		w.pushExpr(expr{text: w.globalName(in.GlobalIndex), prec: precAtom, spGlobal: w.sp.isGlobal(in.GlobalIndex)})
+		return ""
+	case op == "global.set":
+		v := w.pop()
+		w.sp.setGlobal(in.GlobalIndex, v, w.inIf())
+		w.settle(readsGlobal(in.GlobalIndex))
+		return w.globalName(in.GlobalIndex) + " = " + v.text
+	case op == "call" || op == "call_indirect" || op == "return_call":
+		return w.call(op, arg, in)
+	}
+	return w.value(op, arg, typ, short, in)
+}
+
+// open starts a block, loop or if.
+func (w *stmtWriter) open(i int, op string, in *wasmir.Instruction) string {
+	params, results := blockArity(w.info.m, in)
+	b := wasmBlock{
+		loop: op == "loop", cond: op == "if", results: results,
+		cases: w.cases[i], selector: w.selectors[i], sp: w.sp.state,
+	}
+	if b.cases == "" && (w.targeted[i] || b.results > 0) {
+		w.labels++
+		b.label = fmt.Sprint("L", w.labels)
+	}
+	cond := ""
+	if op == "if" {
+		cond = w.pop().text
+	}
+	// A call waiting on the stack ran before the block.
+	w.settle(readsCall)
+	// The block's parameters are its own values.
+	b.height = max(len(w.stack)-params, 0)
+	if b.cond {
+		b.params = slices.Clone(w.stack[b.height:])
+	}
+	w.frames = append(w.frames, b)
+	switch {
+	case b.cases != "":
+		// The switch spells it.
+		return ""
+	case op == "if":
+		return strings.TrimSpace("if "+b.label) + " (" + cond + ") {"
+	case op == "try_table":
+		return strings.TrimSpace("try "+b.label) + " {"
+	}
+	return strings.TrimSpace(op+" "+b.label) + " {"
+}
+
+// end closes the innermost block.
+func (w *stmtWriter) end() string {
+	if len(w.frames) == 1 {
+		return ""
+	}
+	b := *w.top()
+	text := w.leftover(&b) + "}"
+	if b.cases != "" {
+		text = b.cases + ":"
+		w.sp.caseStart(b.cases)
+	}
+	if b.cond {
+		// Go only moves SP inside an if on its way out.
+		w.sp.state = b.sp
+	}
+	w.frames = w.frames[:len(w.frames)-1]
+	if b.results > 0 {
+		for _, n := range resultNames(b.label, b.results) {
+			w.push(n, precAtom)
+		}
+	}
+	return text
+}
+
+// branch spells br, br_if and br_table.
+func (w *stmtWriter) branch(i int, op string, in *wasmir.Instruction) string {
+	cond := ""
+	if op != "br" {
+		cond = w.pop().text
+	}
+	w.settle(readsCall)
+	if op != "br_if" {
+		// What follows is unreachable until the block ends.
+		defer w.cut()
+	}
+	if text, ok := w.gotoCase(i, op, in); ok {
+		return text
+	}
+	switch {
+	case op == "br":
+		return w.carry(in.BranchDepth) + w.target(in.BranchDepth)
+	case op == "br_if":
+		if c := w.carry(in.BranchDepth); c != "" {
+			return "if (" + cond + ") { " + c + w.target(in.BranchDepth) + " }"
+		}
+		return "if (" + cond + ") " + w.target(in.BranchDepth)
+	case w.switches[i]:
+		return "switch (" + cond + ")"
+	}
+	var carried []string
+	for _, d := range append(slices.Clone(in.BranchTable), in.BranchDefault) {
+		if c := w.carry(d); c != "" && !slices.Contains(carried, c) {
+			carried = append(carried, c)
+		}
+	}
+	short := func(d uint32) string {
+		return strings.TrimPrefix(strings.TrimPrefix(w.target(d), "break "), "continue ")
+	}
+	var cases []string
+	for _, d := range in.BranchTable {
+		cases = append(cases, short(d))
+	}
+	return strings.Join(carried, "") + "switch (" + cond + ") " + strings.Join(cases, ", ") + " else " + short(in.BranchDefault)
+}
+
+// gotoCase spells setting a switch's local to a constant and going back
+// to its loop as going to a case. Go jumps that way inside a function
+// and never reads PC_B after, so there the write goes unsaid.
+func (w *stmtWriter) gotoCase(i int, op string, in *wasmir.Instruction) (string, bool) {
+	if op != "br" || i < 2 || int(in.BranchDepth) >= len(w.frames) {
+		return "", false
+	}
+	b := w.frames[len(w.frames)-1-int(in.BranchDepth)]
+	set := &w.body[i-1]
+	value, isConst := strings.CutPrefix(w.insts[i-2].Text, "i32.const ")
+	n, err := strconv.Atoi(value)
+	if !b.loop || b.selector == nil || set.Kind != wasmir.InstrLocalSet || set.LocalIndex != b.selector.local || !isConst || err != nil {
+		return "", false
+	}
+	// Keep the write if a temporary was named on its row.
+	if w.info.goWasm && !strings.Contains(w.insts[i-1].NativeText, ";") {
+		w.insts[i-1].NativeText = ""
+	}
+	if n < 0 || n >= b.selector.cases {
+		return "goto default", true
+	}
+	return "goto case " + strconv.Itoa(n), true
+}
+
+// call spells a call, which runs after the values it reads and before
+// any that read what it might change.
+func (w *stmtWriter) call(op, arg string, in *wasmir.Instruction) string {
+	var t wasmir.TypeDef
+	callee := strings.TrimPrefix(arg, "$")
+	if op == "call_indirect" {
+		t = typeOf(w.info.m, in.CallTypeIndex)
+		callee = "table[" + w.pop().text + "]"
+	} else if int(in.FuncIndex) < len(w.info.funcTypes) {
+		t = w.info.funcTypes[in.FuncIndex]
+	}
+	call := callee + "(" + strings.Join(w.popN(len(t.Params)), ", ") + ")"
+	w.settle(readsAny)
+	w.selfReads.call = true
+	switch {
+	case op == "return_call":
+		return "return " + call
+	case len(t.Results) == 1:
+		w.push(call, precAtom)
+		return ""
+	case len(t.Results) == 0:
+		return call
+	}
+	// Several results get a temporary each.
+	var names []string
+	for range t.Results {
+		names = append(names, w.temp())
+	}
+	for _, n := range names {
+		w.stack = append(w.stack, expr{text: n, prec: precAtom, row: -1})
+	}
+	return strings.Join(names, ", ") + " = " + call
+}
+
+// value spells the instructions that compute a value or touch memory.
+func (w *stmtWriter) value(op, arg, typ, short string, in *wasmir.Instruction) string {
+	switch {
+	case short == "const":
+		v, err := strconv.ParseInt(arg, 0, 64)
+		w.pushExpr(expr{text: arg, prec: precAtom, konst: err == nil, val: v})
+	case strings.HasPrefix(short, "load"):
+		w.settle(readsCall)
+		w.selfReads.memory = true
+		base := w.pop()
+		if n, ok := w.sp.argName(base, in.MemoryOffset); ok {
+			w.push(n, precAtom)
+			break
+		}
+		w.push(memType(typ, short)+"["+address(base, in.MemoryOffset)+"]", precAtom)
+	case strings.HasPrefix(short, "store"):
+		v := w.pop()
+		base := w.pop()
+		a := memType(typ, short) + "[" + address(base, in.MemoryOffset) + "]"
+		if n, ok := w.sp.argName(base, in.MemoryOffset); ok {
+			a = n
+		}
+		w.settle(readsMemory)
+		return a + " = " + v.text
+	case op == "memory.size":
+		w.settle(readsCall)
+		w.selfReads.memory = true
+		w.push("memory_size()", precAtom)
+	case op == "memory.grow":
+		n := w.pop()
+		w.settle(readsMemory)
+		// It changes memory as a call might, and drop shows it.
+		w.selfReads.memory, w.selfReads.call = true, true
+		w.push("memory_grow("+n.text+")", precAtom)
+	case op == "memory.copy" || op == "memory.fill":
+		args := w.popN(3)
+		w.settle(readsMemory)
+		return strings.ReplaceAll(op, ".", "_") + "(" + strings.Join(args, ", ") + ")"
+	case binaryOps[short] != (binaryOp{}):
+		w.binary(typ, short)
+	case short == "eqz":
+		a := w.pop()
+		if a.not != "" {
+			w.pushExpr(expr{text: a.not, prec: precCmp, not: a.text})
+			break
+		}
+		w.pushExpr(expr{text: wrap(a, precAtom) + " == 0", prec: precCmp, not: wrap(a, precAtom) + " != 0"})
+	case short == "neg":
+		w.push("-"+wrap(w.pop(), precAtom), precAtom)
+	case isUnary(short):
+		w.unary(typ, short)
+	default:
+		// An instruction this doesn't know the operands of: show it
+		// and start the block over with an unknown stack.
+		w.cut()
+		return w.insts[w.row].Text
+	}
+	return ""
+}
+
+func (w *stmtWriter) binary(typ, short string) {
+	o := binaryOps[short]
+	b, a := w.pop(), w.pop()
+	if o.fn {
+		w.push(short+"("+a.text+", "+b.text+")", precAtom)
+		return
+	}
+	e := expr{
+		text:    wrap(a, o.prec) + " " + o.text + " " + wrap(b, o.prec+1),
+		prec:    o.prec,
+		bitwise: strings.HasPrefix(short, "sh") || short == "and" || short == "or" || short == "xor",
+	}
+	// An address on Go's stack stays one past an offset.
+	switch {
+	case short == "add" && a.sp && b.konst:
+		e.sp, e.spOff = true, a.spOff+b.val
+	case short == "add" && b.sp && a.konst:
+		e.sp, e.spOff = true, b.spOff+a.val
+	case short == "sub" && a.sp && b.konst:
+		e.sp, e.spOff = true, a.spOff-b.val
+	}
+	// A float comparison is false either way for NaN, so only an
+	// integer one turns around.
+	if not, ok := negations[o.text]; ok && typ[0] == 'i' {
+		e.not = wrap(a, o.prec) + " " + not + " " + wrap(b, o.prec+1)
+	}
+	w.pushExpr(e)
+}
+
+func (w *stmtWriter) unary(typ, short string) {
+	a := w.pop()
+	widen := strings.HasPrefix(short, "extend_i32")
+	switch {
+	case a.not != "" && widen:
+		// A comparison is 0 or 1 at any width.
+		w.pushExpr(expr{text: a.text, prec: a.prec, not: a.not})
+		return
+	case short == "wrap_i64" && a.narrow != "":
+		w.pushExpr(expr{text: a.narrow, prec: precAtom, sp: a.sp, spOff: a.spOff})
+		return
+	}
+	e := expr{text: convert(typ, short) + "(" + a.text + ")", prec: precAtom}
+	if short == "wrap_i64" || widen {
+		e.sp, e.spOff = a.sp, a.spOff
+	}
+	if widen {
+		e.narrow = wrap(a, precAtom)
+	}
+	w.pushExpr(e)
+}
+
+// goSP follows Go's SP, which Go's wasm port keeps in local 1, to name
+// the arguments and results a load or store reaches. args is nil
+// outside Go.
+type goSP struct {
+	args  map[int64]string
+	state goSPState
+	// frame is where SP points once the function has made its frame.
+	frame goSPState
+}
+
+// goSPState is where local 1 points, adj bytes from SP at the
+// function's start, while known.
+type goSPState struct {
+	adj   int64
+	known bool
+}
+
+// read is whether reading local gives a known address on Go's stack,
+// and where.
+func (s *goSP) read(local uint32) (bool, int64) {
+	return s.args != nil && local == 1 && s.state.known, s.state.adj
+}
+
+func (s *goSP) isGlobal(global uint32) bool { return s.args != nil && global == 0 }
+
+// set follows a store to local.
+func (s *goSP) set(local uint32, v expr) {
+	switch {
+	case s.args == nil || local != 1:
+	case v.sp:
+		s.state = goSPState{v.spOff, true}
+	case v.spGlobal && s.frame.known:
+		// After a call SP is back at the frame.
+		s.state = s.frame
+	case v.spGlobal:
+		// The function's start, before it makes its frame.
+		s.state = goSPState{0, true}
+	default:
+		s.state.known = false
+	}
+}
+
+// setGlobal follows a store to a global: the function's first SP
+// outside the stack check makes its frame.
+func (s *goSP) setGlobal(global uint32, v expr, inIf bool) {
+	if s.isGlobal(global) && v.sp && !s.frame.known && !inIf {
+		s.frame = goSPState{v.spOff, true}
+	}
+}
+
+// caseStart follows the start of a case: Go enters case 0 at the
+// function's start and any other to resume, with its frame made.
+func (s *goSP) caseStart(cases string) {
+	if cases == "case 0" || strings.HasPrefix(cases, "case 0,") {
+		s.state = goSPState{0, true}
+	} else {
+		s.state = s.frame
+	}
+}
+
+// argName is the argument or result a Go stack address reaches.
+func (s *goSP) argName(base expr, offset uint64) (string, bool) {
+	if !base.sp {
+		return "", false
+	}
+	// The arguments start past the return address.
+	n, ok := s.args[base.spOff+int64(offset)-8]
+	return n, ok
 }
 
 const (
@@ -616,18 +805,18 @@ type binaryOp struct {
 // binaryOps are the operators of the instructions taking two values,
 // by the name after the type. Unsigned operators end in u.
 var binaryOps = map[string]binaryOp{
-	"add": {"+", 4, false}, "sub": {"-", 4, false}, "mul": {"*", 5, false},
-	"div": {"/", 5, false}, "div_s": {"/", 5, false}, "div_u": {"/u", 5, false},
-	"rem_s": {"%", 5, false}, "rem_u": {"%u", 5, false},
-	"and": {"&", 5, false}, "or": {"|", 4, false}, "xor": {"^", 4, false},
-	"shl": {"<<", 5, false}, "shr_s": {">>", 5, false}, "shr_u": {">>u", 5, false},
-	"rotl": {"", 9, true}, "rotr": {"", 9, true},
-	"eq": {"==", 3, false}, "ne": {"!=", 3, false},
-	"lt": {"<", 3, false}, "lt_s": {"<", 3, false}, "lt_u": {"<u", 3, false},
-	"gt": {">", 3, false}, "gt_s": {">", 3, false}, "gt_u": {">u", 3, false},
-	"le": {"<=", 3, false}, "le_s": {"<=", 3, false}, "le_u": {"<=u", 3, false},
-	"ge": {">=", 3, false}, "ge_s": {">=", 3, false}, "ge_u": {">=u", 3, false},
-	"min": {"", 9, true}, "max": {"", 9, true}, "copysign": {"", 9, true},
+	"add": {"+", precAdd, false}, "sub": {"-", precAdd, false}, "mul": {"*", precMul, false},
+	"div": {"/", precMul, false}, "div_s": {"/", precMul, false}, "div_u": {"/u", precMul, false},
+	"rem_s": {"%", precMul, false}, "rem_u": {"%u", precMul, false},
+	"and": {"&", precMul, false}, "or": {"|", precAdd, false}, "xor": {"^", precAdd, false},
+	"shl": {"<<", precMul, false}, "shr_s": {">>", precMul, false}, "shr_u": {">>u", precMul, false},
+	"rotl": {"", precAtom, true}, "rotr": {"", precAtom, true},
+	"eq": {"==", precCmp, false}, "ne": {"!=", precCmp, false},
+	"lt": {"<", precCmp, false}, "lt_s": {"<", precCmp, false}, "lt_u": {"<u", precCmp, false},
+	"gt": {">", precCmp, false}, "gt_s": {">", precCmp, false}, "gt_u": {">u", precCmp, false},
+	"le": {"<=", precCmp, false}, "le_s": {"<=", precCmp, false}, "le_u": {"<=u", precCmp, false},
+	"ge": {">=", precCmp, false}, "ge_s": {">=", precCmp, false}, "ge_u": {">=u", precCmp, false},
+	"min": {"", precAtom, true}, "max": {"", precAtom, true}, "copysign": {"", precAtom, true},
 }
 
 // isUnary reports whether the instruction takes one value and gives
@@ -689,7 +878,7 @@ func address(base expr, offset uint64) string {
 		return strconv.FormatUint(offset, 10)
 	}
 	text := base.text
-	if base.prec < 4 || base.bits {
+	if base.prec < precAdd || base.bitwise {
 		text = "(" + text + ")"
 	}
 	return text + " + " + strconv.FormatUint(offset, 10)
@@ -702,44 +891,16 @@ func typeOf(m *wasmir.Module, i uint32) wasmir.TypeDef {
 	return wasmir.TypeDef{}
 }
 
-// blockResults is how many values a block leaves.
-func blockResults(m *wasmir.Module, in *wasmir.Instruction) int {
+// blockArity is how many values a block takes and leaves.
+func blockArity(m *wasmir.Module, in *wasmir.Instruction) (params, results int) {
 	switch {
 	case in.BlockTypeUsesIndex:
-		return len(typeOf(m, in.BlockTypeIndex).Results)
+		t := typeOf(m, in.BlockTypeIndex)
+		return len(t.Params), len(t.Results)
 	case in.BlockType != nil:
-		return 1
+		return 0, 1
 	}
-	return 0
-}
-
-// wasmTargets marks the blocks that a branch goes to, by their row.
-func wasmTargets(body []wasmir.Instruction) map[int]bool {
-	targeted := map[int]bool{}
-	var open []int
-	mark := func(depth uint32) {
-		if int(depth) < len(open) {
-			targeted[open[len(open)-1-int(depth)]] = true
-		}
-	}
-	for i, in := range body {
-		switch in.Kind {
-		case wasmir.InstrBlock, wasmir.InstrLoop, wasmir.InstrIf, wasmir.InstrTryTable:
-			open = append(open, i)
-		case wasmir.InstrEnd:
-			if len(open) > 0 {
-				open = open[:len(open)-1]
-			}
-		case wasmir.InstrBr, wasmir.InstrBrIf:
-			mark(in.BranchDepth)
-		case wasmir.InstrBrTable:
-			for _, d := range in.BranchTable {
-				mark(d)
-			}
-			mark(in.BranchDefault)
-		}
-	}
-	return targeted
+	return 0, 0
 }
 
 // wasmSelector is a switch on a local: the value of local picks one
@@ -756,7 +917,7 @@ type wasmSelector struct {
 // and switches marks the br_tables.
 //
 // When the switch is on a local, right inside a loop, selectors holds
-// that local plus one by the loop's row.
+// it by the loop's row.
 func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.Inst) (cases map[int]string, switches map[int]bool, selectors map[int]*wasmSelector) {
 	cases, switches, selectors = map[int]string{}, map[int]bool{}, map[int]*wasmSelector{}
 	for j, in := range body {
@@ -766,15 +927,16 @@ func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.In
 		// Between the blocks and the br_table only the value is
 		// computed, with nothing a statement would show.
 		k := j - 1
-		for k >= 0 && !isOpener(body[k].Kind) && pure(insts[k].Text) {
+		opener := func(k int) bool { return isWasmOpener(wasmOp(insts[k].Text)) }
+		for k >= 0 && !opener(k) && pure(insts[k].Text) {
 			k--
 		}
-		if k < 0 || !isOpener(body[k].Kind) {
+		if k < 0 || !opener(k) {
 			continue
 		}
 		// run holds the blocks opened one after another, innermost first.
 		var run []int
-		for ; k >= 0 && isOpener(body[k].Kind); k-- {
+		for ; k >= 0 && opener(k); k-- {
 			run = append(run, k)
 		}
 		values := map[uint32][]string{}
@@ -786,7 +948,8 @@ func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.In
 		ok := int(deepest) < len(run)
 		for d := uint32(0); ok && d <= deepest; d++ {
 			b := &body[run[d]]
-			ok = b.Kind == wasmir.InstrBlock && blockResults(m, b) == 0 &&
+			params, results := blockArity(m, b)
+			ok = b.Kind == wasmir.InstrBlock && params == 0 && results == 0 &&
 				(len(values[d]) > 0 || d == in.BranchDefault)
 		}
 		if !ok {
@@ -810,19 +973,10 @@ func wasmSwitches(m *wasmir.Module, body []wasmir.Instruction, insts []disasm.In
 	return cases, switches, selectors
 }
 
-func isOpener(k wasmir.InstrKind) bool {
-	switch k {
-	case wasmir.InstrBlock, wasmir.InstrLoop, wasmir.InstrIf, wasmir.InstrTryTable:
-		return true
-	}
-	return false
-}
-
 // pure reports whether an instruction only computes a value from
 // others, so it shows no statement of its own.
 func pure(text string) bool {
-	op, _, _ := strings.Cut(text, " ")
-	typ, short, _ := strings.Cut(op, ".")
+	typ, short, _ := strings.Cut(wasmOp(text), ".")
 	switch typ {
 	case "local", "global":
 		return short == "get"

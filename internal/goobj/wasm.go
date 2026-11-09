@@ -31,15 +31,6 @@ func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, e
 	// steps holds each open block's step, 0 or 1.
 	level := 0
 	var steps []int
-	opener := func(op string) bool {
-		switch op {
-		// watgo prints try_table's catch clauses inline and has no
-		// legacy try, so try_table is the only other opener.
-		case "block", "loop", "if", "try_table":
-			return true
-		}
-		return false
-	}
 	for i, in := range decoded {
 		switch {
 		case in.Op == "end" && len(steps) > 0:
@@ -50,9 +41,9 @@ func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, e
 		}
 		inst := disasm.Inst{PC: uint64(i), Text: in.Text, Indent: min(level, maxIndent)}
 		switch {
-		case opener(in.Op):
+		case isWasmOpener(in.Op):
 			step := 1
-			if i > 0 && opener(decoded[i-1].Op) && in.Op != "if" {
+			if i > 0 && isWasmOpener(decoded[i-1].Op) && in.Op != "if" {
 				step = 0
 			}
 			steps = append(steps, step)
@@ -71,13 +62,13 @@ func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, e
 		refs.Add(inst.File, inst.Line, i)
 		code.Insts = append(code.Insts, inst)
 	}
-	wasmBranches(code.Insts)
+	targeted := wasmBranches(code.Insts)
 	if info := file.wasmModule(); info != nil {
 		var goArgs map[int64]string
 		if info.goWasm {
 			goArgs = goArgNames(code.File, fn.Name())
 		}
-		wasmStatements(info, int(fn.fn.Addr), code.Insts, goArgs)
+		wasmStatements(info, int(fn.fn.Addr), code.Insts, targeted, goArgs)
 		code.Statements = true
 	}
 	code.Source = source.Load(fn.file.files, refs, code.File, opts.Context)
@@ -88,7 +79,10 @@ func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, e
 // so the view draws it as a jump. A branch names its target by how many
 // blocks out it is; a loop's label is its start and a block's or an
 // if's is its end. br_table points at its default target.
-func wasmBranches(insts []disasm.Inst) {
+//
+// It returns the rows of the blocks that branches go to.
+func wasmBranches(insts []disasm.Inst) map[int]bool {
+	targeted := map[int]bool{}
 	type label struct {
 		at       int   // the opener's row
 		loop     bool  // branches go back to at
@@ -98,10 +92,10 @@ func wasmBranches(insts []disasm.Inst) {
 	stack := []*label{{at: -1}}
 	for i := range insts {
 		op, arg, _ := strings.Cut(insts[i].Text, " ")
-		switch op {
-		case "block", "loop", "if", "try_table":
+		switch {
+		case isWasmOpener(op):
 			stack = append(stack, &label{at: i, loop: op == "loop"})
-		case "end":
+		case op == "end":
 			if len(stack) > 1 || i == len(insts)-1 {
 				l := stack[len(stack)-1]
 				for _, b := range l.branches {
@@ -112,10 +106,16 @@ func wasmBranches(insts []disasm.Inst) {
 					stack = stack[:len(stack)-1]
 				}
 			}
-		case "br", "br_if", "br_table":
+		case op == "br" || op == "br_if" || op == "br_table":
 			fields := strings.Fields(arg)
 			if len(fields) == 0 {
 				continue
+			}
+			// The jump goes to br_table's default, the last depth.
+			for _, f := range fields {
+				if d, err := strconv.Atoi(f); err == nil && d < len(stack) && stack[len(stack)-1-d].at >= 0 {
+					targeted[stack[len(stack)-1-d].at] = true
+				}
 			}
 			depth, err := strconv.Atoi(fields[len(fields)-1])
 			if err != nil || depth >= len(stack) {
@@ -129,6 +129,7 @@ func wasmBranches(insts []disasm.Inst) {
 			}
 		}
 	}
+	return targeted
 }
 
 // wasmCall names the callee of a call. objfile names it in Text from
@@ -144,4 +145,21 @@ func wasmCall(in objfile.Inst) string {
 		return name
 	}
 	return ""
+}
+
+// isWasmOpener reports whether a wasm instruction opens a block. watgo
+// prints try_table's catch clauses inline and has no legacy try, so
+// try_table is the only other opener.
+func isWasmOpener(op string) bool {
+	switch op {
+	case "block", "loop", "if", "try_table":
+		return true
+	}
+	return false
+}
+
+// wasmOp is the instruction in a row's text.
+func wasmOp(text string) string {
+	op, _, _ := strings.Cut(text, " ")
+	return op
 }
