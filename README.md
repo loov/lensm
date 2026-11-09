@@ -60,7 +60,10 @@ Flags:
 
 Keys:
 
-- `Cmd/Ctrl+F` focuses the function filter; `Down` or `Enter` moves into the
+- `Cmd/Ctrl+F` in the code finds text in the shown columns of the open
+  function; `Enter` or `Cmd/Ctrl+G` steps to the next match, with `Shift`
+  to the previous, and `Escape` closes the find bar;
+- `Cmd/Ctrl+F` elsewhere focuses the function filter; `Down` or `Enter` moves into the
   list, and `Enter` there keeps the previewed function open in a tab;
 - `Cmd/Ctrl+P` goes to a function by name, or by an address such as
   `0x4a2f10` from a stack trace or profile, selecting its instruction;

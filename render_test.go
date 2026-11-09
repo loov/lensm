@@ -40,6 +40,7 @@ var (
 	renderSize     = flag.String("render.size", "1400x900", "window size in dp")
 	renderScale    = flag.Float64("render.scale", 2, "pixels per dp")
 	renderHover    = flag.String("render.hover", "", "pointer position in dp, as x,y")
+	renderFind     = flag.String("render.find", "", "open the find bar with this query")
 	renderQuick    = flag.String("render.quick", "", "open the go-to-function popup with this query")
 	renderMenu     = flag.Bool("render.menu", false, "open the app menu, drawn in the window except on macOS")
 	renderSettings = flag.Int("render.settings", -1, "open the settings on this page")
@@ -133,6 +134,10 @@ func TestRender(t *testing.T) {
 			Metric:      unit.Metric{PxPerDp: scale, PxPerSp: scale},
 			Constraints: layout.Exact(size),
 			Source:      router.Source(),
+		}
+		if i == 0 && *renderFind != "" {
+			ui.Find.Editor.SetText(*renderFind)
+			ui.openFind(gtx)
 		}
 		if i == 0 && *renderQuick != "" {
 			ui.QuickOpen.Editor.SetText(*renderQuick)

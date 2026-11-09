@@ -111,6 +111,7 @@ type FileUI struct {
 	SettingsOK        widget.Clickable
 	SettingsCancel    widget.Clickable
 	Comment           codeview.CommentEditor
+	Find              findBar
 	TextSizeEditor    widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -512,12 +513,13 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	// unfocused poll runs before any editor's Update, so it would steal
 	// them from a focused editor. Only listen for Alt+arrows while no
 	// text editor has focus.
-	editorFocused := gtx.Focused(&ui.Comment) || gtx.Focused(&ui.Funcs.Filter) || gtx.Focused(&ui.QuickOpen.Editor)
+	editorFocused := gtx.Focused(&ui.Comment) || gtx.Focused(&ui.Funcs.Filter) || gtx.Focused(&ui.QuickOpen.Editor) || gtx.Focused(&ui.Find.Editor)
 	filters := []event.Filter{
 		key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("W")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("F")},
+		key.Filter{Required: key.ModShortcut, Optional: key.ModShift, Name: key.Name("G")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("O")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("P")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("R")},
@@ -551,7 +553,18 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 		case key.Name("W"):
 			ui.closeTab(ui.ActiveTab)
 		case key.Name("F"):
-			ui.focusFilter(gtx)
+			// In the code it finds text, elsewhere it filters functions.
+			if code := ui.activeCode(); code != nil && (gtx.Focused(code) || gtx.Focused(&ui.Find.Editor)) {
+				ui.openFind(gtx)
+			} else {
+				ui.focusFilter(gtx)
+			}
+		case key.Name("G"):
+			if keyEvent.Modifiers.Contain(key.ModShift) {
+				ui.stepFind(-1)
+			} else {
+				ui.stepFind(1)
+			}
 		case key.Name("O"):
 			ui.chooseFile()
 		case key.Name("P"):
@@ -738,6 +751,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					return ui.layoutCodeTabs(gtx, colors)
 				}),
 				layout.Rigid(ui.layoutCrumbs),
+				layout.Rigid(ui.layoutFind),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					if ui.LoadError != nil && ui.File == nil {
 						return layout.Dimensions{}
