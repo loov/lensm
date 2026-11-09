@@ -272,8 +272,12 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 	for i := range body {
 		in := &body[i]
 		current, popped, own = i, reads{}, reads{}
-		for k := len(stack) - 1; k >= 0; k-- {
-			insts[i].Stack = append(insts[i].Stack, stack[k].text)
+		for k := len(stack) - 1; k >= max(len(stack)-maxStack, 0); k-- {
+			t := stack[k].text
+			if len(t) > maxExpr {
+				t = t[:maxExpr] + "…"
+			}
+			insts[i].Stack = append(insts[i].Stack, t)
 		}
 		op, arg, _ := strings.Cut(insts[i].Text, " ")
 		typ, short, _ := strings.Cut(op, ".")
@@ -572,6 +576,13 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 			text = insts[i].Text
 			cut()
 		}
+		// A value grown too long to read gets a name on its own row.
+		if n := len(stack); n > 0 && stack[n-1].row == i && len(stack[n-1].text) > maxExpr {
+			temps++
+			t := fmt.Sprint("t", temps)
+			text = strings.TrimSpace(text + " " + t + " = " + stack[n-1].text)
+			stack[n-1] = expr{text: t, prec: 9, row: -1}
+		}
 		insts[i].NativeText = text
 	}
 	// The values left at the end are the function's results.
@@ -580,6 +591,13 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 		insts[last].NativeText = strings.TrimSpace(insts[last].NativeText + " " + ret)
 	}
 }
+
+const (
+	// maxStack is the most values a row keeps of the stack before it.
+	maxStack = 16
+	// maxExpr is the longest a value gets before it is named.
+	maxExpr = 200
+)
 
 // negations are the comparisons' opposites.
 var negations = map[string]string{

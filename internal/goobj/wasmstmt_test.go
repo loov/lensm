@@ -165,6 +165,11 @@ func TestWasmStatements(t *testing.T) {
 			i32.and)`,
 		want: []string{"return ((p0 & p1) == 0) & ((p0 | p1) < 4)"},
 	}, {
+		name: "a long value gets a name",
+		module: `(func $f (param i32) (result i32)
+			local.get 0 ` + strings.Repeat("i32.const 1234567 i32.add ", 20) + `)`,
+		want: []string{"t1 = p0" + strings.Repeat(" + 1234567", 20) + " return t1"},
+	}, {
 		name: "a br_table that isn't a switch",
 		module: `(func $f (param i32)
 			(block (block local.get 0 i32.const 1 i32.add local.set 0 local.get 0 br_table 0 1)))`,
