@@ -47,6 +47,7 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 			checkRefs(t, file)
 			checkMarks(t, file)
 			checkIndex(t, file)
+			checkQualified(t, file)
 
 			for _, fn := range file.Funcs() {
 				if !strings.Contains(fn.Name(), "main.sumInts") {
@@ -166,5 +167,17 @@ func checkIndex(t *testing.T, file *File) {
 		if index.Stats[i].Size == 0 {
 			t.Errorf("%s: size 0", fn.Name())
 		}
+	}
+}
+
+// checkQualified checks that Go assembly local to its file, which the
+// symbol table names without a package, gets one from its source.
+func checkQualified(t *testing.T, file *File) {
+	t.Helper()
+	if disasm.FindFunc(file, "gogo") != nil {
+		t.Error("gogo has no package")
+	}
+	if disasm.FindFunc(file, "runtime.gogo") == nil {
+		t.Error("runtime.gogo is missing")
 	}
 }

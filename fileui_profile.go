@@ -40,9 +40,23 @@ func (ui *FileUI) loadProfile() {
 		}
 		spans = append(spans, s)
 	}
+	slices.SortFunc(spans, func(a, b span) int { return cmp.Compare(a.addr, b.addr) })
+	// spanAt is the index into spans of the function holding pc, or -1.
+	spanAt := func(pc uint64) int {
+		k, _ := slices.BinarySearchFunc(spans, pc, func(s span, pc uint64) int { return cmp.Compare(s.addr, pc+1) })
+		if k > 0 && pc-spans[k-1].addr < spans[k-1].size {
+			return k - 1
+		}
+		return -1
+	}
 	prof, err := pprof.Load(ui.Config.ProfilePath, func(name string) (uint64, uint64, bool) {
 		s, ok := byName[name]
 		return s.addr, s.size, ok
+	}, func(pc uint64) string {
+		if k := spanAt(pc); k >= 0 {
+			return funcs[spans[k].i].Name()
+		}
+		return ""
 	})
 	if err != nil {
 		ui.LoadError = fmt.Errorf("profile: %w", err)
@@ -51,12 +65,10 @@ func (ui *FileUI) loadProfile() {
 	}
 	ui.Profile = prof
 	// Sum the samples per function for the summary.
-	slices.SortFunc(spans, func(a, b span) int { return cmp.Compare(a.addr, b.addr) })
 	ui.ProfileFlat = make([]int64, len(funcs))
 	for pc, v := range prof.Flat {
-		k, _ := slices.BinarySearchFunc(spans, pc, func(s span, pc uint64) int { return cmp.Compare(s.addr, pc+1) })
-		if k > 0 && pc-spans[k-1].addr < spans[k-1].size {
-			ui.ProfileFlat[spans[k-1].i] += v
+		if k := spanAt(pc); k >= 0 {
+			ui.ProfileFlat[spans[k].i] += v
 		}
 	}
 }

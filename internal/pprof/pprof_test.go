@@ -11,7 +11,9 @@ import (
 )
 
 // TestLoadPlacesSamples profiles a program that spins in one function
-// and checks that the samples land in its code in the binary.
+// and checks that the samples land in its code in the binary. The
+// program also compares bytes, in Go assembly that the profile names
+// without a package, and the binary with one.
 func TestLoadPlacesSamples(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and runs a program")
@@ -21,6 +23,7 @@ func TestLoadPlacesSamples(t *testing.T) {
 	err := os.WriteFile(src, []byte(`package main
 
 import (
+	"bytes"
 	"os"
 	"runtime/pprof"
 	"time"
@@ -37,10 +40,19 @@ func spin(until time.Time) {
 	}
 }
 
+//go:noinline
+func compare(until time.Time) {
+	a, b := bytes.Repeat([]byte("x"), 1<<16), bytes.Repeat([]byte("x"), 1<<16)
+	for time.Now().Before(until) {
+		sink += bytes.Compare(a, b)
+	}
+}
+
 func main() {
 	f, _ := os.Create(os.Args[1])
 	pprof.StartCPUProfile(f)
 	spin(time.Now().Add(300 * time.Millisecond))
+	compare(time.Now().Add(100 * time.Millisecond))
 	pprof.StopCPUProfile()
 	f.Close()
 }
@@ -70,7 +82,13 @@ func main() {
 		addr, size := fn.(disasm.Ranged).Range()
 		return addr, size, true
 	}
-	p, err := Load(prof, lookup)
+	nameAt := func(pc uint64) string {
+		if fn := disasm.FindPC(file, pc); fn != nil {
+			return fn.Name()
+		}
+		return ""
+	}
+	p, err := Load(prof, lookup, nameAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,6 +110,9 @@ func main() {
 	}
 	if e := p.Edges[Edge{"main.main", "main.spin"}]; e*2 < all {
 		t.Errorf("edge main.main → main.spin = %d of %d", e, all)
+	}
+	if p.Funcs["internal/bytealg.cmpbody"].Flat == 0 || p.Funcs["cmpbody"] != (FuncSamples{}) {
+		t.Errorf("cmpbody %+v, internal/bytealg.cmpbody %+v", p.Funcs["cmpbody"], p.Funcs["internal/bytealg.cmpbody"])
 	}
 	mainCode, err := disasm.FindFunc(file, "main.main").Load(disasm.Options{})
 	if err != nil {

@@ -118,7 +118,7 @@ func callName(bin *objfile.Binary, sym *Func, in objfile.Inst) string {
 		return ""
 	}
 	if name, base := bin.Lookup(in.Ref); name != "" && base == in.Ref && (in.Call || !inFunc(sym, in.Ref)) {
-		return name
+		return sym.file.qualify(name)
 	}
 	return ""
 }

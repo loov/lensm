@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/google/pprof/profile"
 )
@@ -59,11 +60,17 @@ func Sum(s []Sample, lo, hi uint64) int64 {
 // Lookup finds the code of a function in the binary by name.
 type Lookup func(name string) (addr, size uint64, ok bool)
 
+// NameAt names the function whose code holds pc, in the binary's own
+// addresses; empty when none does.
+type NameAt func(pc uint64) string
+
 // Load reads the profile at path. Its addresses are where the code ran,
 // which for a position independent binary is shifted from the binary's
 // own addresses, so Load works the shift out from the functions the
-// samples name.
-func Load(path string, lookup Lookup) (*Profile, error) {
+// samples name. A function the binary names differently than the
+// profile, such as Go assembly local to its file, which the profile
+// leaves without a package, takes the binary's name from nameAt.
+func Load(path string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -102,6 +109,7 @@ func Load(path string, lookup Lookup) (*Profile, error) {
 		return nil, fmt.Errorf("%s was not taken from this binary", path)
 	}
 	shift := pickShift(lo, hi)
+	physical := renamer(lookup, nameAt, shift)
 
 	prof := &Profile{Flat: map[uint64]int64{}, Edges: map[Edge]int64{}, Funcs: map[string]FuncSamples{}, Type: st.Type + " " + st.Unit}
 	seenFuncs := map[string]bool{}
@@ -164,6 +172,32 @@ func physical(loc *profile.Location) string {
 		return ""
 	}
 	return loc.Line[len(loc.Line)-1].Function.Name
+}
+
+// renamer returns physical, with the names the binary doesn't know
+// replaced by the binary's name for the location's address. A caller's
+// address is the return address, which can be the next function's
+// entry after a call that doesn't return, so the address before it is
+// tried too; the name that ends in the profile's wins.
+func renamer(lookup Lookup, nameAt NameAt, shift int64) func(*profile.Location) string {
+	names := map[*profile.Location]string{}
+	return func(loc *profile.Location) string {
+		if name, ok := names[loc]; ok {
+			return name
+		}
+		name := physical(loc)
+		if _, _, ok := lookup(name); !ok && name != "" && nameAt != nil && loc.Address != 0 {
+			pc := uint64(int64(loc.Address) - shift)
+			for _, at := range []uint64{pc, pc - 1} {
+				if n := nameAt(at); n == name || strings.HasSuffix(n, "."+name) {
+					name = n
+					break
+				}
+			}
+		}
+		names[loc] = name
+		return name
+	}
 }
 
 // pickShift picks the shift in [lo, hi]: none when that fits, as for a

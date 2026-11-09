@@ -5,6 +5,7 @@ package goobj
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"runtime/debug"
 	"slices"
@@ -30,6 +31,10 @@ type File struct {
 	cache map[cacheKey]cacheEntry
 	files source.Files
 	notes map[notePos][]disasm.Note
+
+	// qualified maps the names of functions the symbol table records
+	// without a package to the name with one.
+	qualified map[string]string
 }
 
 type notePos struct {
@@ -91,9 +96,10 @@ func (file *File) Funcs() []disasm.Func { return file.funcs }
 type Func struct {
 	file *File
 	fn   *objfile.Func
+	name string
 }
 
-func (fn *Func) Name() string { return fn.fn.Name }
+func (fn *Func) Name() string { return fn.name }
 
 // Range is where the function's code lies. Wasm functions have no
 // addresses that the code view shows, so they report none.
@@ -131,9 +137,10 @@ func Load(path string) (*File, error) {
 		key string
 		fn  *Func
 	}
+	file.qualified = qualifyAsm(bin)
 	sorted := make([]keyed, len(bin.Funcs))
 	for i := range bin.Funcs {
-		fn := &Func{file: file, fn: &bin.Funcs[i]}
+		fn := &Func{file: file, fn: &bin.Funcs[i], name: file.qualify(bin.Funcs[i].Name)}
 		sorted[i] = keyed{sortingName(fn.Name()), fn}
 	}
 	slices.SortStableFunc(sorted, func(a, b keyed) int { return strings.Compare(a.key, b.key) })
@@ -143,6 +150,43 @@ func Load(path string) (*File, error) {
 	}
 
 	return file, nil
+}
+
+// qualifyAsm finds the package of the Go assembly functions that are
+// local to their file, TEXT ·cmpbody<>(SB), which the symbol table
+// names without one: cmpbody. The package is the directory of the
+// source below src, as in GOROOT/src/internal/bytealg. Code outside a
+// src directory keeps the bare name, since its import path is unknown.
+func qualifyAsm(bin *objfile.Binary) map[string]string {
+	if bin.Func("runtime.main") == nil {
+		return nil
+	}
+	qualified := map[string]string{}
+	for i := range bin.Funcs {
+		fn := &bin.Funcs[i]
+		name := fn.Name
+		if end := strings.IndexByte(name, '['); end >= 0 {
+			name = name[:end]
+		}
+		if strings.Contains(name[strings.LastIndexByte(name, '/')+1:], ".") {
+			continue
+		}
+		src := bin.FuncFile(fn.Addr)
+		at := strings.LastIndex(src, "/src/")
+		if !strings.HasSuffix(src, ".s") || at < 0 {
+			continue
+		}
+		qualified[fn.Name] = path.Dir(src[at+len("/src/"):]) + "." + fn.Name
+	}
+	return qualified
+}
+
+// qualify is name with the package qualifyAsm found for it.
+func (file *File) qualify(name string) string {
+	if q, ok := file.qualified[name]; ok {
+		return q
+	}
+	return name
 }
 
 // open parses path, turning a fault from the file shrinking mid-parse
