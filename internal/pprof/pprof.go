@@ -37,6 +37,9 @@ type Profile struct {
 	// Stacks are the functions of each sample, leaf first, which Filter
 	// sums again.
 	Stacks []Stack
+	// Diff says Funcs and Edges are the change from a base profile, see
+	// Minus; they can be negative.
+	Diff bool
 }
 
 // Stack is the functions one sample was in, the one running first, and
@@ -76,7 +79,9 @@ type Lookup func(name string) (addr, size uint64, ok bool)
 // addresses; empty when none does.
 type NameAt func(pc uint64) string
 
-// Load reads the profile at path. Its addresses are where the code ran,
+// Load reads the profile at path. Without lookup it reads only the
+// names of the functions, for a profile of another build, and its
+// addresses mean nothing. Its addresses are where the code ran,
 // which for a position independent binary is shifted from the binary's
 // own addresses, so Load works the shift out from the functions the
 // samples name. A function the binary names differently than the
@@ -113,6 +118,9 @@ func Load(path, sample string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 	lo, hi := int64(math.MinInt64), int64(math.MaxInt64)
 	known := 0
 	for _, loc := range p.Location {
+		if lookup == nil {
+			break
+		}
 		name := physical(loc)
 		if loc.Address == 0 || name == "" {
 			continue
@@ -125,11 +133,15 @@ func Load(path, sample string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 		lo = max(lo, int64(loc.Address)-int64(addr)-int64(size)+1)
 		hi = min(hi, int64(loc.Address)-int64(addr))
 	}
-	if known == 0 || lo > hi {
-		return nil, fmt.Errorf("%s was not taken from this binary", path)
+	var shift int64
+	physical := physical
+	if lookup != nil {
+		if known == 0 || lo > hi {
+			return nil, fmt.Errorf("%s was not taken from this binary", path)
+		}
+		shift = pickShift(lo, hi)
+		physical = renamer(lookup, nameAt, shift)
 	}
-	shift := pickShift(lo, hi)
-	physical := renamer(lookup, nameAt, shift)
 
 	prof := &Profile{Flat: map[uint64]int64{}, Type: types[value], Types: types}
 	calls := map[uint64]int64{}
@@ -263,6 +275,23 @@ func (p *Profile) Filter(focus string, hide func(string) bool) *Profile {
 	q.Stacks = stacks
 	q.Funcs, q.Edges = aggregate(stacks, hide)
 	return &q
+}
+
+// Minus is p's functions and calls less base's, as pprof's -diff_base
+// shows them, matched by name since base can come from another build.
+// Total stays p's, so shares are of p.
+func (p *Profile) Minus(base *Profile) (*Profile, error) {
+	if base.Type != p.Type {
+		return nil, fmt.Errorf("the base profile has %s, not %s", base.Type, p.Type)
+	}
+	q := *p
+	q.Stacks = slices.Clip(slices.Clone(p.Stacks))
+	for _, s := range base.Stacks {
+		q.Stacks = append(q.Stacks, Stack{Funcs: s.Funcs, Value: -s.Value})
+	}
+	q.Funcs, q.Edges = aggregate(q.Stacks, nil)
+	q.Diff = true
+	return &q, nil
 }
 
 // pickShift picks the shift in [lo, hi]: none when that fits, as for a

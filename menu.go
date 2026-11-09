@@ -53,6 +53,8 @@ var menuBar = []nativeMenuDef{
 		{},
 		{Label: "Open Profile…", Tag: menuOpenProfile},
 		{Label: "Close Profile", Tag: menuCloseProfile},
+		{Label: "Compare Profile With…", Tag: menuBaseProfile},
+		{Label: "Stop Comparing Profiles", Tag: menuCloseBaseProfile},
 		{},
 		{Label: "Compare With…", Tag: menuCompare},
 		{Label: "Stop Comparing", Tag: menuStopCompare},
@@ -105,6 +107,13 @@ func (ui *FileUI) runMenuItem(gtx layout.Context, item int) {
 		ui.showSidebar(ui.Settings.HideSidebar)
 	case menuProfileGraph:
 		ui.ShowGraph = !ui.ShowGraph
+	case menuBaseProfile:
+		if ui.Profile != nil {
+			ui.pick(pickBaseProfile)
+		}
+	case menuCloseBaseProfile:
+		ui.Config.BaseProfilePath = ""
+		ui.loadBaseProfile()
 	case menuCloseProfile:
 		ui.Config.ProfilePath = ""
 		ui.loadProfile()
@@ -175,22 +184,24 @@ func (ui *FileUI) handleMenuBar(gtx layout.Context) {
 	}
 	type state struct{ checked, enabled bool }
 	states := map[int]state{
-		menuReload:       {false, ui.Config.Path != ""},
-		menuWatch:        {ui.Config.Watch, true},
-		menuOpenProfile:  {false, ui.File != nil},
-		menuCloseProfile: {false, ui.Profile != nil},
-		menuCompare:      {false, ui.File != nil},
-		menuStopCompare:  {false, ui.Compare.file != nil},
-		menuProfileGraph: {ui.ShowGraph, ui.Profile != nil},
-		menuSidebar:      {!ui.Settings.HideSidebar, true},
-		menuCopy:         {false, selection != ""},
-		menuBack:         {false, ui.Navigation.CanBack()},
-		menuForward:      {false, ui.Navigation.CanForward()},
-		menuGoAsm:        {ui.ShowGoAsm.Value, true},
-		menuNativeAsm:    {ui.ShowNativeAsm.Value, true},
-		menuSource:       {ui.ShowSource.Value, true},
-		menuDiagnostics:  {!ui.Settings.HideDiagnostics, true},
-		menuSyncScroll:   {ui.Settings.SyncScroll, true},
+		menuReload:           {false, ui.Config.Path != ""},
+		menuWatch:            {ui.Config.Watch, true},
+		menuOpenProfile:      {false, ui.File != nil},
+		menuCloseProfile:     {false, ui.Profile != nil},
+		menuBaseProfile:      {false, ui.Profile != nil},
+		menuCloseBaseProfile: {false, ui.BaseProfile != nil},
+		menuCompare:          {false, ui.File != nil},
+		menuStopCompare:      {false, ui.Compare.file != nil},
+		menuProfileGraph:     {ui.ShowGraph, ui.Profile != nil},
+		menuSidebar:          {!ui.Settings.HideSidebar, true},
+		menuCopy:             {false, selection != ""},
+		menuBack:             {false, ui.Navigation.CanBack()},
+		menuForward:          {false, ui.Navigation.CanForward()},
+		menuGoAsm:            {ui.ShowGoAsm.Value, true},
+		menuNativeAsm:        {ui.ShowNativeAsm.Value, true},
+		menuSource:           {ui.ShowSource.Value, true},
+		menuDiagnostics:      {!ui.Settings.HideDiagnostics, true},
+		menuSyncScroll:       {ui.Settings.SyncScroll, true},
 	}
 	if ui.menuStates == nil {
 		ui.menuStates = map[int]uint8{}

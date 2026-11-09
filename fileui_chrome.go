@@ -61,6 +61,8 @@ const (
 	menuWatch
 	menuOpenProfile
 	menuCloseProfile
+	menuBaseProfile
+	menuCloseBaseProfile
 	menuCompare
 	menuStopCompare
 	menuProfileGraph
@@ -81,23 +83,25 @@ func (ui *FileUI) appMenuItems() []gui.MenuItem {
 		selection = code.SelectedText()
 	}
 	return []gui.MenuItem{
-		menuOpen:         {Label: "Open…", Shortcut: shortcut("O")},
-		menuReload:       {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
-		menuWatch:        {Label: "Watch for Changes", Checked: ui.Config.Watch},
-		menuOpenProfile:  {Label: "Open Profile…", Disabled: ui.File == nil},
-		menuCloseProfile: {Label: "Close Profile", Disabled: ui.Profile == nil},
-		menuCompare:      {Label: "Compare With…", Disabled: ui.File == nil},
-		menuStopCompare:  {Label: "Stop Comparing", Disabled: ui.Compare.file == nil},
-		menuProfileGraph: {Label: "Profile Graph", Checked: ui.ShowGraph, Disabled: ui.Profile == nil},
-		sepFile:          {Separator: true},
-		menuCopy:         {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
-		menuBack:         {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
-		menuForward:      {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
-		sepGo:            {Separator: true},
-		menuSettings:     {Label: "Settings…", Shortcut: shortcut(",")},
-		menuShortcuts:    {Label: "Keyboard Shortcuts", Shortcut: "?"},
-		sepApp:           {Separator: true},
-		menuQuit:         {Label: "Quit", Shortcut: shortcut("Q")},
+		menuOpen:             {Label: "Open…", Shortcut: shortcut("O")},
+		menuReload:           {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
+		menuWatch:            {Label: "Watch for Changes", Checked: ui.Config.Watch},
+		menuOpenProfile:      {Label: "Open Profile…", Disabled: ui.File == nil},
+		menuCloseProfile:     {Label: "Close Profile", Disabled: ui.Profile == nil},
+		menuBaseProfile:      {Label: "Compare Profile With…", Disabled: ui.Profile == nil},
+		menuCloseBaseProfile: {Label: "Stop Comparing Profiles", Disabled: ui.BaseProfile == nil},
+		menuCompare:          {Label: "Compare With…", Disabled: ui.File == nil},
+		menuStopCompare:      {Label: "Stop Comparing", Disabled: ui.Compare.file == nil},
+		menuProfileGraph:     {Label: "Profile Graph", Checked: ui.ShowGraph, Disabled: ui.Profile == nil},
+		sepFile:              {Separator: true},
+		menuCopy:             {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
+		menuBack:             {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
+		menuForward:          {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
+		sepGo:                {Separator: true},
+		menuSettings:         {Label: "Settings…", Shortcut: shortcut(",")},
+		menuShortcuts:        {Label: "Keyboard Shortcuts", Shortcut: "?"},
+		sepApp:               {Separator: true},
+		menuQuit:             {Label: "Quit", Shortcut: shortcut("Q")},
 	}
 }
 

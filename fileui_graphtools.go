@@ -31,6 +31,8 @@ type graphTools struct {
 	// share is the least share of the samples; 0 is the default.
 	share float64
 
+	// diff is the profile less the base profile.
+	diff, diffOf, diffBase *pprof.Profile
 	// view is the profile filtered by focus and HideRuntime.
 	view      *pprof.Profile
 	viewOf    *pprof.Profile
@@ -68,16 +70,26 @@ func (ui *FileUI) graphProfile() *pprof.Profile {
 	if ui.Profile == nil {
 		return nil
 	}
+	prof := ui.Profile
+	if ui.BaseProfile != nil {
+		if t.diffOf != ui.Profile || t.diffBase != ui.BaseProfile {
+			t.diff, _ = ui.Profile.Minus(ui.BaseProfile)
+			t.diffOf, t.diffBase = ui.Profile, ui.BaseProfile
+		}
+		if t.diff != nil {
+			prof = t.diff
+		}
+	}
 	hide := t.HideRuntime.Value
 	if t.focus == "" && !hide {
-		return ui.Profile
+		return prof
 	}
-	if t.view == nil || t.viewOf != ui.Profile || t.viewFocus != t.focus || t.viewHide != hide {
+	if t.view == nil || t.viewOf != prof || t.viewFocus != t.focus || t.viewHide != hide {
 		var hidden func(string) bool
 		if hide {
 			hidden = isRuntime
 		}
-		t.view, t.viewOf, t.viewFocus, t.viewHide = ui.Profile.Filter(t.focus, hidden), ui.Profile, t.focus, hide
+		t.view, t.viewOf, t.viewFocus, t.viewHide = prof.Filter(t.focus, hidden), prof, t.focus, hide
 	}
 	return t.view
 }

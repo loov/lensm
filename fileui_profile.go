@@ -73,6 +73,7 @@ func (ui *FileUI) loadProfile() {
 		return
 	}
 	ui.Profile = prof
+	defer ui.loadBaseProfile()
 	// Sum the samples per function for the summary.
 	ui.ProfileFlat = make([]int64, len(funcs))
 	for pc, v := range prof.Flat {
@@ -80,6 +81,28 @@ func (ui *FileUI) loadProfile() {
 			ui.ProfileFlat[spans[k].i] += v
 		}
 	}
+}
+
+// loadBaseProfile reads Config.BaseProfilePath, a profile to compare
+// the profile with, for the same value. It can come from another build,
+// so only its function names are read.
+func (ui *FileUI) loadBaseProfile() {
+	ui.BaseProfile = nil
+	if ui.Config.BaseProfilePath == "" || ui.Profile == nil {
+		return
+	}
+	base, err := pprof.Load(ui.Config.BaseProfilePath, ui.Profile.Type, nil, nil)
+	if err == nil && base.Type != ui.Profile.Type {
+		err = fmt.Errorf("it has no %s", ui.Profile.Type)
+	}
+	if err != nil {
+		ui.LoadError = fmt.Errorf("base profile: %w", err)
+		ui.Config.BaseProfilePath = ""
+		ui.saveSessionState()
+		return
+	}
+	ui.BaseProfile = base
+	ui.saveSessionState()
 }
 
 // profileChanged reports whether, while watching, the profile file
@@ -116,6 +139,9 @@ func (ui *FileUI) layoutProfileStatus(gtx layout.Context) layout.Dimensions {
 	ui.ProfileMenu.Up = true
 	return ui.ProfileMenu.Layout(gtx, th, items, func(gtx layout.Context, open bool) layout.Dimensions {
 		text := fmt.Sprintf("%s · %s", filepath.Base(ui.Config.ProfilePath), prof.Type)
+		if ui.BaseProfile != nil {
+			text = fmt.Sprintf("%s − %s · %s", filepath.Base(ui.Config.ProfilePath), filepath.Base(ui.Config.BaseProfilePath), prof.Type)
+		}
 		if len(prof.Types) > 1 {
 			text += " ▾"
 		}

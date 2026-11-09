@@ -62,6 +62,8 @@ type Session struct {
 	// ProfileSample the value of it shown.
 	Profile       string `json:"profile,omitempty"`
 	ProfileSample string `json:"profile_sample,omitempty"`
+	// BaseProfile is the profile Profile is compared with.
+	BaseProfile string `json:"base_profile,omitempty"`
 }
 
 // TabSession is one open tab and the row selected in it, shown again

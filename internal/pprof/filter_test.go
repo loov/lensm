@@ -40,3 +40,31 @@ func TestFilter(t *testing.T) {
 		t.Error("Filter changed the profile it filtered")
 	}
 }
+
+func TestMinus(t *testing.T) {
+	p := &Profile{Total: 10, Type: "cpu nanoseconds", Stacks: []Stack{
+		{Funcs: []string{"main.slow", "main.main"}, Value: 7},
+		{Funcs: []string{"main.fast", "main.main"}, Value: 3},
+	}}
+	base := &Profile{Total: 8, Type: "cpu nanoseconds", Stacks: []Stack{
+		{Funcs: []string{"main.slow", "main.main"}, Value: 2},
+		{Funcs: []string{"main.fast", "main.main"}, Value: 5},
+		{Funcs: []string{"main.gone", "main.main"}, Value: 1},
+	}}
+	d, err := p.Minus(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]FuncSamples{
+		"main.slow": {5, 5}, "main.fast": {-2, -2}, "main.gone": {-1, -1}, "main.main": {0, 2},
+	}
+	if !d.Diff || d.Total != 10 || !maps.Equal(d.Funcs, want) {
+		t.Errorf("diff = %v of %d", d.Funcs, d.Total)
+	}
+	if e := d.Edges[Edge{"main.main", "main.fast"}]; e != -2 {
+		t.Errorf("edge main.main → main.fast = %d, want -2", e)
+	}
+	if _, err := p.Minus(&Profile{Type: "alloc_space bytes"}); err == nil {
+		t.Error("a base of another value type compares")
+	}
+}

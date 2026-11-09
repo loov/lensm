@@ -37,6 +37,7 @@ var (
 	renderGraphFind   = flag.String("render.graphfind", "", "search the profile graph for this")
 	renderHideRuntime = flag.Bool("render.hideruntime", false, "hide the runtime in the profile graph")
 	renderProfile     = flag.String("render.profile", "", "pprof profile to show")
+	renderBaseProfile = flag.String("render.baseprofile", "", "pprof profile to compare the profile with")
 	renderPath        = flag.String("render.path", "", "binary or package directory to open")
 	renderFunc        = flag.String("render.func", "", "function to open in a tab")
 	renderFilter      = flag.String("render.filter", "", "function list filter")
@@ -92,7 +93,7 @@ func TestRender(t *testing.T) {
 	}
 	ui.Panel = panel
 
-	ui.Config = FileUIConfig{Path: *renderPath, Context: 3, ProfilePath: *renderProfile}
+	ui.Config = FileUIConfig{Path: *renderPath, Context: 3, ProfilePath: *renderProfile, BaseProfilePath: *renderBaseProfile}
 	if *renderPath != "" {
 		file, err := loadFile(*renderPath)
 		if err != nil {

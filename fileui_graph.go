@@ -99,7 +99,7 @@ func (g *callGraph) calls(prof *pprof.Profile) {
 		g.in[e.Callee] = append(g.in[e.Callee], e)
 	}
 	hottest := func(a, b pprof.Edge) int {
-		return cmp.Or(cmp.Compare(prof.Edges[b], prof.Edges[a]), cmp.Compare(a.Caller+a.Callee, b.Caller+b.Callee))
+		return cmp.Or(cmp.Compare(abs(prof.Edges[b]), abs(prof.Edges[a])), cmp.Compare(a.Caller+a.Callee, b.Caller+b.Callee))
 	}
 	for _, es := range g.out {
 		slices.SortFunc(es, hottest)
@@ -134,7 +134,7 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 	}
 	var maxFlat int64
 	for _, f := range prof.Funcs {
-		maxFlat = max(maxFlat, f.Flat)
+		maxFlat = max(maxFlat, abs(f.Flat))
 	}
 	node := func(name string) *glayout.Node {
 		if n, ok := graph.NodeByID[name]; ok {
@@ -146,11 +146,11 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 		pkg, rest := gui.SplitPackage(name)
 		pkg = pkg[strings.LastIndexByte(pkg, '/')+1:]
 		if !g.full {
-			n.Label = pkg + rest + "\n" + percentLabel(f.Cum, prof.Total)
+			n.Label = pkg + rest + "\n" + signed(prof, f.Cum, percentLabel(f.Cum, prof.Total))
 			return n
 		}
 		// As pprof does, the text grows with the function's own samples.
-		n.FontSize = fontSize * glayout.Length(1+1.5*math.Sqrt(float64(f.Flat)/float64(max(maxFlat, 1))))
+		n.FontSize = fontSize * glayout.Length(1+1.5*math.Sqrt(float64(abs(f.Flat))/float64(max(maxFlat, 1))))
 		lines := []string{strings.TrimSuffix(pkg, "."), rest}
 		if f.Flat == f.Cum {
 			lines = append(lines, valueLabel(prof, f.Flat))
@@ -174,9 +174,10 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 		seen[e] = true
 		le := glayout.NewEdge(node(e.Caller), node(e.Callee))
 		le.Directed = true
-		le.Label = percentLabel(prof.Edges[e], prof.Total)
+		v := prof.Edges[e]
+		le.Label = signed(prof, v, percentLabel(v, prof.Total))
 		if g.full {
-			le.Label = valueText(prof, prof.Edges[e])
+			le.Label = signed(prof, v, valueText(prof, v))
 		}
 		le.FontSize = fontSize * 0.9
 		graph.AddEdge(le)
@@ -227,7 +228,7 @@ func (g *callGraph) pickAround(prof *pprof.Profile, focus string, node func(stri
 		// A call back to focus doesn't take one of the places.
 		shown := 0
 		for _, e2 := range g.out[e.Callee] {
-			if shown == graphCallees2 || prof.Edges[e2] < minShare {
+			if shown == graphCallees2 || abs(prof.Edges[e2]) < minShare {
 				break
 			}
 			if e2.Callee != focus {
@@ -246,6 +247,13 @@ const (
 	fullEdgeShare = fullNodeShare / 5
 )
 
+func abs(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
 // share is the least share of the samples a function needs to be in
 // the whole graph.
 func (g *callGraph) share() float64 { return cmp.Or(g.minShare, fullNodeShare) }
@@ -255,12 +263,12 @@ func (g *callGraph) share() float64 { return cmp.Or(g.minShare, fullNodeShare) }
 func (g *callGraph) pickAll(prof *pprof.Profile, node func(string) *glayout.Node, edge func(pprof.Edge)) {
 	var names []string
 	for name, f := range prof.Funcs {
-		if float64(f.Cum) >= g.share()*float64(prof.Total) {
+		if float64(abs(f.Cum)) >= g.share()*float64(prof.Total) {
 			names = append(names, name)
 		}
 	}
 	slices.SortFunc(names, func(a, b string) int {
-		return cmp.Or(cmp.Compare(prof.Funcs[b].Cum, prof.Funcs[a].Cum), cmp.Compare(a, b))
+		return cmp.Or(cmp.Compare(abs(prof.Funcs[b].Cum), abs(prof.Funcs[a].Cum)), cmp.Compare(a, b))
 	})
 	names = names[:min(len(names), fullMaxNodes)]
 	keep := map[string]bool{}
@@ -270,7 +278,7 @@ func (g *callGraph) pickAll(prof *pprof.Profile, node func(string) *glayout.Node
 	}
 	for _, name := range names {
 		for _, e := range g.out[name] {
-			if keep[e.Callee] && float64(prof.Edges[e]) >= g.share()/5*float64(prof.Total) {
+			if keep[e.Callee] && float64(abs(prof.Edges[e])) >= g.share()/5*float64(prof.Total) {
 				edge(e)
 			}
 		}
@@ -294,6 +302,9 @@ func percentLabel(v, total int64) string {
 	if total <= 0 {
 		return ""
 	}
+	if v < 0 {
+		return "-" + percentLabel(-v, total)
+	}
 	return percentText(100 * float64(v) / float64(total))
 }
 
@@ -312,11 +323,27 @@ func valueLabel(prof *pprof.Profile, v int64) string {
 	if v == 0 {
 		return "0"
 	}
+	if prof.Diff && v > 0 {
+		// A difference shows its sign either way.
+		return "+" + valueLabel(&pprof.Profile{Type: prof.Type, Total: prof.Total}, v)
+	}
 	return valueText(prof, v) + " (" + percentLabel(v, prof.Total) + ")"
+}
+
+// signed puts a plus on s, the spelling of v, when prof is a
+// difference and v grew.
+func signed(prof *pprof.Profile, v int64, s string) string {
+	if prof.Diff && v > 0 {
+		return "+" + s
+	}
+	return s
 }
 
 // valueText spells v in the profile's unit.
 func valueText(prof *pprof.Profile, v int64) string {
+	if v < 0 {
+		return "-" + valueText(prof, -v)
+	}
 	unit := prof.Type[strings.LastIndexByte(prof.Type, ' ')+1:]
 	f := float64(v)
 	switch unit {
@@ -567,7 +594,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 			continue
 		}
 		ge := g.graph.Edges[i]
-		share := float32(prof.Edges[pprof.Edge{Caller: ge.From.ID, Callee: ge.To.ID}]) / float32(max(prof.Total, 1))
+		share := float32(abs(prof.Edges[pprof.Edge{Caller: ge.From.ID, Callee: ge.To.ID}])) / float32(max(prof.Total, 1))
 		width := float32(gtx.Metric.Dp(1)) * (1 + 3*min(share*4, 1))
 		col := c.MutedText
 		if i == hoverEdge || g.hover >= 0 && (ge.From == g.graph.Nodes[g.hover] || ge.To == g.graph.Nodes[g.hover]) {
@@ -589,14 +616,22 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 	// Nodes, tinted by their share of the samples.
 	for i, n := range g.layout.Nodes {
 		name := g.graph.Nodes[i].ID
-		share := float32(prof.Funcs[name].Cum) / float32(max(prof.Total, 1))
+		cum := prof.Funcs[name].Cum
+		share := float32(abs(cum)) / float32(max(prof.Total, 1))
 		r := image.Rectangle{
 			Min: at(n.Center.Sub(n.Size.Scale(0.5))).Round(),
 			Max: at(n.Center.Add(n.Size.Scale(0.5))).Round(),
 		}
 		radius := gtx.Metric.Dp(5)
 		paint.FillShape(gtx.Ops, c.Background, clip.UniformRRect(r, radius).Op(gtx.Ops))
+		// A difference is red where it grew and green where it shrank.
 		heat := c.Marks.Alloc
+		switch {
+		case prof.Diff && cum > 0:
+			heat = c.Marks.BoundsCheck
+		case prof.Diff && cum < 0:
+			heat = c.Marks.Good
+		}
 		heat.A = uint8(0x14 + 0x80*min(share*2, 1))
 		paint.FillShape(gtx.Ops, heat, clip.UniformRRect(r, radius).Op(gtx.Ops))
 		border, bw := c.Divider, float32(gtx.Metric.Dp(1))

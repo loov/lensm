@@ -44,6 +44,9 @@ type FileUIConfig struct {
 	CommentsPath string
 	// ProfilePath is a pprof profile of the binary to show.
 	ProfilePath string
+	// BaseProfilePath is a profile to compare the profile with, in the
+	// graphs.
+	BaseProfilePath string
 	// ProfileSample names the profile's value to show, such as
 	// "alloc_space bytes"; empty is the profile's default.
 	ProfileSample string
@@ -139,6 +142,8 @@ type FileUI struct {
 	ProfileMenu gui.Menu
 	// GraphTools are the controls above the profile graph.
 	GraphTools graphTools
+	// BaseProfile is the profile the graphs show the change from.
+	BaseProfile *pprof.Profile
 	// profileModTime is when the loaded profile file last changed.
 	profileModTime time.Time
 	TextSizeEditor widget.Editor
@@ -205,6 +210,8 @@ const (
 	pickProfile
 	// pickCompare loads a binary to compare the open one with.
 	pickCompare
+	// pickBaseProfile loads a profile to compare the profile with.
+	pickBaseProfile
 )
 
 type pickerResult struct {
@@ -385,6 +392,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 			} else if res.ok && res.kind == pickProfile {
 				ui.Config.ProfilePath, ui.Config.ProfileSample = res.path, ""
 				ui.loadProfile()
+			} else if res.ok && res.kind == pickBaseProfile {
+				ui.Config.BaseProfilePath = res.path
+				ui.loadBaseProfile()
 			} else if res.ok && res.kind == pickCompare {
 				ui.setCompare(res.path, res.file)
 			} else if res.ok {
@@ -438,6 +448,7 @@ func (ui *FileUI) SetFile(file disasm.File) {
 		session, _ := ui.Settings.session(path)
 		if ui.File != nil || ui.Config.ProfilePath == "" {
 			ui.Config.ProfilePath, ui.Config.ProfileSample = session.Profile, session.ProfileSample
+			ui.Config.BaseProfilePath = session.BaseProfile
 		}
 	}
 	ui.loadedPath = path
@@ -1015,6 +1026,9 @@ func (ui *FileUI) saveSessionState() {
 	if ui.Config.ProfilePath != "" {
 		session.Profile, _ = filepath.Abs(ui.Config.ProfilePath)
 	}
+	if ui.Config.BaseProfilePath != "" {
+		session.BaseProfile, _ = filepath.Abs(ui.Config.BaseProfilePath)
+	}
 	for _, tab := range ui.CodeTabs {
 		if tab.Name == "" || tab.Preview {
 			continue
@@ -1031,7 +1045,7 @@ func (ui *FileUI) saveSessionState() {
 		session.Active = tab.Name
 	}
 	if ui.Settings.LastPath == ui.loadedPath && old.Active == session.Active && slices.Equal(old.Tabs, session.Tabs) &&
-		old.Profile == session.Profile && old.ProfileSample == session.ProfileSample {
+		old.Profile == session.Profile && old.ProfileSample == session.ProfileSample && old.BaseProfile == session.BaseProfile {
 		return
 	}
 
