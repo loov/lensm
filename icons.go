@@ -21,6 +21,7 @@ var (
 	HistoryIcon   = mustIcon(icons.ActionHistory)
 	WatchIcon     = mustIcon(icons.ActionVisibility)
 	MarksIcon     = mustIcon(icons.ActionAssessment)
+	CallersIcon   = mustIcon(icons.CommunicationCallReceived)
 	BackIcon      = mustIcon(icons.NavigationArrowBack)
 	ForwardIcon   = mustIcon(icons.NavigationArrowForward)
 )

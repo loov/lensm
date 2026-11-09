@@ -77,8 +77,8 @@ type FileUI struct {
 	SettingsButton widget.Clickable
 	// Panel is the sidebar panel picked in the icon strip.
 	Panel        int
-	PanelButtons [4]widget.Clickable
-	PanelTips    [4]gui.Tooltip
+	PanelButtons [panelCount]widget.Clickable
+	PanelTips    [panelCount]gui.Tooltip
 	WatchButton  widget.Clickable
 	WatchTip     gui.Tooltip
 	CommentsList gui.ClickList
@@ -89,6 +89,7 @@ type FileUI struct {
 	ClearComments      widget.Clickable
 	clearCommentsArmed bool
 	HistoryList        gui.ClickList
+	CallersList        gui.ClickList
 
 	// Column toggles and settings.
 	ShowGoAsm     widget.Bool
@@ -116,6 +117,10 @@ type FileUI struct {
 	StartMCP     widget.Clickable
 	StopMCP      widget.Clickable
 
+	// Index is the scan of the file for callers and stats, nil until
+	// it finishes.
+	Index *disasm.Index
+
 	Comments *comments.Store
 	MCP      *mcp.AppServer
 
@@ -133,6 +138,7 @@ type FileUI struct {
 	invalidate        chan struct{}
 	pickerResults     chan pickerResult
 	codeResults       chan codeResult
+	indexResults      chan indexResult
 	exited            chan struct{}
 	flushTimer        *time.Timer
 	sessionDirty      bool
@@ -219,6 +225,8 @@ func (ui *FileUI) Run(w *app.Window) error {
 	ui.pickerResults = pickerResults
 	codeResults := make(chan codeResult)
 	ui.codeResults = codeResults
+	indexResults := make(chan indexResult)
+	ui.indexResults = indexResults
 	ui.exited = exited
 	flushTimer := time.NewTimer(time.Hour)
 	flushTimer.Stop()
@@ -231,6 +239,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 		ui.invalidate = nil
 		ui.pickerResults = nil
 		ui.codeResults = nil
+		ui.indexResults = nil
 		ui.exited = nil
 		ui.flushTimer = nil
 	}()
@@ -281,6 +290,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 			return nil
 		case item := <-menuActions:
 			ui.menuQueue = append(ui.menuQueue, item)
+			w.Invalidate()
+		case res := <-indexResults:
+			ui.setIndex(res)
 			w.Invalidate()
 		case res := <-codeResults:
 			ui.setTabCode(res)
@@ -785,6 +797,7 @@ func (ui *FileUI) requestLoad(path string) {
 }
 
 func (ui *FileUI) afterFileLoaded() {
+	ui.startIndex()
 	ui.saveSessionState()
 	if ui.MCP != nil {
 		ui.MCP.SetFile(ui.Config.Path, ui.File.Acquire(), ui.Comments)

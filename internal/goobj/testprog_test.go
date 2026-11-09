@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,6 +46,7 @@ func TestLoadCrossCompiledTestprog(t *testing.T) {
 
 			checkRefs(t, file)
 			checkMarks(t, file)
+			checkIndex(t, file)
 
 			for _, fn := range file.Funcs() {
 				if !strings.Contains(fn.Name(), "main.sumInts") {
@@ -123,5 +125,41 @@ func checkRefs(t *testing.T, file *File) {
 	}
 	if !tailCall {
 		t.Error("runtime.morestack_noctxt.abi0 has no link to runtime.morestack.abi0")
+	}
+}
+
+// checkIndex checks that the scan finds the callers and counts the
+// marks the code view shows.
+func checkIndex(t *testing.T, file *File) {
+	t.Helper()
+	index := file.Index()
+	if index == nil {
+		t.Fatal("Index = nil")
+	}
+	if got := index.Callers["main.dot"]; !slices.Contains(got, "main.main") {
+		t.Errorf("callers of main.dot = %q, want main.main", got)
+	}
+	for i, fn := range file.Funcs() {
+		if !strings.HasPrefix(fn.Name(), "main.") {
+			continue
+		}
+		code, err := fn.Load(disasm.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var want [len(disasm.Marks)]int
+		for _, ix := range code.Insts {
+			for k, m := range disasm.Marks {
+				if ix.CountedMarks()&m != 0 {
+					want[k]++
+				}
+			}
+		}
+		if index.Stats[i].Marks != want {
+			t.Errorf("%s: marks %v, want %v", fn.Name(), index.Stats[i].Marks, want)
+		}
+		if index.Stats[i].Size == 0 {
+			t.Errorf("%s: size 0", fn.Name())
+		}
 	}
 }

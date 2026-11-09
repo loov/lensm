@@ -42,19 +42,25 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 			// has one rather than from the entry.
 			code.File = inst.File
 		}
-		if in.Call {
-			// objfile names the callee in Text from the calling module.
-			// Lookup can't stand in: in a component it resolves the index
-			// in the first module, whichever module the call is in. An
-			// unnamed callee stays a bare index.
-			name, ok := strings.CutPrefix(in.Text, "call ")
-			if _, err := strconv.ParseUint(name, 10, 64); ok && err != nil {
-				inst.Call = name
-			}
-		}
+		inst.Call = wasmCall(in)
 		refs.Add(inst.File, inst.Line, i)
 		code.Insts = append(code.Insts, inst)
 	}
 	code.Source = source.Load(fn.file.files, refs, code.File, opts.Context)
 	return code, nil
+}
+
+// wasmCall names the callee of a call. objfile names it in Text from
+// the calling module. Lookup can't stand in: in a component it
+// resolves the index in the first module, whichever module the call
+// is in. An unnamed callee stays a bare index and gets no link.
+func wasmCall(in objfile.Inst) string {
+	if !in.Call {
+		return ""
+	}
+	name, ok := strings.CutPrefix(in.Text, "call ")
+	if _, err := strconv.ParseUint(name, 10, 64); ok && err != nil {
+		return name
+	}
+	return ""
 }

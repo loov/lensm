@@ -74,7 +74,7 @@ func TestRender(t *testing.T) {
 	ui.split.Ratio = st.SidebarRatio
 	ui.applySettings(st)
 
-	panels := map[string]int{"functions": panelFunctions, "comments": panelComments, "history": panelHistory, "diagnostics": panelMarks}
+	panels := map[string]int{"functions": panelFunctions, "comments": panelComments, "history": panelHistory, "diagnostics": panelMarks, "callers": panelCallers}
 	panel, ok := panels[*renderPanel]
 	if !ok {
 		t.Fatalf("unknown -render.panel %q", *renderPanel)

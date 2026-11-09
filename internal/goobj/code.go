@@ -52,37 +52,16 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 	for i, in := range decoded {
 		pc := in.Addr
 		file, line := bin.PCToLine(pc)
+		call := callName(bin, sym, in)
 		var refPC uint64
-		var call string
-		if name, base := bin.Lookup(in.Ref); in.Ref != 0 && name != "" && base == in.Ref &&
-			(in.Call || !inFunc(sym, in.Ref)) {
-			// A call, a tail call or a function address: link to it.
-			call = name
-		} else if inFunc(sym, in.Ref) && in.Op != "ADRP" && in.Op != "ADR" {
+		if call == "" && inFunc(sym, in.Ref) && in.Op != "ADRP" && in.Op != "ADR" {
 			// A branch inside the function gets an arrow. Ref also holds
 			// data addresses, but only ADR and ADRP point into code, and
 			// objfile reports ADRP's unmasked pc+imm, often the
 			// instruction itself.
 			refPC = in.Ref
 		}
-
-		var marks disasm.Mark
-		switch {
-		case stack[i].Regs > 0 && stack[i].Store:
-			marks |= disasm.MarkSpill
-		case stack[i].Regs > 0:
-			marks |= disasm.MarkReload
-		}
-		if in.Call && call != "" {
-			switch analysis.ClassifyCall(call) {
-			case analysis.CallBoundsCheck:
-				marks |= disasm.MarkBoundsCheck
-			case analysis.CallAlloc:
-				marks |= disasm.MarkAlloc
-			case analysis.CallWriteBarrier:
-				marks |= disasm.MarkWriteBarrier
-			}
-		}
+		marks := instMarks(stack[i], in, call)
 
 		// A jump to itself (for {}) needs no spacer before its target.
 		if refPC != 0 && refPC != pc {
@@ -130,6 +109,40 @@ func disassemble(bin *objfile.Binary, sym *Func, opts disasm.Options) (*disasm.C
 	sym.file.attachNotes(code.Source)
 
 	return code, nil
+}
+
+// callName names the function in refers to when it calls it, tail
+// calls it or takes its address, so that the row links to it.
+func callName(bin *objfile.Binary, sym *Func, in objfile.Inst) string {
+	if in.Ref == 0 {
+		return ""
+	}
+	if name, base := bin.Lookup(in.Ref); name != "" && base == in.Ref && (in.Call || !inFunc(sym, in.Ref)) {
+		return name
+	}
+	return ""
+}
+
+// instMarks are the run time costs of in, which calls call.
+func instMarks(stack analysis.StackAccess, in objfile.Inst, call string) disasm.Mark {
+	var marks disasm.Mark
+	switch {
+	case stack.Regs > 0 && stack.Store:
+		marks |= disasm.MarkSpill
+	case stack.Regs > 0:
+		marks |= disasm.MarkReload
+	}
+	if in.Call && call != "" {
+		switch analysis.ClassifyCall(call) {
+		case analysis.CallBoundsCheck:
+			marks |= disasm.MarkBoundsCheck
+		case analysis.CallAlloc:
+			marks |= disasm.MarkAlloc
+		case analysis.CallWriteBarrier:
+			marks |= disasm.MarkWriteBarrier
+		}
+	}
+	return marks
 }
 
 // markBoundsChecks marks the branches to a bounds check failure, which

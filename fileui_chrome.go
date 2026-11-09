@@ -33,6 +33,8 @@ const (
 	panelComments
 	panelHistory
 	panelMarks
+	panelCallers
+	panelCount
 )
 
 // shortcut spells a key chord the way the platform does.
@@ -348,6 +350,7 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 			tool(panelFunctions, FunctionsIcon, "Functions"),
 			tool(panelComments, CommentsIcon, "Comments"),
 			tool(panelHistory, HistoryIcon, "History"),
+			tool(panelCallers, CallersIcon, "Callers"),
 			tool(panelMarks, MarksIcon, "Diagnostics"),
 		},
 		Bottom: []layout.Widget{
@@ -365,6 +368,8 @@ func (ui *FileUI) layoutPanel(gtx layout.Context) layout.Dimensions {
 		return ui.layoutHistoryPanel(gtx)
 	case panelMarks:
 		return ui.layoutMarksPanel(gtx)
+	case panelCallers:
+		return ui.layoutCallersPanel(gtx)
 	}
 	return ui.Funcs.Layout(ui.Theme, gtx)
 }
