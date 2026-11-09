@@ -29,6 +29,7 @@ import (
 	"loov.dev/lensm/internal/codeview"
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/pprof"
 
 	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/mcp"
@@ -40,6 +41,8 @@ type FileUIConfig struct {
 	Watch        bool
 	Context      int
 	CommentsPath string
+	// ProfilePath is a pprof profile of the binary to show.
+	ProfilePath string
 }
 
 type FileUI struct {
@@ -124,6 +127,10 @@ type FileUI struct {
 	// Index is the scan of the file for callers and stats, nil until
 	// it finishes.
 	Index *disasm.Index
+	// Profile is the loaded profile, nil without one, and ProfileFlat
+	// its samples per function, in File.Funcs order.
+	Profile     *pprof.Profile
+	ProfileFlat []int64
 
 	Comments *comments.Store
 	MCP      *mcp.AppServer
@@ -148,6 +155,7 @@ type FileUI struct {
 	summary           []int
 	summaryKey        int
 	summaryFor        *disasm.Index
+	summaryProfile    []int64
 	summarySortedBy   int
 	exited            chan struct{}
 	flushTimer        *time.Timer
@@ -165,9 +173,11 @@ type FileUI struct {
 }
 
 type pickerResult struct {
-	path string
-	ok   bool
-	err  error
+	// profile is set when the pick is a profile, not a binary.
+	profile bool
+	path    string
+	ok      bool
+	err     error
 }
 
 func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
@@ -326,6 +336,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 			ui.pickerOpen = false
 			if res.err != nil {
 				ui.LoadError = res.err
+			} else if res.ok && res.profile {
+				ui.Config.ProfilePath = res.path
+				ui.loadProfile()
 			} else if res.ok {
 				ui.Config.Path = res.path
 				ui.LoadError = nil
@@ -692,7 +705,16 @@ func (ui *FileUI) invalidateMain() {
 	}
 }
 
-func (ui *FileUI) chooseFile() {
+func (ui *FileUI) chooseFile() { ui.pick(false) }
+
+// chooseProfile picks a pprof profile of the open binary.
+func (ui *FileUI) chooseProfile() {
+	if ui.File != nil {
+		ui.pick(true)
+	}
+}
+
+func (ui *FileUI) pick(profile bool) {
 	if ui.pickerOpen || ui.picker == nil || ui.pickerResults == nil {
 		return
 	}
@@ -701,7 +723,7 @@ func (ui *FileUI) chooseFile() {
 	ui.pickerOpen = true
 	picker, results, exited := ui.picker, ui.pickerResults, ui.exited
 	go func() {
-		var res pickerResult
+		res := pickerResult{profile: profile}
 		// No extension filter: Go executables usually have none.
 		file, err := picker.ChooseFile()
 		switch {
@@ -709,7 +731,7 @@ func (ui *FileUI) chooseFile() {
 			// The disassembler needs a path, not a reader; on desktop
 			// platforms the explorer hands back an *os.File.
 			if f, ok := file.(*os.File); ok {
-				res = pickerResult{path: f.Name(), ok: true}
+				res.path, res.ok = f.Name(), true
 			} else {
 				res.err = errors.New("file picker did not return a local file path")
 			}
@@ -827,6 +849,8 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								SyncScroll:     ui.SyncScroll.Value,
 								Marks:          marks,
 								TextHeight:     ui.Theme.TextSize,
+								Profile:        profileFlat(ui.Profile),
+								ProfileTotal:   profileTotal(ui.Profile),
 							}.Layout(gtx)
 						}),
 					)
@@ -875,6 +899,7 @@ func (ui *FileUI) requestLoad(path string) {
 
 func (ui *FileUI) afterFileLoaded() {
 	ui.startIndex()
+	ui.loadProfile()
 	ui.saveSessionState()
 	if ui.MCP != nil {
 		ui.MCP.SetFile(ui.Config.Path, ui.File.Acquire(), ui.Comments)

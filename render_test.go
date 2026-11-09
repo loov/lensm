@@ -30,6 +30,7 @@ import (
 //	go test -run TestRender . -render /tmp/out.png -render.path ./testdata/testprog -render.func main.dot
 var (
 	renderOut      = flag.String("render", "", "render the window to this PNG file")
+	renderProfile  = flag.String("render.profile", "", "pprof profile to show")
 	renderPath     = flag.String("render.path", "", "binary or package directory to open")
 	renderFunc     = flag.String("render.func", "", "function to open in a tab")
 	renderFilter   = flag.String("render.filter", "", "function list filter")
@@ -83,7 +84,7 @@ func TestRender(t *testing.T) {
 	}
 	ui.Panel = panel
 
-	ui.Config = FileUIConfig{Path: *renderPath, Context: 3}
+	ui.Config = FileUIConfig{Path: *renderPath, Context: 3, ProfilePath: *renderProfile}
 	if *renderPath != "" {
 		file, err := loadFile(*renderPath)
 		if err != nil {

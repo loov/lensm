@@ -21,6 +21,11 @@ type codeColumns struct {
 	// indentStep is the offset per Inst.Indent level.
 	indentStep int
 
+	// profile and sourceProfile are the lanes for the profile samples,
+	// left of the assembly and of the source, zero width without them.
+	profile       bounds
+	sourceProfile bounds
+
 	jump   bounds
 	asm    bounds
 	native bounds
@@ -81,7 +86,7 @@ type codeHover struct {
 func (ui Style) columns(gtx layout.Context) codeColumns {
 	// The layout has the following sections, hidden columns and their
 	// padding take no space:
-	// pad | Jump | pad/2 | Go asm | pad | Native asm | pad | Marks | pad | Gutter | pad | Source | pad
+	// pad | Profile | pad/2 | Jump | pad/2 | Go asm | pad | Native asm | pad | Marks | pad | Gutter | pad | Profile | pad/2 | Source | pad
 	lineHeight := codeLineHeightPx(gtx, ui.TextHeight)
 	pad := lineHeight
 	jumpStep := lineHeight / 2
@@ -98,6 +103,8 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 		perRow = ui.maxMarks()
 	}
 	showMarks := perRow > 0
+	showProfile := ui.profileShown()
+	profileWidth := lineHeight * 3
 	marksWidth := lineHeight * perRow
 
 	// Each shown column gets its share of the width left after the
@@ -125,6 +132,12 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	if showMarks {
 		fixedWidth += marksWidth + pad
 	}
+	if showProfile && showAsm {
+		fixedWidth += profileWidth + pad/2
+	}
+	if showProfile && ui.ShowSource {
+		fixedWidth += profileWidth + pad/2
+	}
 	blocksWidth := max(0, gtx.Constraints.Max.X-fixedWidth)
 	width := func(i int) int {
 		if total == 0 {
@@ -134,6 +147,11 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	}
 
 	x := pad
+	profile := boundsWidth(x, 0)
+	if showProfile && showAsm {
+		profile = boundsWidth(x, profileWidth)
+		x += profileWidth + pad/2
+	}
 	jump := boundsWidth(x, jumpWidth)
 	if showAsm {
 		x += jumpWidth + pad/2
@@ -149,19 +167,25 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	native := next(width(1), ui.ShowNative, pad)
 	marks := next(marksWidth, showMarks, pad)
 	gutter := next(gutterWidth, ui.ShowSource, pad)
+	sourceProfile := next(0, false, 0)
+	if showProfile && ui.ShowSource {
+		sourceProfile = next(profileWidth, true, pad/2)
+	}
 	source := next(width(2), ui.ShowSource, pad)
 
 	c := codeColumns{
-		lineHeight: lineHeight,
-		pad:        pad,
-		jumpStep:   jumpStep,
-		indentStep: lineHeight / 2,
-		jump:       jump,
-		asm:        asm,
-		native:     native,
-		marks:      marks,
-		gutter:     gutter,
-		source:     source,
+		lineHeight:    lineHeight,
+		pad:           pad,
+		jumpStep:      jumpStep,
+		indentStep:    lineHeight / 2,
+		profile:       profile,
+		sourceProfile: sourceProfile,
+		jump:          jump,
+		asm:           asm,
+		native:        native,
+		marks:         marks,
+		gutter:        gutter,
+		source:        source,
 	}
 	minimumCommentWidth := lineHeight * 4
 	c.goCol = splitColumn(int(asm.Min)+pad/2, int(asm.Max), pad, minimumCommentWidth, 62)

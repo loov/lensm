@@ -31,6 +31,7 @@ func main() {
 	context := flag.Int("context", 3, "source line context")
 	comments := flag.String("comments", "", "comments sidecar path")
 	font := flag.String("font", "", "user font")
+	profilePath := flag.String("profile", "", "pprof profile of the binary to show")
 
 	flag.Parse()
 	exePath := flag.Arg(0)
@@ -68,6 +69,7 @@ func main() {
 		Watch:        *watch,
 		Context:      *context,
 		CommentsPath: *comments,
+		ProfilePath:  *profilePath,
 	}
 	ui.Funcs.SetFilter(*filter)
 

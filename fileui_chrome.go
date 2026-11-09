@@ -58,6 +58,8 @@ const (
 	menuOpen = iota
 	menuReload
 	menuWatch
+	menuOpenProfile
+	menuCloseProfile
 	_
 	menuCopy
 	menuBack
@@ -75,18 +77,20 @@ func (ui *FileUI) appMenuItems() []gui.MenuItem {
 		selection = code.SelectedText()
 	}
 	return []gui.MenuItem{
-		menuOpen:      {Label: "Open…", Shortcut: shortcut("O")},
-		menuReload:    {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
-		menuWatch:     {Label: "Watch for Changes", Checked: ui.Config.Watch},
-		3:             {Separator: true},
-		menuCopy:      {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
-		menuBack:      {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
-		menuForward:   {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
-		7:             {Separator: true},
-		menuSettings:  {Label: "Settings…", Shortcut: shortcut(",")},
-		menuShortcuts: {Label: "Keyboard Shortcuts", Shortcut: "?"},
-		10:            {Separator: true},
-		menuQuit:      {Label: "Quit", Shortcut: shortcut("Q")},
+		menuOpen:         {Label: "Open…", Shortcut: shortcut("O")},
+		menuReload:       {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
+		menuWatch:        {Label: "Watch for Changes", Checked: ui.Config.Watch},
+		menuOpenProfile:  {Label: "Open Profile…", Disabled: ui.File == nil},
+		menuCloseProfile: {Label: "Close Profile", Disabled: ui.Profile == nil},
+		5:                {Separator: true},
+		menuCopy:         {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
+		menuBack:         {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
+		menuForward:      {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
+		9:                {Separator: true},
+		menuSettings:     {Label: "Settings…", Shortcut: shortcut(",")},
+		menuShortcuts:    {Label: "Keyboard Shortcuts", Shortcut: "?"},
+		12:               {Separator: true},
+		menuQuit:         {Label: "Quit", Shortcut: shortcut("Q")},
 	}
 }
 
@@ -536,6 +540,9 @@ func (ui *FileUI) layoutStatus(gtx layout.Context) layout.Dimensions {
 	}
 	if ui.File != nil {
 		left = append(left, th.StatusText(ui.Funcs.CountText()))
+	}
+	if status := ui.profileStatus(); status != "" {
+		left = append(left, th.StatusText(status))
 	}
 	if ui.SyncScroll.Update(gtx) {
 		s := ui.Settings

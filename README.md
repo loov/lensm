@@ -56,6 +56,7 @@ Flags:
 | `-comments path` | comments file, instead of `<executable>.lensm-comments.json` |
 | `-text-size n` | text size for this run; Settings saves one for later runs |
 | `-font path` | font file to use instead of the bundled ones |
+| `-profile path` | show a pprof profile of the binary next to the code |
 | `-cpuprofile path` | write a CPU profile of lensm itself |
 
 Keys:
@@ -90,6 +91,11 @@ Keys:
   open one; click one to open it. The Summary panel lists every
   function by size, spills, bounds checks, allocations or write
   barriers, largest first;
+- open a pprof profile of the binary with Open Profile… in the menu, or
+  `-profile`, to see each instruction's and source line's share of the
+  samples in a lane beside them, and to rank functions by samples in
+  the Summary panel. The profile's addresses are matched to the binary
+  by function, so a profile of a position independent binary works;
 - turn on "Sync scroll" in the status bar to scroll the assembly and the
   source together;
 - double-click a line, or press `Enter` on a selected one, to comment on it;

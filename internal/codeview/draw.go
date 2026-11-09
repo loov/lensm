@@ -118,8 +118,9 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 	var tip markTip
 	defer func() { ui.layoutMarkTip(gtx, c, tip) }()
 
+	_, maxInst, _ := ui.profileLines()
 	asmClip := clip.Rect{
-		Min: image.Pt(int(jump.Min), 0),
+		Min: image.Pt(0, 0),
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 	}.Push(gtx.Ops)
 	if ui.ShowGo && ui.ShowNative {
@@ -169,6 +170,9 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		if ui.ShowGo && ix.Text != "" {
 			ui.layoutRowComment(gtx, ui.asmCoord(ViewGoAsm, ix), ";", c.goCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
+		}
+		if c.profile.Width() > 0 && ix.Text != "" {
+			ui.layoutHeat(gtx, c.profile, i*lineHeight+int(ui.asm.Offset), lineHeight, ui.Profile[ix.PC], maxInst)
 		}
 		if marks := ix.Marks & ui.Marks; marks != 0 && c.marks.Width() > 0 {
 			if t := ui.layoutMarks(gtx, c, int(c.marks.Min), marks, 0, nil, nil, i*lineHeight+int(ui.asm.Offset), hover.position); t.text != "" {
@@ -367,6 +371,10 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 		}
 	}
 	sourceClip.Pop()
+	if c.sourceProfile.Width() > 0 {
+		lines, _, maxLine := ui.profileLines()
+		ui.layoutSourceHeat(gtx, c, lines, maxLine)
+	}
 	if flow != nil {
 		ui.layoutNoteFlow(gtx, c, flow, flowLeft, flowTop)
 	}
@@ -489,11 +497,16 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 	var moved, fromAsm bool
 
 	if ui.ShowGo || ui.ShowNative {
+		// The bar keeps to the left edge, before the profile lane.
+		left := int(jump.Min)
+		if c.profile.Width() > 0 {
+			left = int(c.profile.Min)
+		}
 		stack := clip.Rect{
-			Min: image.Pt(int(jump.Min)-pad, 0),
+			Min: image.Pt(left-pad, 0),
 			Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
-		if ui.asm.LayoutBar(gtx, ui.Theme, int(jump.Min)-pad, pad,
+		if ui.asm.LayoutBar(gtx, ui.Theme, left-pad, pad,
 			-overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow) {
 			moved, fromAsm = true, true
 		}

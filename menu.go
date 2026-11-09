@@ -49,6 +49,9 @@ var menuBar = []nativeMenuDef{
 		{Label: "Open…", Key: "o", Tag: menuOpen},
 		{Label: "Reload", Key: "r", Tag: menuReload},
 		{Label: "Watch for Changes", Tag: menuWatch},
+		{},
+		{Label: "Open Profile…", Tag: menuOpenProfile},
+		{Label: "Close Profile", Tag: menuCloseProfile},
 	}},
 	{"Edit", []nativeMenuItem{
 		{Label: "Copy Selection", Tag: menuCopy},
@@ -83,6 +86,11 @@ func (ui *FileUI) runMenuItem(gtx layout.Context, item int) {
 	switch item {
 	case menuOpen:
 		ui.chooseFile()
+	case menuOpenProfile:
+		ui.chooseProfile()
+	case menuCloseProfile:
+		ui.Config.ProfilePath = ""
+		ui.loadProfile()
 	case menuReload:
 		ui.reload()
 	case menuWatch:
@@ -150,16 +158,18 @@ func (ui *FileUI) handleMenuBar(gtx layout.Context) {
 	}
 	type state struct{ checked, enabled bool }
 	states := map[int]state{
-		menuReload:      {false, ui.Config.Path != ""},
-		menuWatch:       {ui.Config.Watch, true},
-		menuCopy:        {false, selection != ""},
-		menuBack:        {false, ui.Navigation.CanBack()},
-		menuForward:     {false, ui.Navigation.CanForward()},
-		menuGoAsm:       {ui.ShowGoAsm.Value, true},
-		menuNativeAsm:   {ui.ShowNativeAsm.Value, true},
-		menuSource:      {ui.ShowSource.Value, true},
-		menuDiagnostics: {!ui.Settings.HideDiagnostics, true},
-		menuSyncScroll:  {ui.Settings.SyncScroll, true},
+		menuReload:       {false, ui.Config.Path != ""},
+		menuWatch:        {ui.Config.Watch, true},
+		menuOpenProfile:  {false, ui.File != nil},
+		menuCloseProfile: {false, ui.Profile != nil},
+		menuCopy:         {false, selection != ""},
+		menuBack:         {false, ui.Navigation.CanBack()},
+		menuForward:      {false, ui.Navigation.CanForward()},
+		menuGoAsm:        {ui.ShowGoAsm.Value, true},
+		menuNativeAsm:    {ui.ShowNativeAsm.Value, true},
+		menuSource:       {ui.ShowSource.Value, true},
+		menuDiagnostics:  {!ui.Settings.HideDiagnostics, true},
+		menuSyncScroll:   {ui.Settings.SyncScroll, true},
 	}
 	if ui.menuStates == nil {
 		ui.menuStates = map[int]uint8{}

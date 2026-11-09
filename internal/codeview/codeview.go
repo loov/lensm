@@ -251,6 +251,10 @@ type Style struct {
 	// and assembly.
 	HoverLinksOnly bool
 	TextHeight     unit.Sp
+	// Profile, when set, weighs each instruction by the samples at its
+	// PC, shown as a share of ProfileTotal.
+	Profile      map[uint64]int64
+	ProfileTotal int64
 }
 
 func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
