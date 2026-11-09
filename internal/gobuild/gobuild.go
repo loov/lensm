@@ -40,6 +40,15 @@ func IsPackage(path string) bool {
 
 // Run builds the main package in dir with the go command.
 func Run(ctx context.Context, dir string) (*Build, error) {
+	// go build -o writes an archive for any other package, which lensm
+	// can't open.
+	name, err := goCommand(ctx, dir, "list", "-f", "{{.Name}}", ".")
+	if err != nil {
+		return nil, err
+	}
+	if name = strings.TrimSpace(name); name != "main" {
+		return nil, fmt.Errorf("%s is package %s, open a main package", dir, name)
+	}
 	out, err := goCommand(ctx, dir, "list", "-m", "-f", "{{.Path}}")
 	if err != nil {
 		return nil, err

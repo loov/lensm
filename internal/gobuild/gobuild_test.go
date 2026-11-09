@@ -34,3 +34,12 @@ func TestRun(t *testing.T) {
 		t.Errorf("missing %v in %+v", want, b.Notes)
 	}
 }
+
+func TestRunLibrary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the go command")
+	}
+	if _, err := Run(context.Background(), "../disasm"); err == nil {
+		t.Error("built a library package")
+	}
+}
