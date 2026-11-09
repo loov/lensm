@@ -67,6 +67,7 @@ Keys:
   list, and `Enter` there keeps the previewed function open in a tab;
 - `Cmd/Ctrl+P` goes to a function by name, or by an address such as
   `0x4a2f10` from a stack trace or profile, selecting its instruction;
+- `?` lists the keyboard shortcuts;
 - `Cmd/Ctrl+O` opens a binary and `Cmd/Ctrl+,` opens settings;
 - `Ctrl+Tab` and `Ctrl+Shift+Tab` switch tabs, `Cmd/Ctrl+W` closes one;
 - follow call targets and use `Alt+Left/Right` (or `Cmd/Ctrl+[` and

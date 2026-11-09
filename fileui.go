@@ -112,6 +112,7 @@ type FileUI struct {
 	SettingsCancel    widget.Clickable
 	Comment           codeview.CommentEditor
 	Find              findBar
+	Shortcuts         shortcutSheet
 	TextSizeEditor    widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -522,6 +523,7 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 	if ui.settingsOpen {
 		ui.layoutSettings(gtx)
 	}
+	ui.layoutShortcuts(gtx)
 }
 
 func (ui *FileUI) handleActions(gtx layout.Context) {
@@ -546,6 +548,8 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 		filters = append(filters,
 			key.Filter{Required: key.ModAlt, Name: key.NameLeftArrow},
 			key.Filter{Required: key.ModAlt, Name: key.NameRightArrow},
+			key.Filter{Name: "?", Optional: key.ModShift},
+			key.Filter{Name: "/", Required: key.ModShift},
 		)
 	}
 	for {
@@ -566,6 +570,8 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			ui.navigateBack()
 		case key.NameRightArrow, key.Name("]"):
 			ui.navigateForward()
+		case "?", "/":
+			ui.Shortcuts.Open = true
 		case key.Name("W"):
 			ui.closeTab(ui.ActiveTab)
 		case key.Name("F"):

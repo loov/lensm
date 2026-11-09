@@ -42,6 +42,7 @@ var (
 	renderHover    = flag.String("render.hover", "", "pointer position in dp, as x,y")
 	renderFind     = flag.String("render.find", "", "open the find bar with this query")
 	renderQuick    = flag.String("render.quick", "", "open the go-to-function popup with this query")
+	renderKeys     = flag.Bool("render.shortcuts", false, "open the keyboard shortcut sheet")
 	renderMenu     = flag.Bool("render.menu", false, "open the app menu, drawn in the window except on macOS")
 	renderSettings = flag.Int("render.settings", -1, "open the settings on this page")
 )
@@ -107,6 +108,7 @@ func TestRender(t *testing.T) {
 		ui.SettingsNav.Selected = *renderSettings
 	}
 	ui.AppMenu.Open = *renderMenu
+	ui.Shortcuts.Open = *renderKeys
 
 	var hover f32.Point
 	if *renderHover != "" {

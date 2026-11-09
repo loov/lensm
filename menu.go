@@ -72,6 +72,9 @@ var menuBar = []nativeMenuDef{
 		{Label: "Minimize", Key: "m", Selector: "performMiniaturize:"},
 		{Label: "Zoom", Selector: "performZoom:"},
 	}},
+	{"Help", []nativeMenuItem{
+		{Label: "Keyboard Shortcuts", Tag: menuShortcuts},
+	}},
 }
 
 // runMenuItem does what a menu item, in the window or the menu bar,
@@ -94,6 +97,8 @@ func (ui *FileUI) runMenuItem(gtx layout.Context, item int) {
 		ui.navigateForward()
 	case menuSettings:
 		ui.openSettings()
+	case menuShortcuts:
+		ui.Shortcuts.Open = true
 	case menuQuit:
 		ui.quit()
 	case menuGoAsm:

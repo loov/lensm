@@ -64,6 +64,7 @@ const (
 	menuForward
 	_
 	menuSettings
+	menuShortcuts
 	_
 	menuQuit
 )
@@ -74,17 +75,18 @@ func (ui *FileUI) appMenuItems() []gui.MenuItem {
 		selection = code.SelectedText()
 	}
 	return []gui.MenuItem{
-		menuOpen:     {Label: "Open…", Shortcut: shortcut("O")},
-		menuReload:   {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
-		menuWatch:    {Label: "Watch for Changes", Checked: ui.Config.Watch},
-		3:            {Separator: true},
-		menuCopy:     {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
-		menuBack:     {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
-		menuForward:  {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
-		7:            {Separator: true},
-		menuSettings: {Label: "Settings…", Shortcut: shortcut(",")},
-		9:            {Separator: true},
-		menuQuit:     {Label: "Quit", Shortcut: shortcut("Q")},
+		menuOpen:      {Label: "Open…", Shortcut: shortcut("O")},
+		menuReload:    {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
+		menuWatch:     {Label: "Watch for Changes", Checked: ui.Config.Watch},
+		3:             {Separator: true},
+		menuCopy:      {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
+		menuBack:      {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
+		menuForward:   {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
+		7:             {Separator: true},
+		menuSettings:  {Label: "Settings…", Shortcut: shortcut(",")},
+		menuShortcuts: {Label: "Keyboard Shortcuts", Shortcut: "?"},
+		10:            {Separator: true},
+		menuQuit:      {Label: "Quit", Shortcut: shortcut("Q")},
 	}
 }
 
