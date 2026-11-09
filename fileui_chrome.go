@@ -183,10 +183,10 @@ func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
 					dims.Size.X = gtx.Constraints.Max.X
 					return dims
 				}),
-				layout.Rigid(gui.IconButton{Theme: th, Clickable: &ui.BackButton, Icon: BackIcon,
+				layout.Rigid(gui.IconButton{Theme: th, Clickable: &ui.BackButton, Tip: &ui.BackTip, Icon: BackIcon,
 					Description: "Back", Disabled: !ui.Navigation.CanBack()}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: 2, Right: 8}.Layout(gtx, gui.IconButton{Theme: th, Clickable: &ui.ForwardButton, Icon: ForwardIcon,
+					return layout.Inset{Left: 2, Right: 8}.Layout(gtx, gui.IconButton{Theme: th, Clickable: &ui.ForwardButton, Tip: &ui.ForwardTip, Icon: ForwardIcon,
 						Description: "Forward", Disabled: !ui.Navigation.CanForward()}.Layout)
 				}),
 			)
@@ -208,7 +208,7 @@ func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
 						{Label: "Diagnostics", Value: &ui.ShowDiagnostics},
 					}}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						button := gui.IconButton{Theme: th, Clickable: &ui.SettingsButton, Icon: SettingsIcon, Description: "Settings"}
+						button := gui.IconButton{Theme: th, Clickable: &ui.SettingsButton, Tip: &ui.SettingsTip, Icon: SettingsIcon, Description: "Settings"}
 						return layout.Inset{Left: 8}.Layout(gtx, button.Layout)
 					}),
 				)

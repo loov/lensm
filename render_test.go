@@ -122,12 +122,14 @@ func TestRender(t *testing.T) {
 	var router input.Router
 	var ops op.Ops
 	// Code loads on its own goroutine, and hover and the popups need a
-	// frame to settle, so draw a few frames and keep the last.
+	// frame to settle, so draw a few frames and keep the last. The clock
+	// steps a second a frame, past the tooltip delay.
+	start := time.Now()
 	for i := range 4 {
 		ops.Reset()
 		gtx := layout.Context{
 			Ops:         &ops,
-			Now:         time.Now(),
+			Now:         start.Add(time.Duration(i) * time.Second),
 			Metric:      unit.Metric{PxPerDp: scale, PxPerSp: scale},
 			Constraints: layout.Exact(size),
 			Source:      router.Source(),

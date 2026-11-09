@@ -69,6 +69,9 @@ type FileUI struct {
 	GoToButton     widget.Clickable
 	BackButton     widget.Clickable
 	ForwardButton  widget.Clickable
+	BackTip        gui.Tooltip
+	ForwardTip     gui.Tooltip
+	SettingsTip    gui.Tooltip
 	QuickOpen      gui.QuickOpen[disasm.Func]
 	EmptyOpen      widget.Clickable
 	SettingsButton widget.Clickable

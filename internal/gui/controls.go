@@ -45,9 +45,11 @@ func (b Button) Layout(gtx layout.Context) layout.Dimensions {
 }
 
 // IconButton is a borderless icon that shows a background on hover.
+// With a Tip it shows Description below it on hover.
 type IconButton struct {
 	Theme       *Theme
 	Clickable   *widget.Clickable
+	Tip         *Tooltip
 	Icon        *widget.Icon
 	Description string
 	// Disabled dims the icon and ignores clicks.
@@ -55,6 +57,14 @@ type IconButton struct {
 }
 
 func (b IconButton) Layout(gtx layout.Context) layout.Dimensions {
+	if b.Tip != nil {
+		// The hint shows for a disabled button too, so it is laid out
+		// before the button disables gtx.
+		b.Tip.Below = true
+		tip := b.Tip
+		b.Tip = nil
+		return tip.Layout(gtx, b.Theme, b.Description, b.Layout)
+	}
 	c := b.Theme.Colors
 	fg := c.MutedText
 	if b.Disabled {
@@ -65,7 +75,7 @@ func (b IconButton) Layout(gtx layout.Context) layout.Dimensions {
 		semantic.Button.Add(gtx.Ops)
 		semantic.DescriptionOp(b.Description).Add(gtx.Ops)
 		var bg color.NRGBA
-		if b.Clickable.Hovered() {
+		if b.Clickable.Hovered() && !b.Disabled {
 			bg = c.Hover
 		}
 		return frame(gtx, bg, bg, layout.UniformInset(5), func(gtx layout.Context) layout.Dimensions {

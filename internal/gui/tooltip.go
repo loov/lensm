@@ -16,8 +16,13 @@ import (
 const tooltipDelay = 600 * time.Millisecond
 
 // Tooltip shows a hint to the right of a widget once the pointer rests
-// on it. Pressing the widget hides the hint until the pointer leaves.
+// on it, or below it with Below. Pressing the widget hides the hint
+// until the pointer leaves.
 type Tooltip struct {
+	// Below puts the hint under the widget, its right edge level with
+	// the widget's, for widgets in a row along the top of the window.
+	Below bool
+
 	hovered bool
 	pressed bool
 	since   time.Time
@@ -67,7 +72,11 @@ func (t *Tooltip) Layout(gtx layout.Context, th *Theme, text string, w layout.Wi
 	tip := measure(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: 4, Bottom: 4, Left: 8, Right: 8}.Layout(gtx, label.Layout)
 	}).Size
-	op.Offset(image.Pt(dims.Size.X+gtx.Metric.Dp(6), (dims.Size.Y-tip.Y)/2)).Add(gtx.Ops)
+	at := image.Pt(dims.Size.X+gtx.Metric.Dp(6), (dims.Size.Y-tip.Y)/2)
+	if t.Below {
+		at = image.Pt(dims.Size.X-tip.X, dims.Size.Y+gtx.Metric.Dp(6))
+	}
+	op.Offset(at).Add(gtx.Ops)
 	Panel(gtx, th, tip, gtx.Metric.Dp(5))
 	layout.Inset{Top: 4, Bottom: 4, Left: 8, Right: 8}.Layout(gtx, label.Layout)
 	op.Defer(gtx.Ops, macro.Stop())
