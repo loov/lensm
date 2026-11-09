@@ -62,6 +62,10 @@ type Inst struct {
 
 	// Marks flags what the instruction costs at run time.
 	Marks Mark
+
+	// Stack is what a stack machine, such as wasm, holds before the
+	// instruction runs, the top first.
+	Stack []string
 }
 
 // CountedMarks are the marks of ix that count towards totals. A bounds

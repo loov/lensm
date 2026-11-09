@@ -226,6 +226,9 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 	for i := range body {
 		in := &body[i]
 		current, popped, own = i, reads{}, reads{}
+		for k := len(stack) - 1; k >= 0; k-- {
+			insts[i].Stack = append(insts[i].Stack, stack[k].text)
+		}
 		op, arg, _ := strings.Cut(insts[i].Text, " ")
 		typ, short, _ := strings.Cut(op, ".")
 		text := ""

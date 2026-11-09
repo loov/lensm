@@ -25,12 +25,18 @@ func (ui Style) layoutHelp(gtx layout.Context, c codeColumns, hover codeHover) {
 	if !ui.ShowHelp || ui.selecting || commentEditing || hover.asmIndex < 0 || hover.asmIndex >= len(ui.Code.Insts) {
 		return
 	}
+	inst := ui.Code.Insts[hover.asmIndex]
 	// The reference covers machine instructions; a wasm mnemonic only
-	// ever matches its generic fallback, which says nothing.
+	// ever matches its generic fallback, which says nothing. What the
+	// instruction works on does.
 	if ui.Code.Arch == "wasm" {
+		if len(inst.Stack) > 0 {
+			op, _, _ := strings.Cut(inst.Text, " ")
+			help := asmhelp.Help{Mnemonic: op, Description: "the stack before it, top first", Explanation: strings.Join(inst.Stack, "\n")}
+			ui.layoutAssemblyHelp(gtx, help, instPerf{}, hover.position)
+		}
 		return
 	}
-	inst := ui.Code.Insts[hover.asmIndex]
 	nativeHovered := ui.ShowNative && c.native.Contains(hover.position.X)
 	var help asmhelp.Help
 	var ok bool
