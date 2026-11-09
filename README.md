@@ -72,8 +72,10 @@ Keys:
 - follow call targets and use `Alt+Left/Right` (or `Cmd/Ctrl+[` and
   `Cmd/Ctrl+]`) to navigate between functions;
 - in the code, `Up`/`Down`, `Page Up`/`Page Down` and `Home`/`End` move
-  between instructions, `Right` follows a jump or call and `Left` returns
-  from a followed jump;
+  between instructions or source lines, with `Shift` to extend a
+  selection, and `Tab` moves to the counterpart in the other column. In
+  the assembly `Right` follows a jump or call and `Left` returns from a
+  followed jump;
 - hover an assembly instruction to see its reference and a simplified
   explanation when Lensm has a matching rule;
 - drag across Go assembly, native assembly, or source lines to select a block,

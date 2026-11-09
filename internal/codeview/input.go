@@ -182,7 +182,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 		key.Filter{Focus: selectionFocus, Name: key.NameReturn},
 	}
 	for _, name := range navKeys {
-		filters = append(filters, key.Filter{Focus: selectionFocus, Name: name})
+		filters = append(filters, key.Filter{Focus: selectionFocus, Name: name, Optional: key.ModShift})
 	}
 	if commentTag != nil {
 		// A nil Focus would match whatever has focus.
@@ -220,7 +220,7 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			ui.editComment(gtx)
 		default:
 			if !commentFocused {
-				ui.navigate(gtx, c, keyEvent.Name)
+				ui.navigate(gtx, c, keyEvent.Name, keyEvent.Modifiers)
 			}
 		}
 	}

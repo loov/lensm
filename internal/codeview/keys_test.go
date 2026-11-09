@@ -35,7 +35,7 @@ func TestNavigate(t *testing.T) {
 	c := style.columns(gtx)
 	press := func(name key.Name, want int) {
 		t.Helper()
-		style.navigate(gtx, c, name)
+		style.navigate(gtx, c, name, 0)
 		if state.SelectedAsm != want {
 			t.Fatalf("after %s selected %d, want %d", name, state.SelectedAsm, want)
 		}
@@ -68,4 +68,61 @@ func TestNavigate(t *testing.T) {
 	}
 	rows := 600 / c.lineHeight
 	press(key.NamePageDown, rows-1)
+
+	// Shift extends a selection from the row it started on.
+	press(key.NameHome, 0)
+	style.navigate(gtx, c, key.NameDownArrow, key.ModShift)
+	style.navigate(gtx, c, key.NameDownArrow, key.ModShift)
+	if from, to, ok := state.Selection.Range(); !ok || from != 0 || to != 2 || state.Selection.View != ViewGoAsm {
+		t.Errorf("shift selection = %d..%d %v %q", from, to, ok, state.Selection.View)
+	}
+	press(key.NameDownArrow, 4)
+	if state.Selection.Active {
+		t.Error("a plain arrow kept the selection")
+	}
+}
+
+func TestNavigateSource(t *testing.T) {
+	insts := []disasm.Inst{
+		{Text: "A", File: "a.go", Line: 10},
+		{Text: "B", File: "a.go", Line: 12},
+	}
+	state := &UI{Code: &disasm.Code{
+		Insts: insts,
+		Source: []disasm.Source{{File: "a.go", Blocks: []disasm.SourceBlock{
+			{LineRange: disasm.LineRange{From: 10, To: 13}, Lines: []string{"a", "b", "c"}},
+		}}},
+	}, SelectedAsm: 1, SelectedView: ViewGoAsm}
+	gtx := layout.Context{
+		Ops:         new(op.Ops),
+		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+		Constraints: layout.Exact(image.Pt(1200, 600)),
+	}
+	style := Style{UI: state, ShowGo: true, ShowSource: true, TextHeight: 12}
+	c := style.columns(gtx)
+	at := func(file string, line int) {
+		t.Helper()
+		if state.SelectedView != ViewSource || state.SelectedFile != file || state.SelectedLine != line {
+			t.Fatalf("selected %q %s:%d, want source %s:%d", state.SelectedView, state.SelectedFile, state.SelectedLine, file, line)
+		}
+	}
+
+	// Tab goes to the selected instruction's line, past the header row.
+	style.navigate(gtx, c, key.NameTab, 0)
+	at("a.go", 12)
+	style.navigate(gtx, c, key.NameUpArrow, 0)
+	at("a.go", 11)
+	style.navigate(gtx, c, key.NameHome, 0)
+	at("a.go", 10)
+	style.navigate(gtx, c, key.NameEnd, 0)
+	at("a.go", 12)
+	style.navigate(gtx, c, key.NameUpArrow, key.ModShift)
+	if from, to, ok := state.Selection.Range(); !ok || state.Selection.View != ViewSource || from != 2 || to != 3 {
+		t.Errorf("shift selection in source = %d..%d %v", from, to, ok)
+	}
+	// And back to the line's first instruction.
+	style.navigate(gtx, c, key.NameTab, 0)
+	if state.SelectedView != ViewGoAsm || state.SelectedAsm != 0 {
+		t.Errorf("after Tab back: %q %d", state.SelectedView, state.SelectedAsm)
+	}
 }
