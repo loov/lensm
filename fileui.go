@@ -66,6 +66,8 @@ type FileUI struct {
 
 	// split divides the function list from the code view.
 	split component.Resize
+	// graphSplit divides the code from the profile graph on its right.
+	graphSplit component.Resize
 
 	// Window chrome.
 	AppMenu        gui.Menu
@@ -226,6 +228,8 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.SyncScrollSetting.Value = settings.SyncScroll
 	ui.split.Axis = layout.Horizontal
 	ui.split.Ratio = settings.SidebarRatio
+	ui.graphSplit.Axis = layout.Horizontal
+	ui.graphSplit.Ratio = settings.GraphRatio
 	ui.Comment.SingleLine = true
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
@@ -804,7 +808,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 		func(gtx layout.Context) layout.Dimensions {
 			return ui.layoutPanel(gtx)
 		},
-		func(gtx layout.Context) layout.Dimensions {
+		ui.withGraph(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					if ui.LoadError != nil {
@@ -831,9 +835,6 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					}
 					if ui.File == nil && ui.Config.Path == "" {
 						return ui.layoutEmptyState(gtx)
-					}
-					if ui.ShowGraph && ui.Profile != nil {
-						return ui.layoutProfileGraph(gtx)
 					}
 					if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
 						txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)
@@ -892,16 +893,39 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					)
 				}),
 			)
-		},
-		func(gtx layout.Context) layout.Dimensions {
-			size := image.Pt(gtx.Metric.Dp(8), gtx.Constraints.Max.Y)
-			paint.FillShape(gtx.Ops, colors.Splitter, clip.Rect{
-				Min: image.Pt(size.X/2, 0),
-				Max: image.Pt(size.X/2+1, size.Y),
-			}.Op())
-			return layout.Dimensions{Size: size}
-		},
+		}),
+		ui.splitHandle,
 	)
+}
+
+// splitHandle is the line between two resizable panes.
+func (ui *FileUI) splitHandle(gtx layout.Context) layout.Dimensions {
+	size := image.Pt(gtx.Metric.Dp(8), gtx.Constraints.Max.Y)
+	paint.FillShape(gtx.Ops, ui.Theme.Colors.Splitter, clip.Rect{
+		Min: image.Pt(size.X/2, 0),
+		Max: image.Pt(size.X/2+1, size.Y),
+	}.Op())
+	return layout.Dimensions{Size: size}
+}
+
+// withGraph puts the profile graph, when shown, right of content.
+func (ui *FileUI) withGraph(content layout.Widget) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil {
+			return content(gtx)
+		}
+		total := float32(gtx.Constraints.Max.X)
+		least := float32(gtx.Metric.Dp(240))
+		ui.graphSplit.Ratio = min(max(ui.graphSplit.Ratio, least/total), 1-least/total)
+		defer func() {
+			if ui.graphSplit.Ratio != ui.Settings.GraphRatio {
+				settings := ui.Settings
+				settings.GraphRatio = ui.graphSplit.Ratio
+				ui.saveSettings(settings)
+			}
+		}()
+		return ui.graphSplit.Layout(gtx, content, ui.layoutProfileGraph, ui.splitHandle)
+	}
 }
 
 // layoutEmptyState invites the user to open a binary when none is loaded.

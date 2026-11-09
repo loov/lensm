@@ -99,7 +99,8 @@ func (g *callGraph) calls(prof *pprof.Profile) {
 // build lays out the graph around focus.
 func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile, focus string) {
 	if g.prof == prof && g.textSize == th.TextSize && (g.focus == focus || g.full && g.layout != nil) {
-		// The whole graph doesn't depend on focus, only its highlight.
+		// The whole graph doesn't depend on focus; only bring it into view.
+		g.center = g.center || g.focus != focus
 		g.focus = focus
 		return
 	}
@@ -347,9 +348,9 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 	}
 	var expand layout.Widget
 	if ui.Profile != nil {
-		text := "Expand"
+		text := "Show all"
 		if ui.ShowGraph {
-			text = "Collapse"
+			text = "Hide all"
 		}
 		expand = gui.Button{Theme: th, Clickable: &ui.ExpandGraph, Text: text}.Layout
 	}
@@ -370,19 +371,10 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 	})
 }
 
-// layoutProfileGraph draws the whole profile's graph in place of the
-// code; a click on a function opens it, and Escape goes back.
+// layoutProfileGraph draws the whole profile's graph beside the code;
+// a click on a function opens it.
 func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
-	for {
-		ev, ok := gtx.Event(key.Filter{Name: key.NameEscape})
-		if !ok {
-			break
-		}
-		if e, ok := ev.(key.Event); ok && e.State == key.Press {
-			ui.ShowGraph = false
-		}
-	}
 	if ui.CloseGraph.Clicked(gtx) {
 		ui.ShowGraph = false
 	}
@@ -405,14 +397,13 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{}
 			}
 			if name, ok := g.draw(gtx, th, ui.Profile); ok {
-				ui.ShowGraph = false
 				ui.openTab(ui.findFunc(name), true)
 				gtx.Execute(op.InvalidateCmd{})
 			}
 			return layout.Dimensions{Size: gtx.Constraints.Max}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layout.UniformInset(10).Layout(gtx, gui.Button{Theme: th, Clickable: &ui.CloseGraph, Text: "Close graph"}.Layout)
+			return layout.UniformInset(10).Layout(gtx, gui.Button{Theme: th, Clickable: &ui.CloseGraph, Text: "Close"}.Layout)
 		}),
 	)
 }

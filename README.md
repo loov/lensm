@@ -99,11 +99,11 @@ Keys:
   list does. With a profile the Callers panel puts the callers that
   spend the most through the open function first, and the Call graph
   panel draws the hottest callers and callees around it; click a
-  function in the graph to open it. Expand, or Profile Graph in the
-  menu, draws the whole profile's graph in place of the code, as
-  pprof's web view does, with a node's text growing with its own time.
-  Drag or scroll to pan, hold Command or Ctrl and scroll to zoom, and
-  press Escape to go back. The profile's addresses are matched
+  function in the graph to open it. Show all, or Profile Graph in the
+  menu, draws the whole profile's graph in a resizable pane right of
+  the code, as pprof's web view does, with a node's text growing with
+  its own time. Drag or scroll to pan, and hold Command or Ctrl and
+  scroll to zoom. The profile's addresses are matched
   to the binary by function, so a profile of a position independent
   binary works;
 - Compare With… in the menu loads another build of the program and

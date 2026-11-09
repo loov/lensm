@@ -36,7 +36,9 @@ type AppSettings struct {
 	HideDiagnostics bool    `json:"hide_diagnostics,omitempty"`
 	TextSize        int     `json:"text_size,omitempty"`
 	SidebarRatio    float32 `json:"sidebar_ratio,omitempty"`
-	LastPath        string  `json:"last_path,omitempty"`
+	// GraphRatio is the code's share of the width beside the profile graph.
+	GraphRatio float32 `json:"graph_ratio,omitempty"`
+	LastPath   string  `json:"last_path,omitempty"`
 	// Sessions are the tabs left open in each binary, most recent first.
 	Sessions []Session `json:"sessions,omitempty"`
 
@@ -97,6 +99,7 @@ func DefaultAppSettings() AppSettings {
 		ShowAsmHelp:   true,
 		TextSize:      12,
 		SidebarRatio:  0.15,
+		GraphRatio:    0.55,
 		// Most parameters leak somewhere and most pointer uses have a
 		// nil check, so these would bury the other notes. The bounds
 		// check mark already shows the remaining bounds checks.
@@ -136,6 +139,9 @@ func (settings AppSettings) normalized() AppSettings {
 	settings.SyntaxStyle = syntax.NormalizeStyle(settings.SyntaxStyle)
 	if settings.TextSize <= 0 {
 		settings.TextSize = defaults.TextSize
+	}
+	if settings.GraphRatio <= 0 || settings.GraphRatio >= 1 {
+		settings.GraphRatio = defaults.GraphRatio
 	}
 	if settings.SidebarRatio <= 0 || settings.SidebarRatio >= 1 {
 		settings.SidebarRatio = defaults.SidebarRatio

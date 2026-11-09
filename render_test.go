@@ -77,6 +77,8 @@ func TestRender(t *testing.T) {
 	st.HideDiagnostics = !strings.Contains(*renderCols, "d")
 	st.SyntaxStyle = *renderSyntax
 	ui.split.Ratio = st.SidebarRatio
+	ui.graphSplit.Axis = layout.Horizontal
+	ui.graphSplit.Ratio = st.GraphRatio
 	ui.applySettings(st)
 
 	panels := map[string]int{"functions": panelFunctions, "comments": panelComments, "history": panelHistory, "diagnostics": panelMarks, "callers": panelCallers, "summary": panelSummary, "graph": panelGraph}
