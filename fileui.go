@@ -443,6 +443,10 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 
 	if fn, ok := ui.QuickOpen.Update(gtx); ok {
 		ui.openTab(fn, false)
+		// The arrows step through the opened code at once.
+		if code := ui.activeCode(); code != nil {
+			gtx.Execute(key.FocusCmd{Tag: code})
+		}
 	}
 	ui.QuickOpen.Layout(gtx, ui.Theme, "Go to function")
 	if ui.settingsOpen {

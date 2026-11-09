@@ -81,12 +81,14 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			switch ev.Kind {
 			case pointer.Move:
 				ui.mousePosition = ev.Position
+				ui.keyboardRow = false
 			case pointer.Leave:
 				if !ui.selecting {
 					ui.mousePosition = f32.Pt(-1, -1)
 				}
 			case pointer.Press:
 				ui.mousePosition = ev.Position
+				ui.keyboardRow = false
 				if ev.Buttons.Contain(pointer.ButtonSecondary) {
 					ui.alignCounterpart(gtx, c, ev.Position)
 				}
@@ -179,6 +181,9 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 		key.Filter{Focus: selectionFocus, Name: key.NameEscape},
 		key.Filter{Focus: selectionFocus, Name: key.NameReturn},
 	}
+	for _, name := range navKeys {
+		filters = append(filters, key.Filter{Focus: selectionFocus, Name: name})
+	}
 	if commentTag != nil {
 		// A nil Focus would match whatever has focus.
 		filters = append(filters, key.Filter{Focus: commentTag, Name: key.NameEscape})
@@ -213,6 +218,10 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 			}
 		case key.NameReturn:
 			ui.editComment(gtx)
+		default:
+			if !commentFocused {
+				ui.navigate(gtx, c, keyEvent.Name)
+			}
 		}
 	}
 	return mouseClicked
@@ -256,6 +265,11 @@ func (ui Style) resolveHover(gtx layout.Context, c codeColumns, mouseClicked boo
 	highlightAsmIndex := -1
 	if relative := mousePosition.Y - ui.asm.Offset; mouseInAsm && relative >= 0 {
 		highlightAsmIndex = int(relative) / lineHeight
+	}
+	if ui.keyboardRow {
+		// The pointer stays put while the keyboard moves the selection.
+		highlightAsmIndex = ui.SelectedAsm
+		mouseClicked = false
 	}
 
 	if 0 <= highlightAsmIndex && highlightAsmIndex < len(ui.Code.Insts) {

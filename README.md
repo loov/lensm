@@ -66,6 +66,9 @@ Keys:
 - `Ctrl+Tab` and `Ctrl+Shift+Tab` switch tabs, `Cmd/Ctrl+W` closes one;
 - follow call targets and use `Alt+Left/Right` (or `Cmd/Ctrl+[` and
   `Cmd/Ctrl+]`) to navigate between functions;
+- in the code, `Up`/`Down`, `Page Up`/`Page Down` and `Home`/`End` move
+  between instructions, `Right` follows a jump or call and `Left` returns
+  from a followed jump;
 - hover an assembly instruction to see its reference and a simplified
   explanation when Lensm has a matching rule;
 - drag across Go assembly, native assembly, or source lines to select a block,

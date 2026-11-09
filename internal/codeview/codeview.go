@@ -45,6 +45,12 @@ type UI struct {
 	lastClickRow string
 	lastClickAt  time.Time
 
+	// keyboardRow says the selected row moved from the keyboard, so it
+	// highlights its relations until the pointer moves.
+	keyboardRow bool
+	// jumpBack are the rows of the jumps followed with →, for ←.
+	jumpBack []int
+
 	// reveal is the row to scroll to on the next layout.
 	reveal *comments.Coord
 
