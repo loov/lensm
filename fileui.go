@@ -75,8 +75,8 @@ type FileUI struct {
 	split component.Resize
 	// graphSplit divides the code from the profile graph on its right.
 	graphSplit component.Resize
-	// flameSplit divides the sidebar and code from the flame graph below.
-	flameSplit component.Resize
+	// belowSplit divides the sidebar and code from a graph below them.
+	belowSplit component.Resize
 
 	// Window chrome.
 	AppMenu        gui.Menu
@@ -123,6 +123,8 @@ type FileUI struct {
 	ThemeSelect       gui.Select
 	SyntaxSelect      gui.Select
 	FlameSelect       gui.Select
+	CallGraphSelect   gui.Select
+	FlameUpSelect     gui.Select
 	SettingsOK        widget.Clickable
 	SettingsCancel    widget.Clickable
 	Comment           codeview.CommentEditor
@@ -260,8 +262,8 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.split.Ratio = settings.SidebarRatio
 	ui.graphSplit.Axis = layout.Horizontal
 	ui.graphSplit.Ratio = settings.GraphRatio
-	ui.flameSplit.Axis = layout.Vertical
-	ui.flameSplit.Ratio = settings.FlameRatio
+	ui.belowSplit.Axis = layout.Vertical
+	ui.belowSplit.Ratio = settings.BelowRatio
 	ui.Comment.SingleLine = true
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
@@ -842,30 +844,33 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 	if ui.GraphFull {
 		return ui.layoutProfileGraph(gtx)
 	}
-	if !ui.flameBelow() {
+	if !ui.graphBelow() {
 		return ui.layoutMain(gtx, colors)
 	}
-	// The flame graph is wide rather than tall, so it goes below the
-	// sidebar and the code, across the whole width.
+	// Below the sidebar and the code the graph gets the whole width,
+	// which suits the flame graph, wide rather than tall.
 	total := float32(gtx.Constraints.Max.Y)
 	least := float32(gtx.Metric.Dp(160))
-	ui.flameSplit.Ratio = min(max(ui.flameSplit.Ratio, least/total), 1-least/total)
+	ui.belowSplit.Ratio = min(max(ui.belowSplit.Ratio, least/total), 1-least/total)
 	defer func() {
-		if ui.flameSplit.Ratio != ui.Settings.FlameRatio {
+		if ui.belowSplit.Ratio != ui.Settings.BelowRatio {
 			settings := ui.Settings
-			settings.FlameRatio = ui.flameSplit.Ratio
+			settings.BelowRatio = ui.belowSplit.Ratio
 			ui.saveSettings(settings)
 		}
 	}()
-	return ui.flameSplit.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.belowSplit.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return ui.layoutMain(gtx, colors)
 	}, ui.layoutProfileGraph, ui.rowHandle)
 }
 
-// flameBelow reports whether the pane is the flame graph and goes below
-// the code rather than right of it.
-func (ui *FileUI) flameBelow() bool {
-	return ui.GraphTools.Flame && !ui.Settings.FlameRight
+// graphBelow reports whether the profile graph shown goes below the
+// code rather than right of it.
+func (ui *FileUI) graphBelow() bool {
+	if ui.GraphTools.Flame {
+		return !ui.Settings.FlameRight
+	}
+	return ui.Settings.CallGraphBelow
 }
 
 // layoutMain draws the sidebar and the code, with the call graph, when
@@ -1009,7 +1014,7 @@ func (ui *FileUI) rowHandle(gtx layout.Context) layout.Dimensions {
 // withGraph puts the profile graph, when shown, right of content.
 func (ui *FileUI) withGraph(content layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil || ui.flameBelow() {
+		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil || ui.graphBelow() {
 			return content(gtx)
 		}
 		total := float32(gtx.Constraints.Max.X)

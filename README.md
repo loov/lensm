@@ -111,8 +111,9 @@ Keys:
   the runtime so its time counts in the code calling it, and pick the
   least share a function needs to be drawn. The second button on the
   right edge draws a flame graph of the same samples instead, in a
-  resizable pane across the bottom of the window, or right of the
-  code if Settings says so, callers on top. Click a frame to zoom to
+  resizable pane across the bottom of the window, callers on top.
+  Settings picks whether each graph goes right of or below the code,
+  and whether the flame graph's root is at the top or the bottom. Click a frame to zoom to
   it, and double-click it or hold Command or Ctrl while clicking to
   open its function. Click a frame above, or press Escape, to zoom out
   a step, and Home to see it all again. Enter in the search zooms to

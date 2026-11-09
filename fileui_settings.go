@@ -97,19 +97,19 @@ func (ui *FileUI) appearancePage() []layout.Widget {
 	for i, style := range syntax.Styles {
 		syntaxLabels[i] = syntax.StyleLabel(style)
 	}
+	places := []string{"Below the code", "Right of the code"}
+	index := func(b bool, yes, no int) int {
+		if b {
+			return yes
+		}
+		return no
+	}
 	return []layout.Widget{
 		gui.FormRow(th, "Theme", func(gtx layout.Context) layout.Dimensions {
 			return ui.ThemeSelect.Layout(gtx, th, []string{"Light", "Dark"}, theme)
 		}),
 		gui.FormRow(th, "Syntax colors", func(gtx layout.Context) layout.Dimensions {
 			return ui.SyntaxSelect.Layout(gtx, th, syntaxLabels, slices.Index(syntax.Styles, ui.Settings.SyntaxStyle))
-		}),
-		gui.FormRow(th, "Flame graph", func(gtx layout.Context) layout.Dimensions {
-			place := 0
-			if ui.Settings.FlameRight {
-				place = 1
-			}
-			return ui.FlameSelect.Layout(gtx, th, []string{"Below the code", "Right of the code"}, place)
 		}),
 		gui.FormRow(th, "Text size", func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
@@ -122,6 +122,16 @@ func (ui *FileUI) appearancePage() []layout.Widget {
 					return layout.Inset{Left: 8}.Layout(gtx, th.Muted("pt", 0.95).Layout)
 				}),
 			)
+		}),
+		gui.FormHeading(th, "Profile"),
+		gui.FormRow(th, "Call graph", func(gtx layout.Context) layout.Dimensions {
+			return ui.CallGraphSelect.Layout(gtx, th, places, index(ui.Settings.CallGraphBelow, 0, 1))
+		}),
+		gui.FormRow(th, "Flame graph", func(gtx layout.Context) layout.Dimensions {
+			return ui.FlameSelect.Layout(gtx, th, places, index(ui.Settings.FlameRight, 1, 0))
+		}),
+		gui.FormRow(th, "Flame graph root", func(gtx layout.Context) layout.Dimensions {
+			return ui.FlameUpSelect.Layout(gtx, th, []string{"At the top", "At the bottom"}, index(ui.Settings.FlameUp, 1, 0))
 		}),
 	}
 }
@@ -178,6 +188,12 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 	if i, ok := ui.FlameSelect.Update(gtx); ok {
 		s.FlameRight, changed = i == 1, true
 	}
+	if i, ok := ui.CallGraphSelect.Update(gtx); ok {
+		s.CallGraphBelow, changed = i == 0, true
+	}
+	if i, ok := ui.FlameUpSelect.Update(gtx); ok {
+		s.FlameUp, changed = i == 1, true
+	}
 	for ui.ShowAsmHelp.Update(gtx) {
 		s.ShowAsmHelp, changed = ui.ShowAsmHelp.Value, true
 	}
@@ -212,7 +228,7 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 		if !ok {
 			break
 		}
-		if ev, ok := ev.(key.Event); ok && ev.State == key.Press && !ui.ThemeSelect.Menu.Open && !ui.SyntaxSelect.Menu.Open && !ui.FlameSelect.Menu.Open {
+		if ev, ok := ev.(key.Event); ok && ev.State == key.Press && !ui.ThemeSelect.Menu.Open && !ui.SyntaxSelect.Menu.Open && !ui.FlameSelect.Menu.Open && !ui.CallGraphSelect.Menu.Open && !ui.FlameUpSelect.Menu.Open {
 			ui.closeSettings(false)
 		}
 	}

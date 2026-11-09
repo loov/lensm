@@ -38,6 +38,8 @@ var (
 	renderHideRuntime = flag.Bool("render.hideruntime", false, "hide the runtime in the profile graph")
 	renderFlame       = flag.Bool("render.flame", false, "draw the profile as a flame graph")
 	renderFlameRight  = flag.Bool("render.flameright", false, "put the flame graph right of the code")
+	renderGraphBelow  = flag.Bool("render.graphbelow", false, "put the call graph below the code")
+	renderFlameUp     = flag.Bool("render.flameup", false, "draw the flame graph's root at the bottom")
 	renderProfile     = flag.String("render.profile", "", "pprof profile to show")
 	renderBaseProfile = flag.String("render.baseprofile", "", "pprof profile to compare the profile with")
 	renderPath        = flag.String("render.path", "", "binary or package directory to open")
@@ -111,6 +113,8 @@ func TestRender(t *testing.T) {
 	ui.GraphTools.HideRuntime.Value = *renderHideRuntime
 	ui.GraphTools.Flame = *renderFlame
 	ui.Settings.FlameRight = *renderFlameRight
+	ui.Settings.CallGraphBelow = *renderGraphBelow
+	ui.Settings.FlameUp = *renderFlameUp
 	if *renderCompare != "" {
 		other, err := loadFile(*renderCompare)
 		if err != nil {

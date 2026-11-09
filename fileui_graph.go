@@ -440,6 +440,7 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			if ui.GraphTools.Flame {
+				ui.Flame.up = ui.Settings.FlameUp
 				if name, ok := ui.Flame.layout(gtx, th, prof, ui.GraphTools.text, focus); ok {
 					ui.openTab(ui.findFunc(name), true)
 					gtx.Execute(op.InvalidateCmd{})
@@ -456,9 +457,9 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 		}),
 	)
 	shadow := gtx.Dp(10)
-	// The flame graph lies below the code, so its shadow runs along the top.
+	// A graph below the code has its shadow along the top.
 	edge, stop := image.Pt(shadow, size.Y), f32.Pt(float32(shadow), 0)
-	if ui.flameBelow() && !ui.GraphFull {
+	if ui.graphBelow() && !ui.GraphFull {
 		edge, stop = image.Pt(size.X, shadow), f32.Pt(0, float32(shadow))
 	}
 	stack := clip.Rect{Max: edge}.Push(gtx.Ops)
