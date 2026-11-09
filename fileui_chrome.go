@@ -438,7 +438,7 @@ func (ui *FileUI) layoutStatus(gtx layout.Context) layout.Dimensions {
 		if code.Code.Arch != "" {
 			left = append(left, th.StatusText(code.Code.Arch))
 		}
-		left = append(left, th.StatusText(fmt.Sprintf("%d instructions · %d jumps", len(code.Code.Insts), jumps)))
+		left = append(left, th.StatusText(plural(len(code.Code.Insts), "instruction")+" · "+plural(jumps, "jump")))
 		if pos := selectedPosition(code); pos != "" {
 			right = append(right, th.StatusText(pos))
 		}
@@ -467,4 +467,12 @@ func (ui *FileUI) layoutStatus(gtx layout.Context) layout.Dimensions {
 		)
 	})
 	return gui.StatusBar{Theme: th, Left: left, Right: right}.Layout(gtx)
+}
+
+// plural spells n of thing: 1 jump, 2 jumps.
+func plural(n int, thing string) string {
+	if n == 1 {
+		return "1 " + thing
+	}
+	return fmt.Sprintf("%d %ss", n, thing)
 }
