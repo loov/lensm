@@ -23,17 +23,40 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 	// The indent stops at maxIndent: past that it no longer helps reading,
 	// and thousands of nested blocks would push the text off screen.
 	const maxIndent = 32
+	// A block opened right inside another adds no level: Go wraps a
+	// function in a block per resume point, and LLVM nests blocks for a
+	// switch, and indenting each would push the code off the column.
+	// steps holds each open block's step, 0 or 1.
 	level := 0
-	for i, in := range decoded {
-		if in.Op == "end" || in.Op == "else" {
-			level = max(level-1, 0)
-		}
-		inst := disasm.Inst{PC: uint64(i), Text: in.Text, Indent: min(level, maxIndent)}
-		switch in.Op {
+	var steps []int
+	opener := func(op string) bool {
+		switch op {
 		// watgo prints try_table's catch clauses inline and has no
 		// legacy try, so try_table is the only other opener.
-		case "block", "loop", "if", "try_table", "else":
-			level++
+		case "block", "loop", "if", "try_table":
+			return true
+		}
+		return false
+	}
+	for i, in := range decoded {
+		switch {
+		case in.Op == "end" && len(steps) > 0:
+			level -= steps[len(steps)-1]
+			steps = steps[:len(steps)-1]
+		case in.Op == "else" && len(steps) > 0:
+			level -= steps[len(steps)-1]
+		}
+		inst := disasm.Inst{PC: uint64(i), Text: in.Text, Indent: min(level, maxIndent)}
+		switch {
+		case opener(in.Op):
+			step := 1
+			if i > 0 && opener(decoded[i-1].Op) && in.Op != "if" {
+				step = 0
+			}
+			steps = append(steps, step)
+			level += step
+		case in.Op == "else" && len(steps) > 0:
+			level += steps[len(steps)-1]
 		}
 		inst.File, inst.Line = bin.PCToLine(in.Addr)
 		if code.File == "" {
