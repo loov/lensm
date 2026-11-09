@@ -9,7 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"gioui.org/io/event"
 	"gioui.org/io/key"
+	"gioui.org/io/pointer"
+	"gioui.org/unit"
 
 	"gioui.org/font"
 	"gioui.org/io/system"
@@ -116,16 +119,46 @@ func (ui *FileUI) setWatch(on bool) {
 	}
 }
 
+// The toolbar's height, and with a custom title bar where the window
+// buttons start and the room they take, in dp.
+const (
+	toolbarHeight      = 44
+	windowButtonsLeft  = 14
+	windowButtonsWidth = 78
+)
+
 func (ui *FileUI) layoutToolbar(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
 	c := th.Colors
-	size := image.Pt(gtx.Constraints.Max.X, gtx.Metric.Dp(44))
+	size := image.Pt(gtx.Constraints.Max.X, gtx.Metric.Dp(toolbarHeight))
 	gtx.Constraints = layout.Exact(size)
 	paint.FillShape(gtx.Ops, c.SecondaryBackground, clip.Rect{Max: size}.Op())
 	paint.FillShape(gtx.Ops, c.Splitter, clip.Rect{Min: image.Pt(0, size.Y-gtx.Metric.Dp(1)), Max: size}.Op())
 
+	left := unit.Dp(8)
+	if customTitleBar {
+		// Empty toolbar space moves the window. The widgets on top
+		// keep their clicks, since a hit stops at the topmost area.
+		area := clip.Rect{Max: size}.Push(gtx.Ops)
+		system.ActionInputOp(system.ActionMove).Add(gtx.Ops)
+		event.Op(gtx.Ops, &ui.titleDrag)
+		area.Pop()
+		for {
+			ev, ok := gtx.Event(pointer.Filter{Target: &ui.titleDrag, Kinds: pointer.Enter | pointer.Leave | pointer.Cancel})
+			if !ok {
+				break
+			}
+			if e, ok := ev.(pointer.Event); ok {
+				overTitleDrag.Store(e.Kind == pointer.Enter)
+			}
+		}
+		if !ui.fullscreen {
+			left = windowButtonsWidth
+		}
+	}
+
 	gui.Start(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Inset{Left: 8, Right: 12}.Layout(gtx, ui.layoutToolbarRow)
+		return layout.Inset{Left: left, Right: 12}.Layout(gtx, ui.layoutToolbarRow)
 	})
 	return layout.Dimensions{Size: size}
 }

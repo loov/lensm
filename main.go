@@ -71,7 +71,9 @@ func main() {
 	}
 	ui.Funcs.SetFilter(*filter)
 
-	windows.Open("lensm", image.Pt(1400, 900), ui.Run)
+	// With its own title bar the window is not decorated, which on
+	// macOS puts the content under a transparent title bar.
+	windows.Open("lensm", image.Pt(1400, 900), ui.Run, app.Decorated(!customTitleBar))
 
 	go func() {
 		profile(*cpuprofile, windows.Wait)

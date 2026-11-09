@@ -117,8 +117,12 @@ type FileUI struct {
 	window *app.Window
 	// menuQueue holds the menu bar items chosen since the last frame;
 	// menuStates the checkmarks and enabled items last sent to it.
-	menuQueue         []int
-	menuStates        map[int]uint8
+	menuQueue  []int
+	menuStates map[int]uint8
+	// fullscreen hides the window buttons, so the toolbar needs no
+	// room for them; titleDrag tracks the pointer over its empty space.
+	fullscreen        bool
+	titleDrag         struct{}
 	picker            *explorer.Explorer
 	loader            *loader
 	invalidate        chan struct{}
@@ -233,6 +237,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 		installMenu(menuBar)
 	}
 
+	var bar titleBar
 	events := make(chan event.Event)
 	acks := make(chan struct{})
 
@@ -289,7 +294,10 @@ func (ui *FileUI) Run(w *app.Window) error {
 			w.Invalidate()
 		case e := <-events:
 			picker.ListenEvents(e)
+			bar.event(e)
 			switch e := e.(type) {
+			case app.ConfigEvent:
+				ui.fullscreen = e.Config.Mode == app.Fullscreen
 			case app.FrameEvent:
 				gtx := app.NewContext(&ops, e)
 				ui.Layout(gtx)

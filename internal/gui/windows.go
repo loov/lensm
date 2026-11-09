@@ -18,14 +18,13 @@ type Windows struct {
 	active sync.WaitGroup
 }
 
-func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Window) error) {
+func (windows *Windows) Open(title string, sizeDp image.Point, run func(*app.Window) error, options ...app.Option) {
 	windows.active.Go(func() {
-
 		window := new(app.Window)
-		window.Option(
+		window.Option(append([]app.Option{
 			app.Title(title),
 			app.Size(unit.Dp(sizeDp.X), unit.Dp(sizeDp.Y)),
-		)
+		}, options...)...)
 		if err := run(window); err != nil {
 			log.Println(err)
 		}
