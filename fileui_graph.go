@@ -456,10 +456,15 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 		}),
 	)
 	shadow := gtx.Dp(10)
-	stack := clip.Rect{Max: image.Pt(shadow, size.Y)}.Push(gtx.Ops)
+	// The flame graph lies below the code, so its shadow runs along the top.
+	edge, stop := image.Pt(shadow, size.Y), f32.Pt(float32(shadow), 0)
+	if ui.GraphTools.Flame && !ui.GraphFull {
+		edge, stop = image.Pt(size.X, shadow), f32.Pt(0, float32(shadow))
+	}
+	stack := clip.Rect{Max: edge}.Push(gtx.Ops)
 	paint.LinearGradientOp{
 		Stop1: f32.Pt(0, 0), Color1: color.NRGBA{A: 0x22},
-		Stop2: f32.Pt(float32(shadow), 0), Color2: color.NRGBA{},
+		Stop2: stop, Color2: color.NRGBA{},
 	}.Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
 	stack.Pop()

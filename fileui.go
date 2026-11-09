@@ -75,6 +75,8 @@ type FileUI struct {
 	split component.Resize
 	// graphSplit divides the code from the profile graph on its right.
 	graphSplit component.Resize
+	// flameSplit divides the sidebar and code from the flame graph below.
+	flameSplit component.Resize
 
 	// Window chrome.
 	AppMenu        gui.Menu
@@ -257,6 +259,8 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.split.Ratio = settings.SidebarRatio
 	ui.graphSplit.Axis = layout.Horizontal
 	ui.graphSplit.Ratio = settings.GraphRatio
+	ui.flameSplit.Axis = layout.Vertical
+	ui.flameSplit.Ratio = settings.FlameRatio
 	ui.Comment.SingleLine = true
 	ui.TextSizeEditor.SingleLine = true
 	ui.TextSizeEditor.Submit = true
@@ -831,9 +835,35 @@ func (ui *FileUI) pick(kind pickKind) {
 }
 
 func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
-	if ui.ShowGraph && ui.GraphFull && ui.Profile != nil && ui.File != nil {
+	if !ui.ShowGraph || ui.Profile == nil || ui.File == nil {
+		return ui.layoutMain(gtx, colors)
+	}
+	if ui.GraphFull {
 		return ui.layoutProfileGraph(gtx)
 	}
+	if !ui.GraphTools.Flame {
+		return ui.layoutMain(gtx, colors)
+	}
+	// The flame graph is wide rather than tall, so it goes below the
+	// sidebar and the code, across the whole width.
+	total := float32(gtx.Constraints.Max.Y)
+	least := float32(gtx.Metric.Dp(160))
+	ui.flameSplit.Ratio = min(max(ui.flameSplit.Ratio, least/total), 1-least/total)
+	defer func() {
+		if ui.flameSplit.Ratio != ui.Settings.FlameRatio {
+			settings := ui.Settings
+			settings.FlameRatio = ui.flameSplit.Ratio
+			ui.saveSettings(settings)
+		}
+	}()
+	return ui.flameSplit.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return ui.layoutMain(gtx, colors)
+	}, ui.layoutProfileGraph, ui.rowHandle)
+}
+
+// layoutMain draws the sidebar and the code, with the call graph, when
+// shown, right of the code.
+func (ui *FileUI) layoutMain(gtx layout.Context, colors gui.UIColors) layout.Dimensions {
 	active := ui.activeTab()
 	if active == nil || (!active.Code.Loaded() && !active.loading) || active.Name != ui.Funcs.Selected {
 		selected := ui.Funcs.SelectedItem
@@ -959,10 +989,20 @@ func (ui *FileUI) splitHandle(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{Size: size}
 }
 
+// rowHandle is the line between a pane and the one below it.
+func (ui *FileUI) rowHandle(gtx layout.Context) layout.Dimensions {
+	size := image.Pt(gtx.Constraints.Max.X, gtx.Metric.Dp(8))
+	paint.FillShape(gtx.Ops, ui.Theme.Colors.Splitter, clip.Rect{
+		Min: image.Pt(0, size.Y/2),
+		Max: image.Pt(size.X, size.Y/2+1),
+	}.Op())
+	return layout.Dimensions{Size: size}
+}
+
 // withGraph puts the profile graph, when shown, right of content.
 func (ui *FileUI) withGraph(content layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil {
+		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil || ui.GraphTools.Flame {
 			return content(gtx)
 		}
 		total := float32(gtx.Constraints.Max.X)

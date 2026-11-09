@@ -216,7 +216,7 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 	}
 	return layout.Inset{Top: 8, Bottom: 6, Left: 14, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		if gtx.Constraints.Max.X >= gtx.Dp(560) {
-			return row(gtx, append([]layout.FlexChild{layout.Flexed(1, search), layout.Rigid(gap)}, controls...)...)
+			return row(gtx, append([]layout.FlexChild{layout.Rigid(search), layout.Rigid(gap)}, controls...)...)
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {

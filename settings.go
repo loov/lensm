@@ -40,6 +40,8 @@ type AppSettings struct {
 	HideSidebar bool `json:"hide_sidebar,omitempty"`
 	// GraphRatio is the code's share of the width beside the profile graph.
 	GraphRatio float32 `json:"graph_ratio,omitempty"`
+	// FlameRatio is the share of the height above the flame graph.
+	FlameRatio float32 `json:"flame_ratio,omitempty"`
 	LastPath   string  `json:"last_path,omitempty"`
 	// Sessions are the tabs left open in each binary, most recent first.
 	Sessions []Session `json:"sessions,omitempty"`
@@ -108,6 +110,7 @@ func DefaultAppSettings() AppSettings {
 		TextSize:      12,
 		SidebarRatio:  0.15,
 		GraphRatio:    0.55,
+		FlameRatio:    0.6,
 		// Most parameters leak somewhere and most pointer uses have a
 		// nil check, so these would bury the other notes. The bounds
 		// check mark already shows the remaining bounds checks.
@@ -150,6 +153,9 @@ func (settings AppSettings) normalized() AppSettings {
 	}
 	if settings.GraphRatio <= 0 || settings.GraphRatio >= 1 {
 		settings.GraphRatio = defaults.GraphRatio
+	}
+	if settings.FlameRatio <= 0 || settings.FlameRatio >= 1 {
+		settings.FlameRatio = defaults.FlameRatio
 	}
 	if settings.SidebarRatio <= 0 || settings.SidebarRatio >= 1 {
 		settings.SidebarRatio = defaults.SidebarRatio
