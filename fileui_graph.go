@@ -60,6 +60,9 @@ type callGraph struct {
 
 	offset f32.Point // pan, in px
 	hover  int
+	// pointer is where the pointer is over the graph, if inside.
+	pointer f32.Point
+	inside  bool
 	press  bool
 	// drag is where a press started, and moved whether it has moved
 	// far enough to pan instead of click.
@@ -488,9 +491,9 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 			rescale()
 			g.offset = e.Position.Sub(origin).Sub(f32.Pt(pad, pad)).Sub(p.Mul(scale))
 		case pointer.Move:
-			g.hover = at()
+			g.hover, g.pointer, g.inside = at(), e.Position, true
 		case pointer.Leave:
-			g.hover = -1
+			g.hover, g.inside = -1, false
 		case pointer.Press:
 			g.press, g.moved, g.drag = true, false, e.Position
 		case pointer.Drag:
@@ -522,6 +525,19 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 	}
 	c := th.Colors
 
+	// The call under the pointer, when no function is.
+	hoverEdge := -1
+	if g.inside && g.hover < 0 {
+		best := float32(gtx.Dp(5))
+		for i, e := range g.layout.Edges {
+			for k := 1; k < len(e.Path); k++ {
+				if d := segmentDistance(g.pointer, at(e.Path[k-1]), at(e.Path[k])); d < best {
+					best, hoverEdge = d, i
+				}
+			}
+		}
+	}
+
 	// Edges, thicker for more samples, under the nodes.
 	for i, e := range g.layout.Edges {
 		if len(e.Path) < 2 {
@@ -531,7 +547,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		share := float32(prof.Edges[pprof.Edge{Caller: ge.From.ID, Callee: ge.To.ID}]) / float32(max(prof.Total, 1))
 		width := float32(gtx.Metric.Dp(1)) * (1 + 3*min(share*4, 1))
 		col := c.MutedText
-		if g.hover >= 0 && (ge.From == g.graph.Nodes[g.hover] || ge.To == g.graph.Nodes[g.hover]) {
+		if i == hoverEdge || g.hover >= 0 && (ge.From == g.graph.Nodes[g.hover] || ge.To == g.graph.Nodes[g.hover]) {
 			col = c.Accent
 		}
 		var path clip.Path
@@ -582,7 +598,97 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 			drawText(gtx, th, line, f32.Pt(center.X, top+float32(k)*lineHeight), size, col, weight)
 		}
 	}
+
+	// Details of what is under the pointer.
+	var tip []string
+	switch {
+	case g.hover >= 0:
+		tip = g.nodeDetails(prof, g.graph.Nodes[g.hover].ID)
+	case hoverEdge >= 0:
+		ge := g.graph.Edges[hoverEdge]
+		v := prof.Edges[pprof.Edge{Caller: ge.From.ID, Callee: ge.To.ID}]
+		tip = []string{ge.From.ID, "calls " + ge.To.ID, valueLabel(prof, v)}
+	}
+	if len(tip) > 0 {
+		drawTip(gtx, th, g.pointer, tip)
+	}
 	return clicked, clicked != ""
+}
+
+// graphTipCalls is how many callers and callees a function's details
+// list.
+const graphTipCalls = 4
+
+// nodeDetails describes a function for its tooltip: its name, its own
+// and cumulative samples and its hottest callers and callees.
+func (g *callGraph) nodeDetails(prof *pprof.Profile, name string) []string {
+	f := prof.Funcs[name]
+	lines := []string{name, "self " + valueLabel(prof, f.Flat), "total " + valueLabel(prof, f.Cum)}
+	list := func(title string, edges []pprof.Edge, other func(pprof.Edge) string) {
+		if len(edges) == 0 {
+			return
+		}
+		lines = append(lines, "", title)
+		for _, e := range edges[:min(len(edges), graphTipCalls)] {
+			lines = append(lines, "  "+other(e)+"  "+valueText(prof, prof.Edges[e]))
+		}
+		if len(edges) > graphTipCalls {
+			lines = append(lines, fmt.Sprintf("  and %d more", len(edges)-graphTipCalls))
+		}
+	}
+	list("Called by", g.in[name], func(e pprof.Edge) string { return e.Caller })
+	list("Calls", g.out[name], func(e pprof.Edge) string { return e.Callee })
+	return lines
+}
+
+// segmentDistance is how far p is from the segment a to b.
+func segmentDistance(p, a, b f32.Point) float32 {
+	d := b.Sub(a)
+	t := float32(0)
+	if l := d.X*d.X + d.Y*d.Y; l > 0 {
+		t = min(max(((p.X-a.X)*d.X+(p.Y-a.Y)*d.Y)/l, 0), 1)
+	}
+	q := a.Add(d.Mul(t)).Sub(p)
+	return float32(math.Hypot(float64(q.X), float64(q.Y)))
+}
+
+// drawTip draws lines in a popup beside the pointer at p, kept inside
+// the area; the first line is the title.
+func drawTip(gtx layout.Context, th *gui.Theme, p f32.Point, lines []string) {
+	gtx.Constraints.Min = image.Point{}
+	pad := gtx.Dp(8)
+	macro := op.Record(gtx.Ops)
+	height, width := 0, 0
+	for i, line := range lines {
+		label := th.Label(line, 0.9)
+		label.MaxLines = 1
+		if i == 0 {
+			label.Font.Weight = font.SemiBold
+		}
+		if line == "" {
+			height += gtx.Dp(4)
+			continue
+		}
+		trans := op.Offset(image.Pt(pad, pad+height)).Push(gtx.Ops)
+		dims := label.Layout(gtx)
+		trans.Pop()
+		height += dims.Size.Y
+		width = max(width, dims.Size.X)
+	}
+	content := macro.Stop()
+	size := image.Pt(width+2*pad, height+2*pad)
+	at := p.Round().Add(image.Pt(gtx.Dp(14), gtx.Dp(14)))
+	area := gtx.Constraints.Max
+	if at.X+size.X > area.X {
+		at.X = p.Round().X - gtx.Dp(14) - size.X
+	}
+	if at.Y+size.Y > area.Y {
+		at.Y = max(area.Y-size.Y, 0)
+	}
+	at.X = max(at.X, 0)
+	defer op.Offset(at).Push(gtx.Ops).Pop()
+	gui.Panel(gtx, th, size, gtx.Dp(6))
+	content.Add(gtx.Ops)
 }
 
 // nodeAt is the index of the node under p, in px from the content's
