@@ -46,8 +46,56 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 		refs.Add(inst.File, inst.Line, i)
 		code.Insts = append(code.Insts, inst)
 	}
+	wasmBranches(code.Insts)
 	code.Source = source.Load(fn.file.files, refs, code.File, opts.Context)
 	return code, nil
+}
+
+// wasmBranches points each br and br_if at the row it continues from,
+// so the view draws it as a jump. A branch names its target by how many
+// blocks out it is; a loop's label is its start and a block's or an
+// if's is its end. br_table points at its default target.
+func wasmBranches(insts []disasm.Inst) {
+	type label struct {
+		at       int   // the opener's row
+		loop     bool  // branches go back to at
+		branches []int // rows waiting for the end
+	}
+	// The function body is the outermost block; its end is the last row.
+	stack := []*label{{at: -1}}
+	for i := range insts {
+		op, arg, _ := strings.Cut(insts[i].Text, " ")
+		switch op {
+		case "block", "loop", "if", "try_table":
+			stack = append(stack, &label{at: i, loop: op == "loop"})
+		case "end":
+			if len(stack) > 1 || i == len(insts)-1 {
+				l := stack[len(stack)-1]
+				for _, b := range l.branches {
+					insts[b].RefOffset = i - b
+				}
+				l.branches = nil
+				if len(stack) > 1 {
+					stack = stack[:len(stack)-1]
+				}
+			}
+		case "br", "br_if", "br_table":
+			fields := strings.Fields(arg)
+			if len(fields) == 0 {
+				continue
+			}
+			depth, err := strconv.Atoi(fields[len(fields)-1])
+			if err != nil || depth >= len(stack) {
+				continue
+			}
+			l := stack[len(stack)-1-depth]
+			if l.loop {
+				insts[i].RefOffset = l.at - i
+			} else {
+				l.branches = append(l.branches, i)
+			}
+		}
+	}
 }
 
 // wasmCall names the callee of a call. objfile names it in Text from

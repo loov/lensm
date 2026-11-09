@@ -65,6 +65,34 @@ func TestLoadIndentsBlocks(t *testing.T) {
 	t.Fatal("no function has nested blocks")
 }
 
+// TestLoadLinksBranches checks that a branch out of a loop's body back
+// to the loop points at the loop.
+func TestLoadLinksBranches(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "example.wasm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	fn := disasm.FindFunc(file, "main.sumInts")
+	if fn == nil {
+		t.Fatal("no main.sumInts")
+	}
+	code, err := fn.Load(disasm.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, in := range code.Insts {
+		if in.Text != "br 1" {
+			continue
+		}
+		if target := code.Insts[i+in.RefOffset]; in.RefOffset >= 0 || target.Text != "loop" {
+			t.Errorf("br 1 at %d jumps %d rows to %q", i, in.RefOffset, target.Text)
+		}
+		return
+	}
+	t.Fatal("no br 1 in main.sumInts")
+}
+
 // TestLoadGoWasm builds testdata/testprog for wasip1 and checks that
 // names come through and calls resolve to other functions.
 func TestLoadGoWasm(t *testing.T) {
