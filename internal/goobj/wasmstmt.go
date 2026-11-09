@@ -468,8 +468,9 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 		insts[i].NativeText = text
 	}
 	// The values left at the end are the function's results.
-	if last := len(insts) - 1; last >= 0 && insts[last].NativeText == "" && len(ftype.Results) > 0 && len(stack) > 0 {
-		insts[last].NativeText = "return " + strings.Join(popN(min(len(ftype.Results), len(stack))), ", ")
+	if last := len(insts) - 1; last >= 0 && len(ftype.Results) > 0 && len(stack) > 0 {
+		ret := "return " + strings.Join(popN(min(len(ftype.Results), len(stack))), ", ")
+		insts[last].NativeText = strings.TrimSpace(insts[last].NativeText + " " + ret)
 	}
 }
 
