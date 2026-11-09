@@ -142,13 +142,9 @@ func (ui *FileUI) runMenuItem(gtx layout.Context, item int) {
 	case menuSource:
 		ui.toggleColumn(&ui.ShowSource)
 	case menuDiagnostics:
-		s := ui.Settings
-		s.HideDiagnostics = !s.HideDiagnostics
-		ui.applySettings(s)
+		ui.applySetting(func(s *AppSettings) { s.HideDiagnostics = !s.HideDiagnostics })
 	case menuSyncScroll:
-		s := ui.Settings
-		s.SyncScroll = !s.SyncScroll
-		ui.applySettings(s)
+		ui.applySetting(func(s *AppSettings) { s.SyncScroll = !s.SyncScroll })
 	case menuGoTo:
 		ui.QuickOpen.Show(gtx)
 	case menuFilter:
@@ -162,9 +158,9 @@ func (ui *FileUI) toggleColumn(b *widget.Bool) {
 	if !ui.ShowGoAsm.Value && !ui.ShowNativeAsm.Value && !ui.ShowSource.Value {
 		b.Value = true
 	}
-	s := ui.Settings
-	s.ShowGoAsm, s.ShowNativeAsm, s.ShowSource = ui.ShowGoAsm.Value, ui.ShowNativeAsm.Value, ui.ShowSource.Value
-	ui.applySettings(s)
+	ui.applySetting(func(s *AppSettings) {
+		s.ShowGoAsm, s.ShowNativeAsm, s.ShowSource = ui.ShowGoAsm.Value, ui.ShowNativeAsm.Value, ui.ShowSource.Value
+	})
 }
 
 // handleMenuBar runs the items chosen in the menu bar since the last

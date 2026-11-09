@@ -269,6 +269,20 @@ func (ui *FileUI) updateTextSize(gtx layout.Context) (int, bool) {
 	return value, true
 }
 
+// saveSetting saves the settings as change leaves them.
+func (ui *FileUI) saveSetting(change func(*AppSettings)) {
+	s := ui.Settings
+	change(&s)
+	ui.saveSettings(s)
+}
+
+// applySetting shows and saves the settings as change leaves them.
+func (ui *FileUI) applySetting(change func(*AppSettings)) {
+	s := ui.Settings
+	change(&s)
+	ui.applySettings(s)
+}
+
 func (ui *FileUI) saveSettings(settings AppSettings) {
 	ui.Settings = settings
 	ui.sessionDirty = true

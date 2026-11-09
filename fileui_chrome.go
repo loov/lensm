@@ -124,9 +124,7 @@ func (ui *FileUI) showSidebar(show bool) {
 	if ui.Settings.HideSidebar == !show {
 		return
 	}
-	settings := ui.Settings
-	settings.HideSidebar = !show
-	ui.saveSettings(settings)
+	ui.saveSetting(func(s *AppSettings) { s.HideSidebar = !show })
 }
 
 // focusFilter puts the caret at the end of the function filter, showing
@@ -620,9 +618,7 @@ func (ui *FileUI) layoutStatus(gtx layout.Context) layout.Dimensions {
 		left = append(left, ui.layoutProfileStatus)
 	}
 	if ui.SyncScroll.Update(gtx) {
-		s := ui.Settings
-		s.SyncScroll = ui.SyncScroll.Value
-		ui.applySettings(s)
+		ui.applySetting(func(s *AppSettings) { s.SyncScroll = ui.SyncScroll.Value })
 	}
 	right = append(right, gui.StatusToggle{Theme: th, Value: &ui.SyncScroll, Label: "Sync scroll"}.Layout)
 	dot, mcp := th.Colors.MutedText, "MCP off"

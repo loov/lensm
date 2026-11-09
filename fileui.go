@@ -740,10 +740,10 @@ func (ui *FileUI) handleColumnToggles(gtx layout.Context) {
 		changed = true
 	}
 	if changed {
-		s := ui.Settings
-		s.ShowGoAsm, s.ShowNativeAsm, s.ShowSource = ui.ShowGoAsm.Value, ui.ShowNativeAsm.Value, ui.ShowSource.Value
-		s.HideDiagnostics = !ui.ShowDiagnostics.Value
-		ui.saveSettings(s)
+		ui.saveSetting(func(s *AppSettings) {
+			s.ShowGoAsm, s.ShowNativeAsm, s.ShowSource = ui.ShowGoAsm.Value, ui.ShowNativeAsm.Value, ui.ShowSource.Value
+			s.HideDiagnostics = !ui.ShowDiagnostics.Value
+		})
 	}
 }
 
@@ -851,9 +851,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 		return ui.layoutMain(gtx, colors)
 	}, ui.layoutProfileGraph)
 	if moved {
-		settings := ui.Settings
-		settings.BelowRatio = ui.belowSplit.Ratio
-		ui.saveSettings(settings)
+		ui.saveSetting(func(s *AppSettings) { s.BelowRatio = ui.belowSplit.Ratio })
 	}
 	return dims
 }
@@ -969,9 +967,7 @@ func (ui *FileUI) layoutMain(gtx layout.Context, colors gui.UIColors) layout.Dim
 	}
 	dims, moved := ui.split.Layout(gtx, ui.Theme, 120, 240, ui.layoutPanel, content)
 	if moved {
-		settings := ui.Settings
-		settings.SidebarRatio = ui.split.Ratio
-		ui.saveSettings(settings)
+		ui.saveSetting(func(s *AppSettings) { s.SidebarRatio = ui.split.Ratio })
 	}
 	return dims
 }
@@ -984,9 +980,7 @@ func (ui *FileUI) withGraph(content layout.Widget) layout.Widget {
 		}
 		dims, moved := ui.graphSplit.Layout(gtx, ui.Theme, 240, 240, content, ui.layoutProfileGraph)
 		if moved {
-			settings := ui.Settings
-			settings.GraphRatio = ui.graphSplit.Ratio
-			ui.saveSettings(settings)
+			ui.saveSetting(func(s *AppSettings) { s.GraphRatio = ui.graphSplit.Ratio })
 		}
 		return dims
 	}

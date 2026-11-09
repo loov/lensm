@@ -31,10 +31,8 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 	for i, m := range disasm.Marks {
 		ui.MarkToggles[i].Value = shown&m != 0
 		if ui.MarkToggles[i].Update(gtx) {
-			s := ui.Settings
-			s.HiddenMarks ^= m
-			ui.applySettings(s)
-			shown = disasm.AllMarks &^ s.HiddenMarks
+			ui.applySetting(func(s *AppSettings) { s.HiddenMarks ^= m })
+			shown = disasm.AllMarks &^ ui.Settings.HiddenMarks
 		}
 	}
 
@@ -42,9 +40,7 @@ func (ui *FileUI) layoutMarksPanel(gtx layout.Context) layout.Dimensions {
 	for i, k := range disasm.NoteKinds {
 		ui.NoteToggles[i].Value = shownNotes&k != 0
 		if ui.NoteToggles[i].Update(gtx) {
-			s := ui.Settings
-			s.HiddenNotes ^= k
-			ui.applySettings(s)
+			ui.applySetting(func(s *AppSettings) { s.HiddenNotes ^= k })
 		}
 	}
 	var noteCounts [len(noteTitles)]int
