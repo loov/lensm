@@ -5,7 +5,6 @@ import (
 	"hash/fnv"
 	"image"
 	"image/color"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -50,14 +49,8 @@ type flameGraph struct {
 	query   string
 	queryOf *pprof.TreeNode
 
-	hover   *pprof.TreeNode
-	pointer f32.Point
-	inside  bool
-	press   bool
-	// drag is where the pointer was when last dragged, and moved
-	// whether the press moved far enough to pan instead of click.
-	drag  f32.Point
-	moved bool
+	hover *pprof.TreeNode
+	pan   gui.PanZoom
 	// lastNode and lastClick are the frame and time of the last click,
 	// to tell a double click.
 	lastNode  *pprof.TreeNode
@@ -247,68 +240,46 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 			}
 		}
 	}
+	f.pan.Add(gtx.Ops)
 	for {
-		ev, ok := gtx.Event(pointer.Filter{
-			Target:  f,
-			Kinds:   pointer.Move | pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Leave | pointer.Scroll,
-			ScrollX: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
-			ScrollY: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
-		})
+		e, ok := f.pan.Update(gtx)
 		if !ok {
 			break
 		}
-		e, ok := ev.(pointer.Event)
-		if !ok {
-			continue
-		}
+		v0, v1 := f.view()
+		w := v1 - v0
 		switch e.Kind {
-		case pointer.Scroll:
-			v0, v1 := f.view()
-			w := v1 - v0
-			if e.Modifiers.Contain(key.ModShortcut) {
-				// Zoom about the pointer.
-				at := float64(e.Position.X) / float64(size.X)
-				nw := w * math.Exp(float64(e.Scroll.Y)/200)
-				f.setView(v0+at*w-at*min(max(nw, 1e-4), 1), nw)
-			} else {
-				f.setView(v0+float64(e.Scroll.X)/float64(size.X)*w, w)
-				f.offset += dir * e.Scroll.Y
-			}
+		case gui.Zoom:
+			// Keep the point under the pointer in place.
+			at := float64(e.Position.X) / float64(size.X)
+			nw := w / float64(e.Zoom)
+			f.setView(v0+at*w-at*min(max(nw, 1e-4), 1), nw)
 			boxes, _ = f.layoutFrames(gtx, size)
-		case pointer.Move:
-			f.hover, f.pointer, f.inside = at(e.Position), e.Position, true
-		case pointer.Leave:
-			f.hover, f.inside = nil, false
-		case pointer.Press:
-			f.press, f.moved, f.drag = true, false, e.Position
-		case pointer.Drag:
-			// Drag to pan, once past a click's slop.
-			if d := e.Position.Sub(f.drag); f.moved || d.X*d.X+d.Y*d.Y > float32(gtx.Dp(4)*gtx.Dp(4)) {
-				f.moved = true
-				v0, v1 := f.view()
-				f.setView(v0-float64(d.X)/float64(size.X)*(v1-v0), v1-v0)
-				f.offset -= dir * d.Y
-				f.drag = e.Position
-				boxes, _ = f.layoutFrames(gtx, size)
-			}
-		case pointer.Release:
+		case gui.Pan:
+			f.setView(v0-float64(e.Pan.X)/float64(size.X)*w, w)
+			f.offset -= dir * e.Pan.Y
+			boxes, _ = f.layoutFrames(gtx, size)
+		case gui.Hover:
+			f.hover = at(e.Position)
+		case gui.Leave:
+			f.hover = nil
+		case gui.Click:
 			// A click zooms to the frame, which keeps its row, so it
 			// stays under the pointer. A double click or one with
 			// Command or Ctrl held also opens its function.
-			if n := at(e.Position); f.press && !f.moved && n != nil {
-				double := n == f.lastNode && e.Time-f.lastClick < 400*time.Millisecond
-				f.lastNode, f.lastClick = n, e.Time
-				f.zoomTo(n)
-				// Escape and Home then zoom out.
-				gtx.Execute(key.FocusCmd{Tag: f})
-				if n.Parent != nil && (double || e.Modifiers.Contain(key.ModShortcut)) {
-					clicked = n.Name
-					f.lastNode = nil
-				}
+			n := at(e.Position)
+			if n == nil {
+				break
 			}
-			f.press = false
-		case pointer.Cancel:
-			f.press = false
+			double := n == f.lastNode && e.Time-f.lastClick < 400*time.Millisecond
+			f.lastNode, f.lastClick = n, e.Time
+			f.zoomTo(n)
+			// Escape and Home then zoom out.
+			gtx.Execute(key.FocusCmd{Tag: f})
+			if n.Parent != nil && (double || e.Modifiers.Contain(key.ModShortcut)) {
+				clicked = n.Name
+				f.lastNode = nil
+			}
 		}
 	}
 	if f.reveal {
@@ -330,15 +301,8 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 		n := b.node
 		col := flameColor(n.Name)
 		if prof.Diff {
-			// A difference is red where it grew and green where it shrank.
-			col = c.Marks.Alloc
+			col = heatColor(c, true, n.Delta)
 			share := float32(abs(n.Delta)) / float32(max(n.Value, 1))
-			switch {
-			case n.Delta > 0:
-				col = c.Marks.BoundsCheck
-			case n.Delta < 0:
-				col = c.Marks.Good
-			}
 			col.A = uint8(0x20 + 0xa0*min(share, 1))
 		}
 		radius := gtx.Dp(2)
@@ -367,7 +331,7 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 		}
 	}
 
-	if f.hover != nil && f.inside {
+	if f.hover != nil && f.pan.Inside {
 		n := f.hover
 		tip := []string{n.Name, prof.Label(n.Value)}
 		if prof.Diff {
@@ -376,7 +340,7 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 		if n.Parent != nil && n.Parent.Value > 0 {
 			tip = append(tip, pprof.PercentText(100*float64(n.Value)/float64(n.Parent.Value))+" of "+n.Parent.Name)
 		}
-		drawTip(gtx, th, f.pointer, tip)
+		gui.PointerTip(gtx, th, f.pan.Pointer, tip)
 	}
 	return clicked, clicked != ""
 }

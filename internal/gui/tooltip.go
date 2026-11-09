@@ -9,6 +9,8 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
+	"gioui.org/f32"
+	"gioui.org/font"
 )
 
 // tooltipDelay is how long the pointer rests on a widget before its
@@ -81,4 +83,43 @@ func (t *Tooltip) Layout(gtx layout.Context, th *Theme, text string, w layout.Wi
 	layout.Inset{Top: 4, Bottom: 4, Left: 8, Right: 8}.Layout(gtx, label.Layout)
 	op.Defer(gtx.Ops, macro.Stop())
 	return dims
+}
+
+// PointerTip draws lines in a popup beside the pointer at p, kept inside
+// the area; the first line is the title.
+func PointerTip(gtx layout.Context, th *Theme, p f32.Point, lines []string) {
+	gtx.Constraints.Min = image.Point{}
+	pad := gtx.Dp(8)
+	macro := op.Record(gtx.Ops)
+	height, width := 0, 0
+	for i, line := range lines {
+		label := th.Label(line, 0.9)
+		label.MaxLines = 1
+		if i == 0 {
+			label.Font.Weight = font.SemiBold
+		}
+		if line == "" {
+			height += gtx.Dp(4)
+			continue
+		}
+		trans := op.Offset(image.Pt(pad, pad+height)).Push(gtx.Ops)
+		dims := label.Layout(gtx)
+		trans.Pop()
+		height += dims.Size.Y
+		width = max(width, dims.Size.X)
+	}
+	content := macro.Stop()
+	size := image.Pt(width+2*pad, height+2*pad)
+	at := p.Round().Add(image.Pt(gtx.Dp(14), gtx.Dp(14)))
+	area := gtx.Constraints.Max
+	if at.X+size.X > area.X {
+		at.X = p.Round().X - gtx.Dp(14) - size.X
+	}
+	if at.Y+size.Y > area.Y {
+		at.Y = max(area.Y-size.Y, 0)
+	}
+	at.X = max(at.X, 0)
+	defer op.Offset(at).Push(gtx.Ops).Pop()
+	Panel(gtx, th, size, gtx.Dp(6))
+	content.Add(gtx.Ops)
 }

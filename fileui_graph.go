@@ -10,8 +10,6 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/io/event"
-	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -59,14 +57,7 @@ type callGraph struct {
 
 	offset f32.Point // pan, in px
 	hover  int
-	// pointer is where the pointer is over the graph, if inside.
-	pointer f32.Point
-	inside  bool
-	press   bool
-	// drag is where a press started, and moved whether it has moved
-	// far enough to pan instead of click.
-	drag  f32.Point
-	moved bool
+	pan    gui.PanZoom
 	// zoom multiplies the fitted scale; 0 is 1.
 	zoom float32
 
@@ -204,6 +195,18 @@ const (
 	fullMaxNodes  = 80
 	fullNodeShare = 0.005
 )
+
+// heatColor is the colour of a function with v samples: the profile's
+// heat, or in a difference red where it grew and green where it shrank.
+func heatColor(c gui.UIColors, diff bool, v int64) color.NRGBA {
+	switch {
+	case diff && v > 0:
+		return c.Marks.BoundsCheck
+	case diff && v < 0:
+		return c.Marks.Good
+	}
+	return c.Marks.Alloc
+}
 
 func abs(v int64) int64 {
 	if v < 0 {
@@ -373,55 +376,30 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 	}
 
 	clicked := ""
-	event.Op(gtx.Ops, g)
+	g.pan.Add(gtx.Ops)
 	for {
-		ev, ok := gtx.Event(pointer.Filter{
-			Target:  g,
-			Kinds:   pointer.Move | pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Leave | pointer.Scroll,
-			ScrollX: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
-			ScrollY: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
-		})
+		e, ok := g.pan.Update(gtx)
 		if !ok {
 			break
 		}
-		e, ok := ev.(pointer.Event)
-		if !ok {
-			continue
-		}
 		at := func() int { return g.nodeAt(e.Position.Sub(origin).Sub(g.offset), scale, pad) }
 		switch e.Kind {
-		case pointer.Scroll:
-			if !e.Modifiers.Contain(key.ModShortcut) {
-				g.offset = g.offset.Sub(e.Scroll)
-				break
-			}
-			// Zoom about the pointer.
+		case gui.Pan:
+			g.offset = g.offset.Add(e.Pan)
+		case gui.Zoom:
+			// Keep the point under the pointer in place.
 			p := e.Position.Sub(origin).Sub(g.offset).Sub(f32.Pt(pad, pad)).Mul(1 / scale)
-			g.zoom = min(max(cmp.Or(g.zoom, 1)*float32(math.Exp(float64(-e.Scroll.Y)/200)), 0.2), 4)
+			g.zoom = min(max(cmp.Or(g.zoom, 1)*e.Zoom, 0.2), 4)
 			rescale()
 			g.offset = e.Position.Sub(origin).Sub(f32.Pt(pad, pad)).Sub(p.Mul(scale))
-		case pointer.Move:
-			g.hover, g.pointer, g.inside = at(), e.Position, true
-		case pointer.Leave:
-			g.hover, g.inside = -1, false
-		case pointer.Press:
-			g.press, g.moved, g.drag = true, false, e.Position
-		case pointer.Drag:
-			// Drag to pan, once the pointer has moved past a click's slop.
-			if d := e.Position.Sub(g.drag); g.moved || d.X*d.X+d.Y*d.Y > float32(gtx.Dp(4)*gtx.Dp(4)) {
-				g.moved = true
-				g.offset = g.offset.Add(d)
-				g.drag = e.Position
+		case gui.Hover:
+			g.hover = at()
+		case gui.Leave:
+			g.hover = -1
+		case gui.Click:
+			if i := at(); i >= 0 {
+				clicked = g.graph.Nodes[i].ID
 			}
-		case pointer.Release:
-			if g.press && !g.moved {
-				if i := at(); i >= 0 {
-					clicked = g.graph.Nodes[i].ID
-				}
-			}
-			g.press = false
-		case pointer.Cancel:
-			g.press = false
 		}
 	}
 	g.offset.X = min(max(g.offset.X, min(float32(size.X)-content.X-origin.X, 0)), 0)
@@ -437,11 +415,11 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 
 	// The call under the pointer, when no function is.
 	hoverEdge := -1
-	if g.inside && g.hover < 0 {
+	if g.pan.Inside && g.hover < 0 {
 		best := float32(gtx.Dp(5))
 		for i, e := range g.layout.Edges {
 			for k := 1; k < len(e.Path); k++ {
-				if d := segmentDistance(g.pointer, at(e.Path[k-1]), at(e.Path[k])); d < best {
+				if d := segmentDistance(g.pan.Pointer, at(e.Path[k-1]), at(e.Path[k])); d < best {
 					best, hoverEdge = d, i
 				}
 			}
@@ -485,13 +463,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		radius := gtx.Metric.Dp(5)
 		paint.FillShape(gtx.Ops, c.Background, clip.UniformRRect(r, radius).Op(gtx.Ops))
 		// A difference is red where it grew and green where it shrank.
-		heat := c.Marks.Alloc
-		switch {
-		case prof.Diff && cum > 0:
-			heat = c.Marks.BoundsCheck
-		case prof.Diff && cum < 0:
-			heat = c.Marks.Good
-		}
+		heat := heatColor(c, prof.Diff, cum)
 		heat.A = uint8(0x14 + 0x80*min(share*2, 1))
 		paint.FillShape(gtx.Ops, heat, clip.UniformRRect(r, radius).Op(gtx.Ops))
 		border, bw := c.Divider, float32(gtx.Metric.Dp(1))
@@ -531,7 +503,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		tip = []string{ge.From.ID, "calls " + ge.To.ID, prof.Label(v)}
 	}
 	if len(tip) > 0 {
-		drawTip(gtx, th, g.pointer, tip)
+		gui.PointerTip(gtx, th, g.pan.Pointer, tip)
 	}
 	return clicked, clicked != ""
 }
@@ -571,45 +543,6 @@ func segmentDistance(p, a, b f32.Point) float32 {
 	}
 	q := a.Add(d.Mul(t)).Sub(p)
 	return float32(math.Hypot(float64(q.X), float64(q.Y)))
-}
-
-// drawTip draws lines in a popup beside the pointer at p, kept inside
-// the area; the first line is the title.
-func drawTip(gtx layout.Context, th *gui.Theme, p f32.Point, lines []string) {
-	gtx.Constraints.Min = image.Point{}
-	pad := gtx.Dp(8)
-	macro := op.Record(gtx.Ops)
-	height, width := 0, 0
-	for i, line := range lines {
-		label := th.Label(line, 0.9)
-		label.MaxLines = 1
-		if i == 0 {
-			label.Font.Weight = font.SemiBold
-		}
-		if line == "" {
-			height += gtx.Dp(4)
-			continue
-		}
-		trans := op.Offset(image.Pt(pad, pad+height)).Push(gtx.Ops)
-		dims := label.Layout(gtx)
-		trans.Pop()
-		height += dims.Size.Y
-		width = max(width, dims.Size.X)
-	}
-	content := macro.Stop()
-	size := image.Pt(width+2*pad, height+2*pad)
-	at := p.Round().Add(image.Pt(gtx.Dp(14), gtx.Dp(14)))
-	area := gtx.Constraints.Max
-	if at.X+size.X > area.X {
-		at.X = p.Round().X - gtx.Dp(14) - size.X
-	}
-	if at.Y+size.Y > area.Y {
-		at.Y = max(area.Y-size.Y, 0)
-	}
-	at.X = max(at.X, 0)
-	defer op.Offset(at).Push(gtx.Ops).Pop()
-	gui.Panel(gtx, th, size, gtx.Dp(6))
-	content.Add(gtx.Ops)
 }
 
 // nodeAt is the index of the node under p, in px from the content's
