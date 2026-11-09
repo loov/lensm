@@ -77,6 +77,7 @@ func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, e
 			goArgs = goArgNames(code.File, fn.Name())
 		}
 		wasmStatements(info, int(fn.fn.Addr), code.Insts, goArgs)
+		code.Statements = true
 	}
 	code.Source = source.Load(fn.file.files, refs, code.File, opts.Context)
 	return code, nil

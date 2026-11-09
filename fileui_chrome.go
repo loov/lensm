@@ -123,7 +123,7 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context) layout.Dimensions {
 func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
 	// A wasm module has WAT and the statements it adds up to instead.
 	asmLabel, nativeLabel := "Go asm", "Native"
-	if code := ui.activeCode(); code != nil && code.Code != nil && code.Code.Arch == "wasm" {
+	if code := ui.activeCode(); code != nil && code.Code != nil && code.Code.Statements {
 		asmLabel, nativeLabel = "WAT", "Statements"
 	}
 	th := ui.Theme

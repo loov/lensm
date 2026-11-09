@@ -145,8 +145,7 @@ func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
 	for i := range code.Insts {
 		ix := &code.Insts[i]
 		hl.asm[i] = syntax.HighlightAsm(ix.Text, ix.Call, palette)
-		if code.Arch == "wasm" {
-			// A wasm row's native text is the statement it completes.
+		if code.Statements {
 			hl.nativeText[i] = ix.NativeText
 			hl.native[i] = syntax.HighlightGo(ix.NativeText, palette)
 			continue
@@ -163,7 +162,7 @@ func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
 	for i, ix := range code.Insts {
 		hl.widest[0].consider(ix.Text, ix.Indent)
 		indent := 0
-		if code.Arch == "wasm" {
+		if code.Statements {
 			indent = ix.Indent
 		}
 		hl.widest[1].consider(hl.nativeText[i], indent)

@@ -8,6 +8,11 @@ type Code struct {
 	File string
 	// Arch is the GOARCH of the disassembled binary.
 	Arch string
+	// Statements marks the instructions' NativeText as source-like
+	// statements instead of native assembly, as wasm has: each nests
+	// by Indent as Text does, and a row that only feeds the next has
+	// none.
+	Statements bool
 
 	// Insts is the slice of a all instructions in the code.
 	Insts []Inst
@@ -28,7 +33,8 @@ type Inst struct {
 	PC uint64
 	// Text is the textual representation of this instruction.
 	Text string
-	// NativeText is the native assembler syntax for this instruction.
+	// NativeText is the native assembler syntax for this instruction,
+	// or with Code.Statements the statement it completes.
 	NativeText string
 	// Mnemonic is the canonical decoder mnemonic (e.g. "LD1" where Text spells
 	// it "VLD1"), used for reference lookups. Empty for undecodable bytes.
