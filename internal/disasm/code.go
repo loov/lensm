@@ -43,8 +43,15 @@ type Inst struct {
 	RefPC uint64
 	// RefOffset is a reference to a relative jump.
 	RefOffset int
-	// RefStack is the depth that the jump line should be drawn at.
+	// RefStack is the column, counted from the code outwards, that the
+	// jump line, or a far jump's outgoing stub, is drawn in.
 	RefStack int
+	// RefFar marks a jump too long to draw whole. It gets a short stub
+	// here and another at its target, in the target's InStack column.
+	RefFar bool
+	// InStack is the column of the stub that far jumps to this
+	// instruction arrive through, 0 when none do.
+	InStack int
 
 	// Call is a named target that should be present in Funcs.
 	// This is used to make the instruction clickable and follow to the

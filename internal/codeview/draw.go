@@ -191,43 +191,86 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 	}
 
 	// Jump lines span rows, so any whose span crosses the view is drawn.
-	for i, ix := range ui.Code.Insts {
-		if ix.RefOffset == 0 {
-			continue
-		}
-		from, to := min(i, i+ix.RefOffset), max(i, i+ix.RefOffset)
-		if (to+1)*lineHeight+int(ui.asm.Offset) < 0 || from*lineHeight+int(ui.asm.Offset) > viewHeight {
-			continue
-		}
-		lineWidth := gtx.Metric.Dp(1)
-		align := float32(lineWidth%2) / 2
-		stack := op.Affine(f32.Affine2D{}.Offset(
-			f32.Pt(jump.Max+align, float32(i*lineHeight)+align+ui.asm.Offset))).Push(gtx.Ops)
-
-		var path clip.Path
-		path.Begin(gtx.Ops)
-		path.MoveTo(f32.Pt(float32(pad/2), float32(lineHeight*2/3)))
-		path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight*2/3)))
-		path.LineTo(f32.Pt(float32(-jumpStep*ix.RefStack), float32(lineHeight/3+ix.RefOffset*lineHeight)))
-		path.LineTo(f32.Pt(float32(-jumpStep/2), float32(lineHeight/3+ix.RefOffset*lineHeight)))
-		// draw arrow
+	inView := func(from, to int) bool {
+		return (to+1)*lineHeight+int(ui.asm.Offset) >= 0 && from*lineHeight+int(ui.asm.Offset) <= viewHeight
+	}
+	lineWidth := gtx.Metric.Dp(1)
+	align := float32(lineWidth%2) / 2
+	third := float32(lineHeight) / 3
+	// arrive draws the arrow into the target row, at y, from column x.
+	arrive := func(path *clip.Path, x, y float32) {
+		path.LineTo(f32.Pt(x, y))
+		path.LineTo(f32.Pt(float32(-jumpStep/2), y))
 		path.Line(f32.Pt(0, float32(lineHeight/4)))
 		path.Line(f32.Pt(float32(lineHeight/3), float32(-lineHeight/4)))
 		path.Line(f32.Pt(float32(-lineHeight/3), float32(-lineHeight/4)))
 		path.Line(f32.Pt(0, float32(lineHeight/4)))
+	}
+	for i, ix := range ui.Code.Insts {
+		if ix.RefOffset == 0 {
+			continue
+		}
+		target := i + ix.RefOffset
+		from, to := min(i, target), max(i, target)
+		if ix.RefFar {
+			from, to = i, i
+		}
+		showLeave := inView(from, to)
+		showArrive := ix.RefFar && inView(target, target)
+		if !showLeave && !showArrive {
+			continue
+		}
 
 		width := float32(lineWidth)
 		alpha := float32(0.7)
-		if highlightAsmIndex >= 0 && (highlightAsmIndex == i || highlightAsmIndex == i+ix.RefOffset) {
+		if highlightAsmIndex >= 0 && (highlightAsmIndex == i || highlightAsmIndex == target) {
 			width *= 3
 			alpha = 1
-		} else if disasm.LineRangesContain(highlightRanges, i, i+ix.RefOffset) {
+		} else if disasm.LineRangesContain(highlightRanges, i, target) {
 			width *= 3
 		}
-		jumpColor := hsla(float32(math.Mod(float64(ix.PC)*math.Phi, 1)), 0.8, 0.4, alpha)
-		paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: width}.Op())
+		// Jumps to one target share its color, so the lines that join
+		// and the two stubs of a far jump match.
+		jumpColor := hsla(float32(math.Mod(float64(ui.Code.Insts[target].PC)*math.Phi, 1)), 0.8, 0.4, alpha)
+		stroke := func(row int, draw func(path *clip.Path)) {
+			stack := op.Affine(f32.Affine2D{}.Offset(
+				f32.Pt(jump.Max+align, float32(row*lineHeight)+align+ui.asm.Offset))).Push(gtx.Ops)
+			var path clip.Path
+			path.Begin(gtx.Ops)
+			draw(&path)
+			paint.FillShape(gtx.Ops, jumpColor, clip.Stroke{Path: path.End(), Width: width}.Op())
+			stack.Pop()
+		}
 
-		stack.Pop()
+		x := float32(-jumpStep * ix.RefStack)
+		dir := float32(1)
+		if ix.RefOffset < 0 {
+			dir = -1
+		}
+		if showLeave {
+			stroke(i, func(path *clip.Path) {
+				path.MoveTo(f32.Pt(float32(pad/2), 2*third))
+				path.LineTo(f32.Pt(x, 2*third))
+				if !ix.RefFar {
+					arrive(path, x, third+float32(ix.RefOffset*lineHeight))
+					return
+				}
+				// The stub heads toward the target and ends in a
+				// chevron.
+				end := 2*third + dir*2*third
+				path.LineTo(f32.Pt(x, end))
+				path.MoveTo(f32.Pt(x-third/2, end-dir*third/2))
+				path.LineTo(f32.Pt(x, end))
+				path.LineTo(f32.Pt(x+third/2, end-dir*third/2))
+			})
+		}
+		if showArrive {
+			in := float32(-jumpStep * ui.Code.Insts[target].InStack)
+			stroke(target, func(path *clip.Path) {
+				path.MoveTo(f32.Pt(in, third-dir*2*third))
+				arrive(path, in, third)
+			})
+		}
 	}
 	asmClip.Pop()
 }

@@ -160,17 +160,41 @@ func markBoundsChecks(code *disasm.Code) {
 	}
 }
 
+// farJump is the length in rows above which a jump is drawn as two
+// stubs. A longer line rarely shows both its ends, and each one takes
+// a column for its whole length: one function had 342 columns.
+const farJump = 40
+
 // layoutJumps sets each jump's RefOffset and gives it a column, so jumps
-// whose spans overlap get separate lines. Jumps that start earlier, and
-// the longer one on a tie, take the outer columns.
+// whose spans overlap get separate lines. Near jumps to one target share
+// a column and join into one arrow. Far jumps get a stub at each end,
+// and the far jumps to one target share the stub there.
 func layoutJumps(code *disasm.Code, pcToIndex map[uint64]int) {
-	type jump struct {
-		ix       *disasm.Inst
-		min, max uint64
+	// A span covers rows in thirds: a jump leaves its row two thirds
+	// down and arrives one third down.
+	type span struct {
+		min, max int
+		insts    []*disasm.Inst
+		in       bool // the incoming stub of far jumps
 	}
-	var jumps []jump
+	var spans, stubs []*span
+	near := map[int]*span{}
+	in := map[int]*span{}
+	grow := func(spans map[int]*span, target, lo, hi int, ix *disasm.Inst, isIn bool) *span {
+		s, ok := spans[target]
+		if !ok {
+			s = &span{min: lo, max: hi, in: isIn}
+			spans[target] = s
+		}
+		s.min, s.max = min(s.min, lo), max(s.max, hi)
+		if ix != nil {
+			s.insts = append(s.insts, ix)
+		}
+		return s
+	}
 	for i := range code.Insts {
 		ix := &code.Insts[i]
+		ix.RefFar = false
 		if ix.RefPC == 0 {
 			continue
 		}
@@ -179,33 +203,88 @@ func layoutJumps(code *disasm.Code, pcToIndex map[uint64]int) {
 			continue
 		}
 		ix.RefOffset = target - i
-		jumps = append(jumps, jump{ix, min(ix.PC, ix.RefPC), max(ix.PC, ix.RefPC)})
-	}
-	slices.SortFunc(jumps, func(a, b jump) int {
-		return cmp.Or(cmp.Compare(a.min, b.min), cmp.Compare(b.max, a.max))
-	})
-
-	// columns holds the end of the jump in each column, 0 when free.
-	var columns []uint64
-	for _, j := range jumps {
-		for k, end := range columns {
-			if end <= j.min {
-				columns[k] = 0
-			}
+		from, to := 3*i+2, 3*target+1
+		if abs(ix.RefOffset) <= farJump {
+			grow(near, target, min(from, to), max(from, to), ix, false)
+			continue
 		}
-		k := slices.Index(columns, 0)
+		ix.RefFar = true
+		if ix.RefOffset > 0 {
+			stubs = append(stubs, &span{min: from, max: from + 2, insts: []*disasm.Inst{ix}})
+			grow(in, target, to-2, to, &code.Insts[target], true)
+		} else {
+			stubs = append(stubs, &span{min: from - 2, max: from, insts: []*disasm.Inst{ix}})
+			grow(in, target, to, to+2, &code.Insts[target], true)
+		}
+	}
+	for _, s := range near {
+		spans = append(spans, s)
+	}
+	for _, s := range in {
+		stubs = append(stubs, s)
+	}
+	byStart := func(a, b *span) int {
+		return cmp.Or(cmp.Compare(a.min, b.min), cmp.Compare(b.max, a.max))
+	}
+	slices.SortFunc(spans, byStart)
+	slices.SortFunc(stubs, byStart)
+
+	// Taking spans by their start and the first free column gives the
+	// fewest columns. Any order of the columns works after that, so the
+	// ones with the shortest spans go next to the code.
+	type column struct {
+		end, longest int
+		spans        []*span
+	}
+	var columns []*column
+	for _, s := range spans {
+		k := slices.IndexFunc(columns, func(c *column) bool { return c.end < s.min })
 		if k < 0 {
 			k = len(columns)
-			code.MaxJump = k
-			columns = append(columns, 0)
+			columns = append(columns, &column{})
 		}
-		columns[k] = j.max
-		j.ix.RefStack = k
+		c := columns[k]
+		c.end = s.max
+		c.longest = max(c.longest, s.max-s.min)
+		c.spans = append(c.spans, s)
 	}
-	// Number the columns from the code outwards.
+	slices.SortStableFunc(columns, func(a, b *column) int { return cmp.Compare(a.longest, b.longest) })
+
+	// Stubs go in the innermost column free at their rows, so their
+	// line out of the code stays short. One that fits nowhere gets a
+	// new column next to the code.
+	for _, s := range stubs {
+		k := slices.IndexFunc(columns, func(c *column) bool {
+			return !slices.ContainsFunc(c.spans, func(o *span) bool { return o.min <= s.max && s.min <= o.max })
+		})
+		if k < 0 {
+			k = 0
+			columns = slices.Insert(columns, 0, &column{})
+		}
+		columns[k].spans = append(columns[k].spans, s)
+	}
+
 	for i := range code.Insts {
-		ix := &code.Insts[i]
-		ix.RefStack = code.MaxJump - ix.RefStack + 1
+		code.Insts[i].RefStack, code.Insts[i].InStack = 0, 0
 	}
-	code.MaxJump++
+	for k, c := range columns {
+		for _, s := range c.spans {
+			for _, ix := range s.insts {
+				if s.in {
+					ix.InStack = k + 1
+				} else {
+					ix.RefStack = k + 1
+				}
+			}
+		}
+	}
+	// Without jumps the code keeps the gap of one column.
+	code.MaxJump = max(len(columns), 1)
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
