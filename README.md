@@ -111,7 +111,8 @@ Keys:
   the runtime so its time counts in the code calling it, and pick the
   least share a function needs to be drawn. The second button on the
   right edge draws a flame graph of the same samples instead, in a
-  resizable pane across the bottom of the window, callers on top; click a frame to zoom to it and open its function, and a
+  resizable pane across the bottom of the window, or right of the
+  code if Settings says so, callers on top; click a frame to zoom to it and open its function, and a
   frame above to zoom out. Hold Command or Ctrl and scroll to zoom
   about the pointer, and drag or scroll to pan.
   Compare Profile With… in

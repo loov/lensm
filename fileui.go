@@ -122,6 +122,7 @@ type FileUI struct {
 	SettingsNav       gui.NavList
 	ThemeSelect       gui.Select
 	SyntaxSelect      gui.Select
+	FlameSelect       gui.Select
 	SettingsOK        widget.Clickable
 	SettingsCancel    widget.Clickable
 	Comment           codeview.CommentEditor
@@ -841,7 +842,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 	if ui.GraphFull {
 		return ui.layoutProfileGraph(gtx)
 	}
-	if !ui.GraphTools.Flame {
+	if !ui.flameBelow() {
 		return ui.layoutMain(gtx, colors)
 	}
 	// The flame graph is wide rather than tall, so it goes below the
@@ -859,6 +860,12 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 	return ui.flameSplit.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return ui.layoutMain(gtx, colors)
 	}, ui.layoutProfileGraph, ui.rowHandle)
+}
+
+// flameBelow reports whether the pane is the flame graph and goes below
+// the code rather than right of it.
+func (ui *FileUI) flameBelow() bool {
+	return ui.GraphTools.Flame && !ui.Settings.FlameRight
 }
 
 // layoutMain draws the sidebar and the code, with the call graph, when
@@ -1002,7 +1009,7 @@ func (ui *FileUI) rowHandle(gtx layout.Context) layout.Dimensions {
 // withGraph puts the profile graph, when shown, right of content.
 func (ui *FileUI) withGraph(content layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil || ui.GraphTools.Flame {
+		if !ui.ShowGraph || ui.Profile == nil || ui.File == nil || ui.flameBelow() {
 			return content(gtx)
 		}
 		total := float32(gtx.Constraints.Max.X)

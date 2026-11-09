@@ -37,6 +37,7 @@ var (
 	renderGraphFind   = flag.String("render.graphfind", "", "search the profile graph for this")
 	renderHideRuntime = flag.Bool("render.hideruntime", false, "hide the runtime in the profile graph")
 	renderFlame       = flag.Bool("render.flame", false, "draw the profile as a flame graph")
+	renderFlameRight  = flag.Bool("render.flameright", false, "put the flame graph right of the code")
 	renderProfile     = flag.String("render.profile", "", "pprof profile to show")
 	renderBaseProfile = flag.String("render.baseprofile", "", "pprof profile to compare the profile with")
 	renderPath        = flag.String("render.path", "", "binary or package directory to open")
@@ -109,6 +110,7 @@ func TestRender(t *testing.T) {
 	ui.GraphTools.Find.SetText(*renderGraphFind)
 	ui.GraphTools.HideRuntime.Value = *renderHideRuntime
 	ui.GraphTools.Flame = *renderFlame
+	ui.Settings.FlameRight = *renderFlameRight
 	if *renderCompare != "" {
 		other, err := loadFile(*renderCompare)
 		if err != nil {

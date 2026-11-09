@@ -104,6 +104,13 @@ func (ui *FileUI) appearancePage() []layout.Widget {
 		gui.FormRow(th, "Syntax colors", func(gtx layout.Context) layout.Dimensions {
 			return ui.SyntaxSelect.Layout(gtx, th, syntaxLabels, slices.Index(syntax.Styles, ui.Settings.SyntaxStyle))
 		}),
+		gui.FormRow(th, "Flame graph", func(gtx layout.Context) layout.Dimensions {
+			place := 0
+			if ui.Settings.FlameRight {
+				place = 1
+			}
+			return ui.FlameSelect.Layout(gtx, th, []string{"Below the code", "Right of the code"}, place)
+		}),
 		gui.FormRow(th, "Text size", func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -168,6 +175,9 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 	if i, ok := ui.SyntaxSelect.Update(gtx); ok {
 		s.SyntaxStyle, changed = syntax.Styles[i], true
 	}
+	if i, ok := ui.FlameSelect.Update(gtx); ok {
+		s.FlameRight, changed = i == 1, true
+	}
 	for ui.ShowAsmHelp.Update(gtx) {
 		s.ShowAsmHelp, changed = ui.ShowAsmHelp.Value, true
 	}
@@ -202,7 +212,7 @@ func (ui *FileUI) handleSettingsActions(gtx layout.Context) {
 		if !ok {
 			break
 		}
-		if ev, ok := ev.(key.Event); ok && ev.State == key.Press && !ui.ThemeSelect.Menu.Open && !ui.SyntaxSelect.Menu.Open {
+		if ev, ok := ev.(key.Event); ok && ev.State == key.Press && !ui.ThemeSelect.Menu.Open && !ui.SyntaxSelect.Menu.Open && !ui.FlameSelect.Menu.Open {
 			ui.closeSettings(false)
 		}
 	}

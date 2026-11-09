@@ -40,6 +40,8 @@ type AppSettings struct {
 	HideSidebar bool `json:"hide_sidebar,omitempty"`
 	// GraphRatio is the code's share of the width beside the profile graph.
 	GraphRatio float32 `json:"graph_ratio,omitempty"`
+	// FlameRight puts the flame graph right of the code instead of below.
+	FlameRight bool `json:"flame_right,omitempty"`
 	// FlameRatio is the share of the height above the flame graph.
 	FlameRatio float32 `json:"flame_ratio,omitempty"`
 	LastPath   string  `json:"last_path,omitempty"`
