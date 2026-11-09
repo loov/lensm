@@ -67,8 +67,9 @@ type callGraph struct {
 	moved bool
 	// zoom multiplies the fitted scale; 0 is 1.
 	zoom float32
-	// center asks draw to scroll the focus into view.
-	center bool
+	// center asks draw to centre the focus; reveal only when it is
+	// out of view, so a node clicked in the graph stays put.
+	center, reveal bool
 }
 
 // calls indexes the edges of prof by caller and by callee.
@@ -99,8 +100,9 @@ func (g *callGraph) calls(prof *pprof.Profile) {
 // build lays out the graph around focus.
 func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile, focus string) {
 	if g.prof == prof && g.textSize == th.TextSize && (g.focus == focus || g.full && g.layout != nil) {
-		// The whole graph doesn't depend on focus; only bring it into view.
-		g.center = g.center || g.focus != focus
+		// The whole graph doesn't depend on focus; only bring it into
+		// view, if it isn't already.
+		g.reveal = g.reveal || g.focus != focus
 		g.focus = focus
 		return
 	}
@@ -406,10 +408,20 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		}
 	}
 	rescale()
-	if g.center {
-		g.center = false
+	if g.center || g.reveal {
 		for i, n := range g.graph.Nodes {
-			if n.ID == g.focus {
+			if n.ID != g.focus {
+				continue
+			}
+			box := g.layout.Nodes[i]
+			lo := box.Center.Sub(box.Size.Scale(0.5)).Sub(g.min)
+			hi := box.Center.Add(box.Size.Scale(0.5)).Sub(g.min)
+			at := func(v glayout.Vector) f32.Point {
+				return f32.Pt(float32(v.X)*scale+pad, float32(v.Y)*scale+pad).Add(origin).Add(g.offset)
+			}
+			a, b := at(lo), at(hi)
+			visible := a.X >= 0 && a.Y >= 0 && b.X <= float32(size.X) && b.Y <= float32(size.Y)
+			if g.center || !visible {
 				p := g.layout.Nodes[i].Center.Sub(g.min)
 				g.offset.X = float32(size.X)/2 - origin.X - (float32(p.X)*scale + pad)
 				if g.full {
@@ -417,6 +429,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 				}
 			}
 		}
+		g.center, g.reveal = false, false
 	}
 
 	clicked := ""
