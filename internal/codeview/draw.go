@@ -443,14 +443,17 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 	jump, gutter, source := c.jump, c.gutter, c.source
 
 	overflow := float32(lineHeight)
+	var moved, fromAsm bool
 
 	if ui.ShowGo || ui.ShowNative {
 		stack := clip.Rect{
 			Min: image.Pt(int(jump.Min)-pad, 0),
 			Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
-		ui.asm.LayoutBar(gtx, ui.Theme, int(jump.Min)-pad, pad,
-			-overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow)
+		if ui.asm.LayoutBar(gtx, ui.Theme, int(jump.Min)-pad, pad,
+			-overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow) {
+			moved, fromAsm = true, true
+		}
 		stack.Pop()
 	}
 
@@ -459,9 +462,17 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 			Min: image.Pt(int(source.Min), 0),
 			Max: image.Pt(int(source.Max)+pad, gtx.Constraints.Max.Y),
 		}.Push(gtx.Ops)
-		ui.src.LayoutBar(gtx, ui.Theme, int(source.Max), pad,
-			-overflow, float32(sourceContentHeight)+overflow)
+		if ui.src.LayoutBar(gtx, ui.Theme, int(source.Max), pad,
+			-overflow, float32(sourceContentHeight)+overflow) {
+			moved, fromAsm = true, false
+		}
 		stack.Pop()
+	}
+	// The columns are drawn already, so the other one follows a
+	// scrollbar drag in the next frame.
+	if moved && ui.SyncScroll {
+		ui.syncScroll(gtx, c, fromAsm)
+		gtx.Execute(op.InvalidateCmd{})
 	}
 }
 

@@ -4,9 +4,11 @@ import (
 	"image"
 	"image/color"
 
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/widget"
 )
 
 // StatusBar is the strip along the bottom of the window. Left items
@@ -62,4 +64,30 @@ func Dot(c color.NRGBA) layout.Widget {
 		paint.FillShape(gtx.Ops, c, clip.Ellipse{Max: image.Pt(d, d)}.Op(gtx.Ops))
 		return layout.Dimensions{Size: image.Pt(d, d)}
 	}
+}
+
+// StatusToggle is a switch in the status bar: a dot, lit while Value
+// is on, and a label.
+type StatusToggle struct {
+	Theme *Theme
+	Value *widget.Bool
+	Label string
+}
+
+func (t StatusToggle) Layout(gtx layout.Context) layout.Dimensions {
+	return t.Value.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		pointer.CursorPointer.Add(gtx.Ops)
+		dot, label := t.Theme.Colors.MutedText, t.Theme.Muted(t.Label, 0.88)
+		dot.A = 0xa0
+		if t.Value.Value {
+			dot, label.Color = t.Theme.Colors.Accent, t.Theme.Colors.Text
+		}
+		label.MaxLines = 1
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(Dot(dot)),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: 6}.Layout(gtx, label.Layout)
+			}),
+		)
+	})
 }

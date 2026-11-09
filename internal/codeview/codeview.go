@@ -232,6 +232,8 @@ type Style struct {
 	ShowNative bool
 	ShowSource bool
 	ShowHelp   bool
+	// SyncScroll scrolls the assembly and the source together.
+	SyncScroll bool
 	// Marks picks the run time cost marks to show next to the assembly.
 	Marks disasm.Mark
 	// HoverLinksOnly draws only the hovered line's band between source

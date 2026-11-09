@@ -24,8 +24,9 @@ type scrollRegion struct {
 
 // LayoutBar draws a vertical scrollbar at barX with the given width,
 // applies scrollbar drags, and clamps the offset
-// so the viewport stays within [contentTop, contentBot].
-func (region *scrollRegion) LayoutBar(gtx layout.Context, th *gui.Theme, barX, barWidth int, contentTop, contentBot float32) {
+// so the viewport stays within [contentTop, contentBot]. It reports
+// whether a drag moved the offset.
+func (region *scrollRegion) LayoutBar(gtx layout.Context, th *gui.Theme, barX, barWidth int, contentTop, contentBot float32) bool {
 	viewTop := -region.Offset
 	viewBot := -region.Offset + float32(gtx.Constraints.Max.Y)
 
@@ -40,10 +41,12 @@ func (region *scrollRegion) LayoutBar(gtx layout.Context, th *gui.Theme, barX, b
 	)
 	stack.Pop()
 
-	if distance := region.Bar.ScrollDistance(); distance != 0 {
+	distance := region.Bar.ScrollDistance()
+	if distance != 0 {
 		region.Offset -= distance * (contentBot - contentTop)
 	}
 	region.Clamp(gtx, contentTop, contentBot)
+	return distance != 0
 }
 
 // Clamp keeps the viewport within the content, stopping any running

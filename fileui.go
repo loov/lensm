@@ -91,6 +91,7 @@ type FileUI struct {
 	ShowSource     widget.Bool
 	ShowAsmHelp    widget.Bool
 	HoverLinksOnly widget.Bool
+	SyncScroll     widget.Bool
 	SettingsNav    gui.NavList
 	ThemeSelect    gui.Select
 	SyntaxSelect   gui.Select
@@ -158,6 +159,7 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.ShowSource.Value = settings.ShowSource
 	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
 	ui.HoverLinksOnly.Value = settings.HoverLinksOnly
+	ui.SyncScroll.Value = settings.SyncScroll
 	ui.split.Axis = layout.Horizontal
 	ui.split.Ratio = settings.SidebarRatio
 	ui.Comment.SingleLine = true
@@ -683,6 +685,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								ShowSource:     ui.ShowSource.Value,
 								ShowHelp:       ui.ShowAsmHelp.Value,
 								HoverLinksOnly: ui.HoverLinksOnly.Value,
+								SyncScroll:     ui.SyncScroll.Value,
 								Marks:          disasm.AllMarks &^ ui.Settings.HiddenMarks,
 								TextHeight:     ui.Theme.TextSize,
 							}.Layout(gtx)

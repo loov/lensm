@@ -24,6 +24,8 @@ type AppSettings struct {
 	// HoverLinksOnly draws only the hovered line's source-to-assembly
 	// link instead of all of them.
 	HoverLinksOnly bool `json:"hover_links_only,omitempty"`
+	// SyncScroll scrolls the assembly and the source together.
+	SyncScroll bool `json:"sync_scroll,omitempty"`
 	// HiddenMarks are the run time cost marks turned off in the
 	// Diagnostics panel.
 	HiddenMarks disasm.Mark `json:"hidden_marks,omitempty"`

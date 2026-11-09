@@ -46,6 +46,7 @@ func (ui *FileUI) applySettings(s AppSettings) {
 	ui.ShowSource.Value = s.ShowSource
 	ui.ShowAsmHelp.Value = s.ShowAsmHelp
 	ui.HoverLinksOnly.Value = s.HoverLinksOnly
+	ui.SyncScroll.Value = s.SyncScroll
 	ui.saveSettings(s)
 	ui.invalidateMain()
 }

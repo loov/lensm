@@ -75,6 +75,8 @@ Keys:
   source line to scroll its instructions beside it; when the line
   compiled into several runs of instructions, each right-click steps to
   the next run;
+- turn on "Sync scroll" in the status bar to scroll the assembly and the
+  source together;
 - double-click a line, or press `Enter` on a selected one, to comment on it;
   `Escape` leaves the comment.
 

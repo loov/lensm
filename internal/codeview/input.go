@@ -138,10 +138,12 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 					ui.asm.Anim.Stop()
 					ui.asm.Offset -= ev.Scroll.Y
 					ui.asm.Clamp(gtx, -overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow)
+					ui.syncScroll(gtx, c, true)
 				case c.source.Contains(ev.Position.X):
 					ui.src.Anim.Stop()
 					ui.src.Offset -= ev.Scroll.Y
 					ui.src.Clamp(gtx, -overflow, float32(sourceRowCount(ui.Code, ui.noteRows())*lineHeight)+overflow)
+					ui.syncScroll(gtx, c, false)
 				}
 			}
 		}

@@ -486,6 +486,12 @@ func (ui *FileUI) layoutStatus(gtx layout.Context) layout.Dimensions {
 	if ui.File != nil {
 		left = append(left, th.StatusText(ui.Funcs.CountText()))
 	}
+	if ui.SyncScroll.Update(gtx) {
+		s := ui.Settings
+		s.SyncScroll = ui.SyncScroll.Value
+		ui.applySettings(s)
+	}
+	right = append(right, gui.StatusToggle{Theme: th, Value: &ui.SyncScroll, Label: "Sync scroll"}.Layout)
 	dot, mcp := th.Colors.MutedText, "MCP off"
 	if ui.MCP != nil {
 		dot, mcp = th.Colors.Positive, "MCP "+ui.MCP.URL()
