@@ -79,7 +79,9 @@ Keys:
   compiled into several runs of instructions, each right-click steps to
   the next run;
 - the Callers panel in the sidebar lists the functions that call the
-  open one; click one to open it;
+  open one; click one to open it. The Summary panel lists every
+  function by size, spills, bounds checks, allocations or write
+  barriers, largest first;
 - turn on "Sync scroll" in the status bar to scroll the assembly and the
   source together;
 - double-click a line, or press `Enter` on a selected one, to comment on it;

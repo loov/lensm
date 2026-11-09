@@ -90,6 +90,8 @@ type FileUI struct {
 	clearCommentsArmed bool
 	HistoryList        gui.ClickList
 	CallersList        gui.ClickList
+	SummaryList        gui.ClickList
+	SummarySelect      gui.Select
 
 	// Column toggles and settings.
 	ShowGoAsm     widget.Bool
@@ -131,14 +133,20 @@ type FileUI struct {
 	menuStates map[int]uint8
 	// fullscreen hides the window buttons, so the toolbar needs no
 	// room for them; titleDrag tracks the pointer over its empty space.
-	fullscreen        bool
-	titleDrag         struct{}
-	picker            *explorer.Explorer
-	loader            *loader
-	invalidate        chan struct{}
-	pickerResults     chan pickerResult
-	codeResults       chan codeResult
-	indexResults      chan indexResult
+	fullscreen    bool
+	titleDrag     struct{}
+	picker        *explorer.Explorer
+	loader        *loader
+	invalidate    chan struct{}
+	pickerResults chan pickerResult
+	codeResults   chan codeResult
+	indexResults  chan indexResult
+	// summary is the order of the summary panel, by summaryKey, for
+	// the index summaryFor.
+	summary           []int
+	summaryKey        int
+	summaryFor        *disasm.Index
+	summarySortedBy   int
 	exited            chan struct{}
 	flushTimer        *time.Timer
 	sessionDirty      bool
