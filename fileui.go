@@ -116,6 +116,7 @@ type FileUI struct {
 	Comment           codeview.CommentEditor
 	Find              findBar
 	Shortcuts         shortcutSheet
+	Compare           compareView
 	TextSizeEditor    widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -172,12 +173,23 @@ type FileUI struct {
 	navigatingHistory bool
 }
 
+// What a file pick is for.
+type pickKind uint8
+
+const (
+	pickBinary pickKind = iota
+	pickProfile
+	// pickCompare loads a binary to compare the open one with.
+	pickCompare
+)
+
 type pickerResult struct {
-	// profile is set when the pick is a profile, not a binary.
-	profile bool
-	path    string
-	ok      bool
-	err     error
+	kind pickKind
+	path string
+	// file is the loaded binary of a pickCompare.
+	file disasm.File
+	ok   bool
+	err  error
 }
 
 func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
@@ -239,6 +251,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 			_ = ui.File.Close()
 			ui.File = nil
 		}
+		ui.setCompare("", nil)
 	}()
 
 	ui.window = w
@@ -336,9 +349,11 @@ func (ui *FileUI) Run(w *app.Window) error {
 			ui.pickerOpen = false
 			if res.err != nil {
 				ui.LoadError = res.err
-			} else if res.ok && res.profile {
+			} else if res.ok && res.kind == pickProfile {
 				ui.Config.ProfilePath = res.path
 				ui.loadProfile()
+			} else if res.ok && res.kind == pickCompare {
+				ui.setCompare(res.path, res.file)
 			} else if res.ok {
 				ui.Config.Path = res.path
 				ui.LoadError = nil
@@ -705,16 +720,16 @@ func (ui *FileUI) invalidateMain() {
 	}
 }
 
-func (ui *FileUI) chooseFile() { ui.pick(false) }
+func (ui *FileUI) chooseFile() { ui.pick(pickBinary) }
 
 // chooseProfile picks a pprof profile of the open binary.
 func (ui *FileUI) chooseProfile() {
 	if ui.File != nil {
-		ui.pick(true)
+		ui.pick(pickProfile)
 	}
 }
 
-func (ui *FileUI) pick(profile bool) {
+func (ui *FileUI) pick(kind pickKind) {
 	if ui.pickerOpen || ui.picker == nil || ui.pickerResults == nil {
 		return
 	}
@@ -723,7 +738,7 @@ func (ui *FileUI) pick(profile bool) {
 	ui.pickerOpen = true
 	picker, results, exited := ui.picker, ui.pickerResults, ui.exited
 	go func() {
-		res := pickerResult{profile: profile}
+		res := pickerResult{kind: kind}
 		// No extension filter: Go executables usually have none.
 		file, err := picker.ChooseFile()
 		switch {
@@ -740,9 +755,17 @@ func (ui *FileUI) pick(profile bool) {
 		default:
 			res.err = err
 		}
+		// Load a binary to compare with here, off the UI goroutine.
+		if res.ok && kind == pickCompare {
+			res.file, res.err = loadFile(res.path)
+			res.ok = res.err == nil
+		}
 		select {
 		case results <- res:
 		case <-exited:
+			if res.file != nil {
+				_ = res.file.Close()
+			}
 		}
 	}()
 }
@@ -814,6 +837,9 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					code := ui.activeCode()
 					if code == nil {
 						return layout.Dimensions{}
+					}
+					if ui.Compare.file != nil {
+						return ui.layoutCompare(gtx, ui.activeTab())
 					}
 
 					gtx.Constraints = layout.Exact(gtx.Constraints.Max)

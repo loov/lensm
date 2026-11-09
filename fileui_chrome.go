@@ -60,14 +60,16 @@ const (
 	menuWatch
 	menuOpenProfile
 	menuCloseProfile
-	_
+	menuCompare
+	menuStopCompare
+	sepFile
 	menuCopy
 	menuBack
 	menuForward
-	_
+	sepGo
 	menuSettings
 	menuShortcuts
-	_
+	sepApp
 	menuQuit
 )
 
@@ -82,14 +84,16 @@ func (ui *FileUI) appMenuItems() []gui.MenuItem {
 		menuWatch:        {Label: "Watch for Changes", Checked: ui.Config.Watch},
 		menuOpenProfile:  {Label: "Open Profile…", Disabled: ui.File == nil},
 		menuCloseProfile: {Label: "Close Profile", Disabled: ui.Profile == nil},
-		5:                {Separator: true},
+		menuCompare:      {Label: "Compare With…", Disabled: ui.File == nil},
+		menuStopCompare:  {Label: "Stop Comparing", Disabled: ui.Compare.file == nil},
+		sepFile:          {Separator: true},
 		menuCopy:         {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
 		menuBack:         {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
 		menuForward:      {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
-		9:                {Separator: true},
+		sepGo:            {Separator: true},
 		menuSettings:     {Label: "Settings…", Shortcut: shortcut(",")},
 		menuShortcuts:    {Label: "Keyboard Shortcuts", Shortcut: "?"},
-		12:               {Separator: true},
+		sepApp:           {Separator: true},
 		menuQuit:         {Label: "Quit", Shortcut: shortcut("Q")},
 	}
 }

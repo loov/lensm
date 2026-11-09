@@ -52,6 +52,9 @@ var menuBar = []nativeMenuDef{
 		{},
 		{Label: "Open Profile…", Tag: menuOpenProfile},
 		{Label: "Close Profile", Tag: menuCloseProfile},
+		{},
+		{Label: "Compare With…", Tag: menuCompare},
+		{Label: "Stop Comparing", Tag: menuStopCompare},
 	}},
 	{"Edit", []nativeMenuItem{
 		{Label: "Copy Selection", Tag: menuCopy},
@@ -88,6 +91,12 @@ func (ui *FileUI) runMenuItem(gtx layout.Context, item int) {
 		ui.chooseFile()
 	case menuOpenProfile:
 		ui.chooseProfile()
+	case menuCompare:
+		if ui.File != nil {
+			ui.pick(pickCompare)
+		}
+	case menuStopCompare:
+		ui.setCompare("", nil)
 	case menuCloseProfile:
 		ui.Config.ProfilePath = ""
 		ui.loadProfile()
@@ -162,6 +171,8 @@ func (ui *FileUI) handleMenuBar(gtx layout.Context) {
 		menuWatch:        {ui.Config.Watch, true},
 		menuOpenProfile:  {false, ui.File != nil},
 		menuCloseProfile: {false, ui.Profile != nil},
+		menuCompare:      {false, ui.File != nil},
+		menuStopCompare:  {false, ui.Compare.file != nil},
 		menuCopy:         {false, selection != ""},
 		menuBack:         {false, ui.Navigation.CanBack()},
 		menuForward:      {false, ui.Navigation.CanForward()},

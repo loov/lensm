@@ -96,6 +96,10 @@ Keys:
   samples in a lane beside them, and to rank functions by samples in
   the Summary panel. The profile's addresses are matched to the binary
   by function, so a profile of a position independent binary works;
+- Compare With… in the menu loads another build of the program and
+  shows the open function from both side by side, with the instructions
+  aligned and the removed and added ones marked. Addresses and branch
+  distances, which shift whenever code moves, don't count as changes;
 - turn on "Sync scroll" in the status bar to scroll the assembly and the
   source together;
 - double-click a line, or press `Enter` on a selected one, to comment on it;
