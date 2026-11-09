@@ -109,7 +109,10 @@ Keys:
   scroll to zoom. Above it, find functions by name (Enter steps
   through them), focus on the stacks through the open function, hide
   the runtime so its time counts in the code calling it, and pick the
-  least share a function needs to be drawn. Compare Profile With… in
+  least share a function needs to be drawn. Flame switches the pane to
+  a flame graph of the same samples, callers on top; click a frame to
+  zoom to it and open its function, and a frame above to zoom out.
+  Compare Profile With… in
   the menu loads a profile to compare with, from this build or another,
   and the graphs then show the change from it by function name, as
   pprof's -diff_base does: red where time grew, green where it shrank. The button at the end lets

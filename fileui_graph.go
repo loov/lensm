@@ -439,6 +439,13 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 			return ui.layoutGraphTools(gtx, g)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			if ui.GraphTools.FlameMode.Value {
+				if name, ok := ui.Flame.layout(gtx, th, prof, ui.GraphTools.query, focus); ok {
+					ui.openTab(ui.findFunc(name), true)
+					gtx.Execute(op.InvalidateCmd{})
+				}
+				return layout.Dimensions{Size: gtx.Constraints.Max}
+			}
 			if g.layout != nil {
 				if name, ok := g.draw(gtx, th, prof); ok {
 					ui.openTab(ui.findFunc(name), true)

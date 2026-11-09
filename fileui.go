@@ -142,6 +142,8 @@ type FileUI struct {
 	ProfileMenu gui.Menu
 	// GraphTools are the controls above the profile graph.
 	GraphTools graphTools
+	// Flame draws the profile as a flame graph in the graph pane.
+	Flame flameGraph
 	// BaseProfile is the profile the graphs show the change from.
 	BaseProfile *pprof.Profile
 	// profileModTime is when the loaded profile file last changed.

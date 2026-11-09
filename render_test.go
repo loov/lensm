@@ -36,6 +36,7 @@ var (
 	renderProfileMenu = flag.Bool("render.profilemenu", false, "open the menu of the profile's values")
 	renderGraphFind   = flag.String("render.graphfind", "", "search the profile graph for this")
 	renderHideRuntime = flag.Bool("render.hideruntime", false, "hide the runtime in the profile graph")
+	renderFlame       = flag.Bool("render.flame", false, "draw the profile as a flame graph")
 	renderProfile     = flag.String("render.profile", "", "pprof profile to show")
 	renderBaseProfile = flag.String("render.baseprofile", "", "pprof profile to compare the profile with")
 	renderPath        = flag.String("render.path", "", "binary or package directory to open")
@@ -107,6 +108,7 @@ func TestRender(t *testing.T) {
 	ui.ProfileMenu.Open = *renderProfileMenu
 	ui.GraphTools.Find.SetText(*renderGraphFind)
 	ui.GraphTools.HideRuntime.Value = *renderHideRuntime
+	ui.GraphTools.FlameMode.Value = *renderFlame
 	if *renderCompare != "" {
 		other, err := loadFile(*renderCompare)
 		if err != nil {

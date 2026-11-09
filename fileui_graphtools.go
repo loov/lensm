@@ -27,6 +27,10 @@ type graphTools struct {
 
 	HideRuntime widget.Bool
 
+	// GraphMode and FlameMode pick how the pane draws the profile; one
+	// is on.
+	GraphMode, FlameMode widget.Bool
+
 	Threshold gui.Select
 	// share is the least share of the samples; 0 is the default.
 	share float64
@@ -163,6 +167,16 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 		options[i] = s.label
 	}
 
+	if t.GraphMode.Update(gtx) {
+		t.FlameMode.Value = !t.GraphMode.Value
+	}
+	if t.FlameMode.Update(gtx) {
+		t.GraphMode.Value = !t.FlameMode.Value
+	}
+	if !t.FlameMode.Value {
+		t.GraphMode.Value = true
+	}
+
 	icon, description := FullscreenIcon, "Fill the window"
 	if ui.GraphFull {
 		icon, description = FullscreenExitIcon, "Back beside the code"
@@ -170,6 +184,11 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 	gap := layout.Spacer{Width: 8}.Layout
 	return layout.Inset{Top: 8, Bottom: 6, Left: 14, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(gui.Segmented{Theme: th, Segments: []gui.Segment{
+				{Label: "Graph", Value: &t.GraphMode},
+				{Label: "Flame", Value: &t.FlameMode},
+			}}.Layout),
+			layout.Rigid(gap),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(200))
 				gtx.Constraints.Min.X = gtx.Constraints.Max.X
@@ -191,6 +210,9 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 			layout.Rigid(gui.Checkbox{Theme: th, Value: &t.HideRuntime, Label: "Hide runtime"}.Layout),
 			layout.Rigid(gap),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if t.FlameMode.Value {
+					return layout.Dimensions{}
+				}
 				gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(170))
 				return t.Threshold.Layout(gtx, th, options, current)
 			}),
