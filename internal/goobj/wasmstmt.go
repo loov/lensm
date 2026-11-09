@@ -7,32 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/eliben/watgo"
 	"github.com/eliben/watgo/wasmir"
 
 	"loov.dev/lensm/internal/disasm"
 )
-
-// wasmModule decodes the whole module once, for the types of calls and
-// blocks and the names of locals and globals, which the listing of a
-// single function doesn't carry. It is nil for a component or a module
-// watgo can't decode, and the statements are then left out.
-func (file *File) wasmModule() *wasmir.Module {
-	if file.wasmTried {
-		return file.wasm
-	}
-	file.wasmTried = true
-	data, err := os.ReadFile(file.path)
-	// A core module is version 1; a component has another version.
-	if err != nil || len(data) < 8 || string(data[:8]) != "\x00asm\x01\x00\x00\x00" {
-		return nil
-	}
-	file.wasm, _ = watgo.DecodeWASM(data)
-	if file.wasm != nil {
-		file.wasmLocals = wasmLocalNames(file.wasm, data)
-	}
-	return file.wasm
-}
 
 // expr is an expression on the wasm value stack and how tightly it
 // binds, as in Go: 5 for * / % << >> &, 4 for + - | ^, 3 for
@@ -77,33 +55,52 @@ func (r *reads) add(o reads) {
 	r.call = r.call || o.call
 }
 
+// wasmModule reads the module once, on first use. It is nil for a
+// component or a module that can't be read, and the statements are
+// then left out.
+func (file *File) wasmModule() *wasmInfo {
+	if !file.wasmTried {
+		file.wasmTried = true
+		if data, err := os.ReadFile(file.path); err == nil {
+			file.wasm = loadWasmInfo(data)
+		}
+	}
+	return file.wasm
+}
+
 // wasmStatements spells the instructions of the function at index idx
 // in the module, the imports counted, as statements: each instruction
 // that completes one gets its text, such as "l2 = l2 + i32[p0 + l1]",
 // and the instructions feeding it get none. insts are the function's
-// rows, in the order of its body. dwarfLocals names locals the module's
-// name section doesn't, by the index among the module's own functions.
+// rows, in the order of its body.
 //
 // goArgs names a Go function's arguments and results by their offset
 // from the first, for the loads and stores that reach them.
-func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals map[int]map[uint32]string, goArgs map[int64]string) {
-	funcs := wasmFuncTypes(m)
-	imported := len(funcs) - len(m.Funcs)
+func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int64]string) {
+	m, funcs, imported := info.m, info.funcTypes, info.imported
 	if idx < imported || idx >= len(funcs) {
 		return
 	}
+	defer func() {
+		// A body it can't follow keeps its listing, without statements.
+		if recover() != nil {
+			for i := range insts {
+				insts[i].NativeText, insts[i].Stack = "", nil
+			}
+		}
+	}()
 	fn := &m.Funcs[idx-imported]
-	body := fn.Body
+	body := info.body(idx - imported)
 	if len(body) > 0 && body[len(body)-1].Kind == wasmir.InstrEnd {
 		body = body[:len(body)-1]
 	}
 	if len(body) != len(insts) {
 		return
 	}
-	locals := dwarfLocals[idx-imported]
+	locals := info.locals[idx-imported]
 	ftype := typeOf(m, fn.TypeIdx)
 	params := len(ftype.Params)
-	goWasm := isGoWasm(m)
+	goWasm := info.goWasm
 	name := func(i uint32) string {
 		if int(i) < params {
 			if int(i) < len(fn.ParamNames) && fn.ParamNames[i] != "" {
@@ -126,14 +123,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 		}
 		return fmt.Sprint("l", i)
 	}
-	globals := wasmGlobalNames(m)
-	if goWasm {
-		for i, name := range goWasmGlobals {
-			if i < len(globals) && globals[i] == "" {
-				globals[i] = name
-			}
-		}
-	}
+	globals := info.globals
 	global := func(i uint32) string {
 		if int(i) < len(globals) && globals[i] != "" {
 			return globals[i]
@@ -656,36 +646,6 @@ func address(base expr, offset uint64) string {
 	return base.text + " + " + strconv.FormatUint(offset, 10)
 }
 
-// wasmFuncTypes is the type of each function in the module's index
-// space, the imported ones first.
-func wasmFuncTypes(m *wasmir.Module) []wasmir.TypeDef {
-	var types []wasmir.TypeDef
-	for _, imp := range m.Imports {
-		if imp.Kind == wasmir.ExternalKindFunction {
-			types = append(types, typeOf(m, imp.TypeIdx))
-		}
-	}
-	for _, f := range m.Funcs {
-		types = append(types, typeOf(m, f.TypeIdx))
-	}
-	return types
-}
-
-// wasmGlobalNames is the name of each global in the module's index
-// space, empty for one without.
-func wasmGlobalNames(m *wasmir.Module) []string {
-	var names []string
-	for _, imp := range m.Imports {
-		if imp.Kind == wasmir.ExternalKindGlobal {
-			names = append(names, imp.Name)
-		}
-	}
-	for _, g := range m.Globals {
-		names = append(names, strings.TrimPrefix(g.Name, "$"))
-	}
-	return names
-}
-
 func typeOf(m *wasmir.Module, i uint32) wasmir.TypeDef {
 	if int(i) < len(m.Types) {
 		return m.Types[i]
@@ -731,21 +691,6 @@ func wasmTargets(body []wasmir.Instruction) map[int]bool {
 		}
 	}
 	return targeted
-}
-
-// goWasmGlobals are the globals the Go linker gives every wasm module,
-// in order, without naming them in the module.
-var goWasmGlobals = []string{"SP", "CTXT", "g", "RET0", "RET1", "RET2", "RET3", "PAUSE"}
-
-// isGoWasm reports whether the Go toolchain built the module, which
-// marks it with its build ID.
-func isGoWasm(m *wasmir.Module) bool {
-	for _, c := range m.CustomSections {
-		if c.Name == "go:buildid" {
-			return true
-		}
-	}
-	return false
 }
 
 // wasmSwitches finds the br_tables that pick a case: blocks opened one

@@ -21,7 +21,10 @@ type wasmVar struct {
 // lists are read. A module without them gets none, and so does one
 // whose DWARF names a function that isn't there: wasm-opt rewrites
 // code without updating DWARF.
-func wasmLocalNames(m *wasmir.Module, module []byte) map[int]map[uint32]string {
+//
+// starts are where the function bodies start, from the code section's
+// contents, as DWARF counts.
+func wasmLocalNames(m *wasmir.Module, starts []uint64) map[int]map[uint32]string {
 	sections := map[string][]byte{}
 	for _, c := range m.CustomSections {
 		sections[c.Name] = c.Payload
@@ -34,9 +37,8 @@ func wasmLocalNames(m *wasmir.Module, module []byte) map[int]map[uint32]string {
 	if err != nil {
 		return nil
 	}
-	// DWARF addresses count from the code section's contents.
 	funcs := map[uint64]int{}
-	for i, start := range wasmBodyStarts(module) {
+	for i, start := range starts {
 		funcs[start] = i
 	}
 
@@ -137,45 +139,6 @@ func wasmLocations(loc any, list []byte, base uint64) []wasmVar {
 		}
 	}
 	return vars
-}
-
-// wasmBodyStarts is where each function body in the module's code
-// section starts, counted from the section's contents.
-func wasmBodyStarts(module []byte) (starts []uint64) {
-	p := 8
-	for p < len(module) {
-		id := module[p]
-		size, k := uleb(module[p+1:])
-		if k == 0 {
-			return nil
-		}
-		p += 1 + k
-		end := p + int(size)
-		if end > len(module) || end < p {
-			return nil
-		}
-		if id != 10 {
-			p = end
-			continue
-		}
-		code := module[p:end]
-		count, k := uleb(code)
-		q := k
-		for range count {
-			n, k := uleb(code[min(q, len(code)):])
-			if k == 0 {
-				return nil
-			}
-			q += k
-			starts = append(starts, uint64(q))
-			q += int(n)
-			if q > len(code) {
-				return nil
-			}
-		}
-		return starts
-	}
-	return nil
 }
 
 // uleb decodes an unsigned LEB128 number and says how many bytes it

@@ -71,12 +71,12 @@ func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, e
 		code.Insts = append(code.Insts, inst)
 	}
 	wasmBranches(code.Insts)
-	if m := file.wasmModule(); m != nil {
+	if info := file.wasmModule(); info != nil {
 		var goArgs map[int64]string
-		if isGoWasm(m) {
+		if info.goWasm {
 			goArgs = goArgNames(code.File, fn.Name())
 		}
-		wasmStatements(m, int(fn.fn.Addr), code.Insts, file.wasmLocals, goArgs)
+		wasmStatements(info, int(fn.fn.Addr), code.Insts, goArgs)
 	}
 	code.Source = source.Load(fn.file.files, refs, code.File, opts.Context)
 	return code, nil

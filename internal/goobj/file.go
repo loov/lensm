@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/eliben/watgo/wasmir"
 	"github.com/loov/disasm/objfile"
 
 	"loov.dev/lensm/internal/disasm"
@@ -38,12 +37,10 @@ type File struct {
 	qualified map[string]string
 
 	path string
-	// wasm is the decoded module, for the statements beside a wasm
-	// listing; wasmTried is set once it was attempted.
-	wasm      *wasmir.Module
+	// wasm is what the wasm statements need from the module, read
+	// once wasmTried is set.
+	wasm      *wasmInfo
 	wasmTried bool
-	// wasmLocals are the names DWARF gives each function's locals.
-	wasmLocals map[int]map[uint32]string
 }
 
 type notePos struct {
