@@ -40,3 +40,13 @@ func TestLayoutJumps(t *testing.T) {
 		t.Errorf("jumps to one exit got columns %d and %d, want one", ix[5].RefStack, ix[8].RefStack)
 	}
 }
+
+func TestLayoutJumpsTrimmedTarget(t *testing.T) {
+	code := &Code{Insts: make([]Inst, 10)}
+	code.Insts[2].RefOffset = 20
+	code.Insts[3].RefOffset = -5
+	code.LayoutJumps(40)
+	if code.Insts[2].RefOffset != 0 || code.Insts[3].RefOffset != 0 {
+		t.Errorf("jumps out of the code kept offsets %d and %d", code.Insts[2].RefOffset, code.Insts[3].RefOffset)
+	}
+}

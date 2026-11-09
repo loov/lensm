@@ -49,6 +49,11 @@ func (code *Code) LayoutJumps(far int) {
 			continue
 		}
 		target := i + ix.RefOffset
+		if target < 0 || target >= len(code.Insts) {
+			// The target was trimmed with the function's padding.
+			ix.RefOffset = 0
+			continue
+		}
 		from, to := 3*i+2, 3*target+1
 		if abs(ix.RefOffset) <= far {
 			grow(near, target, min(from, to), max(from, to), ix, false)
