@@ -93,6 +93,39 @@ func TestLoadLinksBranches(t *testing.T) {
 	t.Fatal("no br 1 in main.sumInts")
 }
 
+// TestLoadSpellsStatements checks the statements beside main.sumInts:
+// the loop's exit test, the sum, the step and the result.
+func TestLoadSpellsStatements(t *testing.T) {
+	file, err := Load(filepath.Join("..", "..", "testdata", "tinygo", "example.wasm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	code, err := disasm.FindFunc(file, "main.sumInts").Load(disasm.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, in := range code.Insts {
+		if in.NativeText != "" {
+			got = append(got, in.NativeText)
+		}
+	}
+	want := []string{
+		"loop L1 {",
+		"if (l1 != 12) {",
+		"l2 = i32[p0 + l1] + l2",
+		"l1 = l1 + 4",
+		"continue L1",
+		"}",
+		"}",
+		"return l2",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("statements:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 // TestLoadGoWasm builds testdata/testprog for wasip1 and checks that
 // names come through and calls resolve to other functions.
 func TestLoadGoWasm(t *testing.T) {

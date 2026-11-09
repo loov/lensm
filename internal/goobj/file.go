@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/eliben/watgo/wasmir"
 	"github.com/loov/disasm/objfile"
 
 	"loov.dev/lensm/internal/disasm"
@@ -35,6 +36,12 @@ type File struct {
 	// qualified maps the names of functions the symbol table records
 	// without a package to the name with one.
 	qualified map[string]string
+
+	path string
+	// wasm is the decoded module, for the statements beside a wasm
+	// listing; wasmTried is set once it was attempted.
+	wasm      *wasmir.Module
+	wasmTried bool
 }
 
 type notePos struct {
@@ -126,6 +133,7 @@ func Load(path string) (*File, error) {
 	}
 
 	file := &File{
+		path:  path,
 		bin:   bin,
 		cache: make(map[cacheKey]cacheEntry),
 		files: make(source.Files),
@@ -233,7 +241,7 @@ func (file *File) disassemble(fn *Func, opts disasm.Options) (code *disasm.Code,
 		}
 	}()
 	if file.bin.Arch == "wasm" {
-		return disassembleWasm(file.bin, fn, opts)
+		return disassembleWasm(file, fn, opts)
 	}
 	return disassemble(file.bin, fn, opts)
 }

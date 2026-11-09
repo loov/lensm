@@ -12,7 +12,8 @@ import (
 
 // disassembleWasm renders a wasm function with its block nesting.
 // Loading, names, calls and source positions come from objfile.
-func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disasm.Code, error) {
+func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, error) {
+	bin := file.bin
 	decoded, err := bin.Disassemble(fn.fn)
 	if err != nil {
 		return nil, err
@@ -70,6 +71,9 @@ func disassembleWasm(bin *objfile.Binary, fn *Func, opts disasm.Options) (*disas
 		code.Insts = append(code.Insts, inst)
 	}
 	wasmBranches(code.Insts)
+	if m := file.wasmModule(); m != nil {
+		wasmStatements(m, int(fn.fn.Addr), code.Insts)
+	}
 	code.Source = source.Load(fn.file.files, refs, code.File, opts.Context)
 	return code, nil
 }
