@@ -33,10 +33,10 @@ type AppSettings struct {
 	HiddenNotes disasm.NoteKind `json:"hidden_notes"`
 	// HideDiagnostics turns off every mark and note at once, keeping
 	// the kinds chosen above for when they come back.
-	HideDiagnostics bool     `json:"hide_diagnostics,omitempty"`
-	TextSize        int      `json:"text_size,omitempty"`
-	SidebarRatio    float32  `json:"sidebar_ratio,omitempty"`
-	LastPath        string   `json:"last_path,omitempty"`
+	HideDiagnostics bool    `json:"hide_diagnostics,omitempty"`
+	TextSize        int     `json:"text_size,omitempty"`
+	SidebarRatio    float32 `json:"sidebar_ratio,omitempty"`
+	LastPath        string  `json:"last_path,omitempty"`
 	// Sessions are the tabs left open in each binary, most recent first.
 	Sessions []Session `json:"sessions,omitempty"`
 
