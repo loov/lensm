@@ -41,7 +41,7 @@ var (
 	renderScale    = flag.Float64("render.scale", 2, "pixels per dp")
 	renderHover    = flag.String("render.hover", "", "pointer position in dp, as x,y")
 	renderQuick    = flag.String("render.quick", "", "open the go-to-function popup with this query")
-	renderMenu     = flag.Bool("render.menu", false, "open the app menu")
+	renderMenu     = flag.Bool("render.menu", false, "open the app menu, drawn in the window except on macOS")
 	renderSettings = flag.Int("render.settings", -1, "open the settings on this page")
 )
 

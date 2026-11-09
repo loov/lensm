@@ -114,7 +114,11 @@ type FileUI struct {
 	Comments *comments.Store
 	MCP      *mcp.AppServer
 
-	window            *app.Window
+	window *app.Window
+	// menuQueue holds the menu bar items chosen since the last frame;
+	// menuStates the checkmarks and enabled items last sent to it.
+	menuQueue         []int
+	menuStates        map[int]uint8
 	picker            *explorer.Explorer
 	loader            *loader
 	invalidate        chan struct{}
@@ -225,6 +229,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 	if ui.Config.Path != "" {
 		ui.requestLoad(ui.Config.Path)
 	}
+	if nativeMenu {
+		installMenu(menuBar)
+	}
 
 	events := make(chan event.Event)
 	acks := make(chan struct{})
@@ -259,6 +266,9 @@ func (ui *FileUI) Run(w *app.Window) error {
 			ui.SetFile(result.file)
 			w.Invalidate()
 		case <-invalidate:
+			w.Invalidate()
+		case item := <-menuActions:
+			ui.menuQueue = append(ui.menuQueue, item)
 			w.Invalidate()
 		case res := <-codeResults:
 			ui.setTabCode(res)
@@ -469,8 +479,7 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 		case key.Name("W"):
 			ui.closeTab(ui.ActiveTab)
 		case key.Name("F"):
-			gtx.Execute(key.FocusCmd{Tag: &ui.Funcs.Filter})
-			ui.Funcs.Filter.SetCaret(ui.Funcs.Filter.Len(), 0)
+			ui.focusFilter(gtx)
 		case key.Name("O"):
 			ui.chooseFile()
 		case key.Name("P"):
@@ -505,6 +514,7 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 		ui.QuickOpen.Show(gtx)
 	}
 	ui.handleAppMenu(gtx)
+	ui.handleMenuBar(gtx)
 	ui.handleColumnToggles(gtx)
 }
 

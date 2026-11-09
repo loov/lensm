@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"gioui.org/io/key"
+
 	"gioui.org/font"
 	"gioui.org/io/system"
 	"gioui.org/layout"
@@ -81,32 +83,23 @@ func (ui *FileUI) appMenuItems() []gui.MenuItem {
 }
 
 func (ui *FileUI) handleAppMenu(gtx layout.Context) {
-	item, ok := ui.AppMenu.Update(gtx)
-	if !ok {
-		return
+	if item, ok := ui.AppMenu.Update(gtx); ok {
+		ui.runMenuItem(gtx, item)
 	}
-	switch item {
-	case menuOpen:
-		ui.chooseFile()
-	case menuReload:
-		ui.reload()
-	case menuWatch:
-		ui.setWatch(!ui.Config.Watch)
-	case menuCopy:
-		if code := ui.activeCode(); code != nil && code.Code != nil {
-			ui.writeClipboardText(gtx, code.SelectedText(), "Copied selection")
-		}
-	case menuBack:
-		ui.navigateBack()
-	case menuForward:
-		ui.navigateForward()
-	case menuSettings:
-		ui.openSettings()
-	case menuQuit:
-		if ui.window != nil {
-			ui.window.Perform(system.ActionClose)
-		}
+}
+
+// quit closes the window, which saves the settings and comments on the
+// way out.
+func (ui *FileUI) quit() {
+	if ui.window != nil {
+		ui.window.Perform(system.ActionClose)
 	}
+}
+
+// focusFilter puts the caret at the end of the function filter.
+func (ui *FileUI) focusFilter(gtx layout.Context) {
+	gtx.Execute(key.FocusCmd{Tag: &ui.Funcs.Filter})
+	ui.Funcs.Filter.SetCaret(ui.Funcs.Filter.Len(), 0)
 }
 
 func (ui *FileUI) reload() {
@@ -145,6 +138,10 @@ func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					// The menu bar has these items on macOS.
+					if nativeMenu {
+						return layout.Dimensions{}
+					}
 					return ui.AppMenu.Layout(gtx, th, ui.appMenuItems(), ui.layoutBrand)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
