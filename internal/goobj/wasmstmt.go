@@ -28,6 +28,9 @@ func (file *File) wasmModule() *wasmir.Module {
 		return nil
 	}
 	file.wasm, _ = watgo.DecodeWASM(data)
+	if file.wasm != nil {
+		file.wasmLocals = wasmLocalNames(file.wasm, data)
+	}
 	return file.wasm
 }
 
@@ -70,8 +73,9 @@ func (r *reads) add(o reads) {
 // in the module, the imports counted, as statements: each instruction
 // that completes one gets its text, such as "l2 = l2 + i32[p0 + l1]",
 // and the instructions feeding it get none. insts are the function's
-// rows, in the order of its body.
-func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
+// rows, in the order of its body. dwarfLocals names locals the module's
+// name section doesn't, by the index among the module's own functions.
+func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals map[int]map[uint32]string) {
 	funcs := wasmFuncTypes(m)
 	imported := len(funcs) - len(m.Funcs)
 	if idx < imported || idx >= len(funcs) {
@@ -85,6 +89,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 	if len(body) != len(insts) {
 		return
 	}
+	locals := dwarfLocals[idx-imported]
 	ftype := typeOf(m, fn.TypeIdx)
 	params := len(ftype.Params)
 	goWasm := isGoWasm(m)
@@ -92,6 +97,9 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 		if int(i) < params {
 			if int(i) < len(fn.ParamNames) && fn.ParamNames[i] != "" {
 				return strings.TrimPrefix(fn.ParamNames[i], "$")
+			}
+			if n := locals[i]; n != "" {
+				return n
 			}
 			if i == 0 && goWasm {
 				// The resume point the function continues from.
@@ -101,6 +109,9 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 		}
 		if k := int(i) - params; k < len(fn.LocalNames) && fn.LocalNames[k] != "" {
 			return strings.TrimPrefix(fn.LocalNames[k], "$")
+		}
+		if n := locals[i]; n != "" {
+			return n
 		}
 		return fmt.Sprint("l", i)
 	}
@@ -128,9 +139,9 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 		// selector is the local a switch right inside the loop picks
 		// its case by, plus one; 0 when there is none.
 		selector uint32
-		loop   bool
-		height int // the stack's height when the block started
-		result int // the values the block leaves
+		loop     bool
+		height   int // the stack's height when the block started
+		result   int // the values the block leaves
 	}
 	targeted := wasmTargets(body)
 	cases, switches, selectors := wasmSwitches(m, body, insts)

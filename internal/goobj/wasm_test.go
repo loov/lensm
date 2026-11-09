@@ -114,12 +114,12 @@ func TestLoadSpellsStatements(t *testing.T) {
 	want := []string{
 		"loop L1 {",
 		"if (l1 != 12) {",
-		"l2 = i32[p0 + l1] + l2",
+		"total = i32[p0 + l1] + total",
 		"l1 = l1 + 4",
 		"continue L1",
 		"}",
 		"}",
-		"return l2",
+		"return total",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("statements:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

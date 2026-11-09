@@ -42,6 +42,8 @@ type File struct {
 	// listing; wasmTried is set once it was attempted.
 	wasm      *wasmir.Module
 	wasmTried bool
+	// wasmLocals are the names DWARF gives each function's locals.
+	wasmLocals map[int]map[uint32]string
 }
 
 type notePos struct {
