@@ -132,7 +132,7 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 		return fmt.Sprint("g", i)
 	}
 
-	// Name the blocks that branches go to, in order.
+	// block is an open block, loop or if.
 	type block struct {
 		label string
 		// cases is set for a block that a switch's case goes to: its end
@@ -149,6 +149,7 @@ func wasmStatements(info *wasmInfo, idx int, insts []disasm.Inst, goArgs map[int
 		height   int // the stack's height when the block started
 		result   int // the values the block leaves
 	}
+	// The blocks that branches go to get labels, in order.
 	targeted := wasmTargets(body)
 	cases, switches, selectors := wasmSwitches(m, body, insts)
 	labels := 0

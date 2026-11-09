@@ -10,7 +10,8 @@ import (
 	"loov.dev/lensm/internal/source"
 )
 
-// disassembleWasm renders a wasm function with its block nesting.
+// disassembleWasm renders a wasm function with its block nesting, its
+// branches as jumps, and for a core module the statements it spells.
 // Loading, names, calls and source positions come from objfile.
 func disassembleWasm(file *File, fn *Func, opts disasm.Options) (*disasm.Code, error) {
 	bin := file.bin
