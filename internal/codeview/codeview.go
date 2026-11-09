@@ -252,6 +252,9 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 	paint.FillShape(gtx.Ops, ui.Theme.Colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
 	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
 
+	// A jump longer than the view could not show both its ends, so it
+	// is drawn as stubs.
+	ui.Code.LayoutJumps(max(gtx.Constraints.Max.Y/codeLineHeightPx(gtx, ui.TextHeight)-1, 8))
 	c := ui.columns(gtx)
 	ui.placeNotes(gtx, c)
 	if ui.reveal != nil {

@@ -1,26 +1,17 @@
-package goobj
+package disasm
 
-import (
-	"testing"
-
-	"loov.dev/lensm/internal/disasm"
-)
+import "testing"
 
 func TestLayoutJumps(t *testing.T) {
-	code := &disasm.Code{Insts: make([]disasm.Inst, 100)}
-	pcToIndex := map[uint64]int{}
-	for i := range code.Insts {
-		code.Insts[i].PC = uint64(4 * (i + 1))
-		pcToIndex[code.Insts[i].PC] = i
-	}
-	jump := func(from, to int) { code.Insts[from].RefPC = code.Insts[to].PC }
+	code := &Code{Insts: make([]Inst, 100)}
+	jump := func(from, to int) { code.Insts[from].RefOffset = to - from }
 	// Two near jumps to one loop header.
 	jump(10, 2)
 	jump(12, 2)
 	// Two far jumps to one exit.
 	jump(5, 90)
 	jump(8, 90)
-	layoutJumps(code, pcToIndex)
+	code.LayoutJumps(40)
 
 	ix := code.Insts
 	if ix[10].RefStack != ix[12].RefStack || ix[10].RefStack == 0 {
@@ -38,5 +29,14 @@ func TestLayoutJumps(t *testing.T) {
 	}
 	if ix[5].RefStack != 1 {
 		t.Errorf("stub at row 5 in column %d, want the innermost", ix[5].RefStack)
+	}
+
+	// A taller view draws the long jumps whole.
+	code.LayoutJumps(100)
+	if ix[5].RefFar || ix[90].InStack != 0 {
+		t.Errorf("with far 100: RefFar %v, InStack %d", ix[5].RefFar, ix[90].InStack)
+	}
+	if ix[5].RefStack != ix[8].RefStack {
+		t.Errorf("jumps to one exit got columns %d and %d, want one", ix[5].RefStack, ix[8].RefStack)
 	}
 }

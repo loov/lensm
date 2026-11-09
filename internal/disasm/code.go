@@ -15,6 +15,8 @@ type Code struct {
 	// This is used to determine how much padding is created for
 	// the jump lines.
 	MaxJump int
+	// jumpsFar is the far argument of the last LayoutJumps, 0 before.
+	jumpsFar int
 
 	// Source is the slice of a codeblocks that were used to create the instructions.
 	Source []Source
