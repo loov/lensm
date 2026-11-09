@@ -115,6 +115,8 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 	pad, jumpStep := c.pad, c.jumpStep
 	jump, asm, native, gutter := c.jump, c.asm, c.native, c.gutter
 	highlightAsmIndex := hover.asmIndex
+	var tip markTip
+	defer func() { ui.layoutMarkTip(gtx, c, tip) }()
 
 	asmClip := clip.Rect{
 		Min: image.Pt(int(jump.Min), 0),
@@ -169,7 +171,9 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
 		}
 		if marks := ix.Marks & ui.Marks; marks != 0 && c.marks.Width() > 0 {
-			ui.layoutMarks(gtx, c, int(c.marks.Min), marks, 0, nil, nil, i*lineHeight+int(ui.asm.Offset))
+			if t := ui.layoutMarks(gtx, c, int(c.marks.Min), marks, 0, nil, nil, i*lineHeight+int(ui.asm.Offset), hover.position); t.text != "" {
+				tip = t
+			}
 		}
 		if ui.ShowNative {
 			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
@@ -256,6 +260,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 	// flow is the hovered note, whose explanation pops up.
 	var flow *disasm.Note
 	var flowLeft, flowTop int
+	var tip markTip
 	for row := range sourceRows(ui.Code, ui.noteRows()) {
 		rowTop := top
 		top += lineHeight
@@ -304,7 +309,9 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 			width := ui.layoutRowComment(gtx, ui.sourceCoord(src.File, lineNo), "//", col, rowTop, lineHeight, selectedSource)
 			width = min(width, right-int(source.Min))
 			if marks != 0 {
-				ui.layoutMarks(gtx, c, int(c.sourceMarks.Min), marks, c.sourceMarkSlots, c.markWidth, &line.counts, rowTop)
+				if t := ui.layoutMarks(gtx, c, int(c.sourceMarks.Min), marks, c.sourceMarkSlots, c.markWidth, &line.counts, rowTop, mousePosition); t.text != "" {
+					tip = t
+				}
 			}
 			sourceLine{
 				TopLeft:    image.Pt(int(source.Min), rowTop),
@@ -320,6 +327,7 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 	if flow != nil {
 		ui.layoutNoteFlow(gtx, c, flow, flowLeft, flowTop)
 	}
+	ui.layoutMarkTip(gtx, c, tip)
 	return top - int(ui.src.Offset)
 }
 
@@ -461,8 +469,10 @@ func (ui Style) layoutScrollbars(gtx layout.Context, c codeColumns, sourceConten
 // letter and, when counts has more than one of it, the count. Each
 // kind in slots keeps its own column, empty when the row lacks it;
 // with no slots the cells pack together. widthOf gives the width of
-// a cell, a square when nil.
-func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slots disasm.Mark, widthOf func(disasm.Mark) int, counts *markCounts, top int) {
+// a cell, a square when nil. It returns the tip of the cell under
+// pointer, if any.
+func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slots disasm.Mark, widthOf func(disasm.Mark) int, counts *markCounts, top int, pointer f32.Point) markTip {
+	var tip markTip
 	height := c.lineHeight
 	inset := height / 10
 	for i, m := range disasm.Marks {
@@ -484,6 +494,13 @@ func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slo
 			insetX = height / 20 // a narrow source cell
 		}
 		rect := image.Rect(x+insetX, top+inset, x+width-insetX, top+height-inset)
+		if image.Pt(int(pointer.X), int(pointer.Y)).In(image.Rect(x, top, x+width, top+height)) {
+			n := 1
+			if counts != nil {
+				n = counts[i]
+			}
+			tip = markTip{text: markTipText(m, n), chip: rect, color: col}
+		}
 		paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, rect.Dy()/4).Op(gtx.Ops))
 
 		// Measure the letter and count to centre them in the cell.
@@ -505,6 +522,54 @@ func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slo
 		}
 		x += width
 	}
+	return tip
+}
+
+// markTip explains the mark chip under the pointer.
+type markTip struct {
+	text  string
+	chip  image.Rectangle
+	color color.NRGBA
+}
+
+// markDescriptions say what each mark costs.
+var markDescriptions = map[disasm.Mark]string{
+	disasm.MarkSpill:        "spill: stores a register on the stack",
+	disasm.MarkReload:       "reload: loads a register back from the stack",
+	disasm.MarkBoundsCheck:  "bounds check: panics on an index out of range",
+	disasm.MarkAlloc:        "allocation: calls the heap allocator",
+	disasm.MarkWriteBarrier: "write barrier: tells the garbage collector about a pointer write",
+}
+
+// markTipText describes n marks m on one row.
+func markTipText(m disasm.Mark, n int) string {
+	if n > 1 {
+		return fmt.Sprintf("%d× %s", n, markDescriptions[m])
+	}
+	return markDescriptions[m]
+}
+
+// layoutMarkTip draws tip in a popup below its chip, or above when
+// there is no room below.
+func (ui Style) layoutMarkTip(gtx layout.Context, c codeColumns, tip markTip) {
+	if tip.text == "" {
+		return
+	}
+	pad := gtx.Dp(6)
+	line := sourceLine{Text: tip.text, TextHeight: ui.TextHeight * noteScale, Color: ui.Theme.Colors.Text}
+	size := image.Pt(glyphWidth(gtx, ui.Theme.Theme, line)+2*pad, c.lineHeight+pad)
+	pos := image.Pt(tip.chip.Min.X, tip.chip.Max.Y+gtx.Dp(2))
+	pos.X = max(min(pos.X, gtx.Constraints.Max.X-size.X), 0)
+	if pos.Y+size.Y > gtx.Constraints.Max.Y {
+		pos.Y = max(tip.chip.Min.Y-size.Y-gtx.Dp(2), 0)
+	}
+	macro := op.Record(gtx.Ops)
+	trans := op.Offset(pos).Push(gtx.Ops)
+	gui.Panel(gtx, ui.Theme, size, gtx.Dp(5))
+	line.TopLeft = image.Pt(pad, pad/2)
+	line.Layout(ui.Theme.Theme, gtx)
+	trans.Pop()
+	op.Defer(gtx.Ops, macro.Stop())
 }
 
 // glyphWidth measures the width of a short line of text.
