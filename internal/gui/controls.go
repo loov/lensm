@@ -50,10 +50,17 @@ type IconButton struct {
 	Clickable   *widget.Clickable
 	Icon        *widget.Icon
 	Description string
+	// Disabled dims the icon and ignores clicks.
+	Disabled bool
 }
 
 func (b IconButton) Layout(gtx layout.Context) layout.Dimensions {
 	c := b.Theme.Colors
+	fg := c.MutedText
+	if b.Disabled {
+		gtx = gtx.Disabled()
+		fg.A /= 3
+	}
 	return b.Clickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		semantic.Button.Add(gtx.Ops)
 		semantic.DescriptionOp(b.Description).Add(gtx.Ops)
@@ -64,7 +71,7 @@ func (b IconButton) Layout(gtx layout.Context) layout.Dimensions {
 		return frame(gtx, bg, bg, layout.UniformInset(5), func(gtx layout.Context) layout.Dimensions {
 			size := gtx.Metric.Dp(16)
 			gtx.Constraints = layout.Exact(image.Pt(size, size))
-			return b.Icon.Layout(gtx, c.MutedText)
+			return b.Icon.Layout(gtx, fg)
 		})
 	})
 }

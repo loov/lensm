@@ -178,7 +178,16 @@ func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
 					return ui.AppMenu.Layout(gtx, th, ui.appMenuItems(), ui.layoutBrand)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: 10, Right: 12}.Layout(gtx, ui.layoutPath)
+					// Fill the space, so the arrows sit by the search.
+					dims := layout.Inset{Left: 10, Right: 12}.Layout(gtx, ui.layoutPath)
+					dims.Size.X = gtx.Constraints.Max.X
+					return dims
+				}),
+				layout.Rigid(gui.IconButton{Theme: th, Clickable: &ui.BackButton, Icon: BackIcon,
+					Description: "Back", Disabled: !ui.Navigation.CanBack()}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Left: 2, Right: 8}.Layout(gtx, gui.IconButton{Theme: th, Clickable: &ui.ForwardButton, Icon: ForwardIcon,
+						Description: "Forward", Disabled: !ui.Navigation.CanForward()}.Layout)
 				}),
 			)
 		}),

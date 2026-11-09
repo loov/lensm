@@ -21,4 +21,6 @@ var (
 	HistoryIcon   = mustIcon(icons.ActionHistory)
 	WatchIcon     = mustIcon(icons.ActionVisibility)
 	MarksIcon     = mustIcon(icons.ActionAssessment)
+	BackIcon      = mustIcon(icons.NavigationArrowBack)
+	ForwardIcon   = mustIcon(icons.NavigationArrowForward)
 )

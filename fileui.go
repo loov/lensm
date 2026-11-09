@@ -67,6 +67,8 @@ type FileUI struct {
 	// Window chrome.
 	AppMenu        gui.Menu
 	GoToButton     widget.Clickable
+	BackButton     widget.Clickable
+	ForwardButton  widget.Clickable
 	QuickOpen      gui.QuickOpen[disasm.Func]
 	EmptyOpen      widget.Clickable
 	SettingsButton widget.Clickable
@@ -517,6 +519,12 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	}
 	for ui.SettingsButton.Clicked(gtx) {
 		ui.openSettings()
+	}
+	for ui.BackButton.Clicked(gtx) {
+		ui.navigateBack()
+	}
+	for ui.ForwardButton.Clicked(gtx) {
+		ui.navigateForward()
 	}
 	for ui.GoToButton.Clicked(gtx) {
 		ui.QuickOpen.Show(gtx)
