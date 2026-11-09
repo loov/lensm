@@ -112,9 +112,12 @@ Keys:
   least share a function needs to be drawn. The second button on the
   right edge draws a flame graph of the same samples instead, in a
   resizable pane across the bottom of the window, or right of the
-  code if Settings says so, callers on top; click a frame to zoom to it and open its function, and a
-  frame above to zoom out. Hold Command or Ctrl and scroll to zoom
-  about the pointer, and drag or scroll to pan.
+  code if Settings says so, callers on top. Click a frame to zoom to
+  it, and double-click it or hold Command or Ctrl while clicking to
+  open its function. Click a frame above, or press Escape, to zoom out
+  a step, and Home to see it all again. Enter in the search zooms to
+  the next frame found, widest first. Hold Command or Ctrl and scroll
+  to zoom about the pointer, and drag or scroll to pan.
   Compare Profile With… in
   the menu loads a profile to compare with, from this build or another,
   and the graphs then show the change from it by function name, as

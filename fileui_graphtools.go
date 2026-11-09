@@ -17,7 +17,10 @@ import (
 // focus on one function, hiding the runtime and the least share a
 // function needs to be drawn.
 type graphTools struct {
-	Find    widget.Editor
+	Find widget.Editor
+	// text is the search in lower case; query, matches and match are
+	// the call graph's last search and the functions it found.
+	text    string
 	query   string
 	matches []string
 	match   int
@@ -105,13 +108,18 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 	t.Find.SingleLine, t.Find.Submit = true, true
 
 	// The search marks the functions in the graph whose names contain
-	// it; Enter scrolls to the next.
+	// it; Enter scrolls to the next, or in the flame graph zooms to it.
 	for {
 		ev, ok := t.Find.Update(gtx)
 		if !ok {
 			break
 		}
-		if _, ok := ev.(widget.SubmitEvent); ok && len(t.matches) > 0 {
+		if _, ok := ev.(widget.SubmitEvent); !ok {
+			continue
+		}
+		if t.Flame {
+			ui.Flame.next()
+		} else if len(t.matches) > 0 {
 			t.match = (t.match + 1) % len(t.matches)
 			g.target = t.matches[t.match]
 		}
@@ -125,7 +133,8 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 			t.Find.SetText("")
 		}
 	}
-	if query := strings.ToLower(strings.TrimSpace(t.Find.Text())); query != t.query || g.matches == nil {
+	t.text = strings.ToLower(strings.TrimSpace(t.Find.Text()))
+	if query := t.text; !t.Flame && (query != t.query || g.matches == nil) {
 		t.query, t.matches, t.match = query, nil, 0
 		g.matches = map[string]bool{}
 		if query != "" && g.graph != nil {
@@ -139,6 +148,10 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 				g.target = t.matches[0]
 			}
 		}
+	}
+	found, current := len(t.matches), t.match
+	if t.Flame {
+		found, current = len(ui.Flame.find(ui.graphProfile(), t.text)), ui.Flame.match
 	}
 
 	focusText := "Focus"
@@ -156,10 +169,10 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 	if i, ok := t.Threshold.Update(gtx); ok {
 		t.share = graphShares[i].share
 	}
-	current := 0
+	threshold := 0
 	for i, s := range graphShares {
 		if s.share == g.share() {
-			current = i
+			threshold = i
 		}
 	}
 	options := make([]string, len(graphShares))
@@ -180,12 +193,15 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 				return gui.SearchField(gtx, th, gtx.Focused(&t.Find), gui.Editor(th, &t.Find, "Find in graph"))
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if t.query == "" {
+				if t.text == "" {
 					return layout.Dimensions{}
 				}
 				text := "none"
-				if len(t.matches) > 0 {
-					text = fmt.Sprintf("%d of %d", t.match+1, len(t.matches))
+				switch {
+				case current >= 0 && found > 0:
+					text = fmt.Sprintf("%d of %d", current+1, found)
+				case found > 0:
+					text = fmt.Sprintf("%d found", found)
 				}
 				return layout.Inset{Left: 6}.Layout(gtx, th.Muted(text, 0.85).Layout)
 			}),
@@ -202,7 +218,7 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 			}
 			t.Threshold.Width = 80
 			gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(90))
-			return t.Threshold.Layout(gtx, th, options, current)
+			return t.Threshold.Layout(gtx, th, options, threshold)
 		}),
 		layout.Flexed(1, gap),
 		layout.Rigid(gui.IconButton{Theme: th, Clickable: &ui.GraphFullBtn, Tip: &ui.GraphFullTip, Icon: icon, Description: description}.Layout),

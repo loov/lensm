@@ -70,27 +70,64 @@ func TestFlameClickZooms(t *testing.T) {
 		router.Frame(gtx.Ops)
 		return name, ok
 	}
-	click := func(x, y float32) (string, bool) {
+	var now time.Duration
+	click := func(x, y float32, mods key.Modifiers) (string, bool) {
+		now += time.Second
 		router.Queue(
-			pointer.Event{Source: pointer.Mouse, PointerID: 1, Buttons: pointer.ButtonPrimary, Kind: pointer.Press, Position: f32.Pt(x, y)},
-			pointer.Event{Source: pointer.Mouse, PointerID: 1, Kind: pointer.Release, Position: f32.Pt(x, y)},
+			pointer.Event{Source: pointer.Mouse, PointerID: 1, Buttons: pointer.ButtonPrimary, Kind: pointer.Press, Position: f32.Pt(x, y), Time: now},
+			pointer.Event{Source: pointer.Mouse, PointerID: 1, Kind: pointer.Release, Position: f32.Pt(x, y), Time: now, Modifiers: mods},
 		)
 		return frame()
 	}
 	frame()
-	// Rows are 20dp: all, main.main, then main.a over the first 3/4.
-	if name, ok := click(100, 50); !ok || name != "main.a" || !slices.Equal(f.zoom, []string{"all", "main.main", "main.a"}) {
+	// Rows are 20dp: all, main.main, then main.a over the first 3/4. A
+	// click zooms without opening.
+	if name, ok := click(100, 50, 0); ok || !slices.Equal(f.zoom, []string{"all", "main.main", "main.a"}) {
 		t.Fatalf("click on main.a = %q %v, zoom %q", name, ok, f.zoom)
 	}
 	// main.a now fills the width, so x=350 is in it, not in main.b.
 	frame()
-	boxes := f.layoutFrames(layout.Context{Metric: unit.Metric{PxPerDp: 1}}, image.Pt(400, 300))
+	boxes, _ := f.layoutFrames(layout.Context{Metric: unit.Metric{PxPerDp: 1}}, image.Pt(400, 300))
 	if last := boxes[len(boxes)-1]; last.node.name != "main.a" || last.rect.Dx() < 390 {
 		t.Fatalf("zoomed frame = %s, %v wide", last.node.name, last.rect.Dx())
 	}
-	if _, _ = click(200, 5); len(f.zoom) != 1 {
+	// Command and click opens it.
+	if name, ok := click(350, 50, key.ModShortcut); !ok || name != "main.a" {
+		t.Errorf("command click = %q %v", name, ok)
+	}
+	// So does a double click.
+	click(350, 30, 0)
+	now -= time.Second - 100*time.Millisecond
+	if name, ok := click(350, 30, 0); !ok || name != "main.main" {
+		t.Errorf("double click = %q %v", name, ok)
+	}
+	// Escape zooms out a step at a time, from main.main to all.
+	router.Queue(key.Event{Name: key.NameEscape, State: key.Press})
+	frame()
+	if len(f.zoom) != 1 {
+		t.Errorf("escape left zoom %q", f.zoom)
+	}
+	if _, _ = click(200, 5, 0); len(f.zoom) != 1 {
 		t.Errorf("click on all zooms to %q", f.zoom)
 	}
+
+	// Find counts the frames and Enter zooms to the widest first.
+	if found := f.find(prof, "main.b"); len(found) != 1 {
+		t.Errorf("found %d frames of main.b", len(found))
+	}
+	f.next()
+	if !slices.Equal(f.zoom, []string{"all", "main.main", "main.b"}) {
+		t.Errorf("next zoomed to %q", f.zoom)
+	}
+	f.zoom = nil
+
+	// Upside down, the root is the bottom row.
+	f.up = true
+	boxes, _ = f.layoutFrames(layout.Context{Metric: unit.Metric{PxPerDp: 1}}, image.Pt(400, 300))
+	if b := boxes[0]; b.node.parent != nil || b.rect.Max.Y != 299 {
+		t.Errorf("root upside down at %v", b.rect)
+	}
+	f.up = false
 
 	// Command and scroll zooms about the pointer: the point a quarter
 	// across stays a quarter across.
@@ -108,7 +145,7 @@ func TestFlameClickZooms(t *testing.T) {
 		pointer.Event{Source: pointer.Mouse, PointerID: 3, Buttons: pointer.ButtonPrimary, Kind: pointer.Move, Position: f32.Pt(300, 50)},
 		pointer.Event{Source: pointer.Mouse, PointerID: 3, Kind: pointer.Release, Position: f32.Pt(300, 50)},
 	)
-	if name, ok := frame(); ok || len(f.zoom) != 1 {
+	if name, ok := frame(); ok || len(f.zoom) > 1 {
 		t.Errorf("drag clicked %q, zoom %q", name, f.zoom)
 	}
 	if p0, _ := f.view(); p0 >= v0 {

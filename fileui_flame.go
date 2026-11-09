@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"time"
 
 	"gioui.org/f32"
 	"gioui.org/io/event"
@@ -101,6 +102,19 @@ type flameGraph struct {
 	// as fractions of it; view1 0 means 1, the whole.
 	view0, view1 float64
 
+	// up draws the root at the bottom and the callees above it, as a
+	// classic flame graph does, instead of the callers on top.
+	up bool
+	// reveal scrolls the zoomed frame into view on the next layout.
+	reveal bool
+
+	// matches are the frames whose names contain query, widest first,
+	// and match the one Enter last zoomed to, -1 for none yet.
+	matches []*flameNode
+	match   int
+	query   string
+	queryOf *flameNode
+
 	hover   *flameNode
 	pointer f32.Point
 	inside  bool
@@ -109,6 +123,72 @@ type flameGraph struct {
 	// whether the press moved far enough to pan instead of click.
 	drag  f32.Point
 	moved bool
+	// lastNode and lastClick are the frame and time of the last click,
+	// to tell a double click.
+	lastNode  *flameNode
+	lastClick time.Duration
+}
+
+// tree is the call tree of prof, built again when prof changes.
+func (f *flameGraph) tree(prof *pprof.Profile) *flameNode {
+	if f.of != prof {
+		f.root, f.of, f.zoom, f.offset, f.hover = flameTree(prof), prof, nil, 0, nil
+		f.view0, f.view1, f.lastNode = 0, 0, nil
+	}
+	return f.root
+}
+
+// find marks the frames of prof whose names contain query, which is
+// lower case, and returns them.
+func (f *flameGraph) find(prof *pprof.Profile, query string) []*flameNode {
+	root := f.tree(prof)
+	if query == f.query && root == f.queryOf {
+		return f.matches
+	}
+	f.query, f.queryOf, f.matches, f.match = query, root, nil, -1
+	if query == "" {
+		return nil
+	}
+	var walk func(n *flameNode)
+	walk = func(n *flameNode) {
+		if n.parent != nil && strings.Contains(strings.ToLower(n.name), query) {
+			f.matches = append(f.matches, n)
+		}
+		for _, c := range n.children {
+			walk(c)
+		}
+	}
+	walk(root)
+	slices.SortStableFunc(f.matches, func(a, b *flameNode) int { return cmp.Compare(b.value, a.value) })
+	return f.matches
+}
+
+// next zooms to the next frame found.
+func (f *flameGraph) next() {
+	if len(f.matches) == 0 {
+		return
+	}
+	f.match = (f.match + 1) % len(f.matches)
+	f.zoomTo(f.matches[f.match])
+	f.reveal = true
+}
+
+// zoomTo draws n full width.
+func (f *flameGraph) zoomTo(n *flameNode) {
+	f.zoom = n.path()
+	f.view0, f.view1 = 0, 0
+}
+
+// zoomOut undoes a scroll zoom, or else zooms to the zoomed frame's
+// caller.
+func (f *flameGraph) zoomOut() {
+	switch {
+	case f.view1 > f.view0:
+		f.view0, f.view1 = 0, 0
+	case len(f.zoom) > 1:
+		f.zoom = f.zoom[:len(f.zoom)-1]
+		f.reveal = true
+	}
 }
 
 // view is the shown part of the zoomed frame, as fractions.
@@ -133,8 +213,9 @@ type flameBox struct {
 }
 
 // layoutFrames places the frames of the zoomed tree in size: the
-// zoomed frame's callers each full width, then its subtree.
-func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) []flameBox {
+// zoomed frame's callers each full width, then its subtree. It returns
+// them and the height of them all, scrolled or not.
+func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) ([]flameBox, int) {
 	row := gtx.Dp(20)
 	zoomed := f.root
 	for _, name := range f.zoom[min(len(f.zoom), 1):] {
@@ -176,7 +257,15 @@ func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) []flameB
 		}
 	}
 	place(zoomed, -v0*float64(zoomed.value)*scale, y)
-	return boxes
+	height := 0
+	for i, b := range boxes {
+		height = max(height, b.rect.Max.Y+1+int(f.offset))
+		if f.up {
+			r := b.rect
+			boxes[i].rect = image.Rect(r.Min.X, size.Y-r.Max.Y-1, r.Max.X, size.Y-r.Min.Y-1)
+		}
+	}
+	return boxes, height
 }
 
 // layout draws the flame graph of prof and returns the function
@@ -186,10 +275,8 @@ func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) []flameB
 func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profile, query, focus string) (string, bool) {
 	size := gtx.Constraints.Max
 	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
-	if f.of != prof {
-		f.root, f.of, f.zoom, f.offset, f.hover = flameTree(prof), prof, nil, 0, nil
-	}
-	boxes := f.layoutFrames(gtx, size)
+	f.tree(prof)
+	boxes, _ := f.layoutFrames(gtx, size)
 	at := func(p f32.Point) *flameNode {
 		pt := p.Round()
 		for i := len(boxes) - 1; i >= 0; i-- {
@@ -200,8 +287,31 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 		return nil
 	}
 
+	// Scrolling and dragging move the frames the other way up.
+	dir := float32(1)
+	if f.up {
+		dir = -1
+	}
 	clicked := ""
 	event.Op(gtx.Ops, f)
+	for {
+		ev, ok := gtx.Event(
+			key.FocusFilter{Target: f},
+			key.Filter{Focus: f, Name: key.NameEscape},
+			key.Filter{Focus: f, Name: key.NameDeleteBackward},
+			key.Filter{Focus: f, Name: key.NameHome},
+		)
+		if !ok {
+			break
+		}
+		if e, ok := ev.(key.Event); ok && e.State == key.Press {
+			if e.Name == key.NameHome {
+				f.zoom, f.view0, f.view1, f.offset = nil, 0, 0, 0
+			} else {
+				f.zoomOut()
+			}
+		}
+	}
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
 			Target:  f,
@@ -227,9 +337,9 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 				f.setView(v0+at*w-at*min(max(nw, 1e-4), 1), nw)
 			} else {
 				f.setView(v0+float64(e.Scroll.X)/float64(size.X)*w, w)
-				f.offset += e.Scroll.Y
+				f.offset += dir * e.Scroll.Y
 			}
-			boxes = f.layoutFrames(gtx, size)
+			boxes, _ = f.layoutFrames(gtx, size)
 		case pointer.Move:
 			f.hover, f.pointer, f.inside = at(e.Position), e.Position, true
 		case pointer.Leave:
@@ -242,16 +352,23 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 				f.moved = true
 				v0, v1 := f.view()
 				f.setView(v0-float64(d.X)/float64(size.X)*(v1-v0), v1-v0)
-				f.offset -= d.Y
+				f.offset -= dir * d.Y
 				f.drag = e.Position
-				boxes = f.layoutFrames(gtx, size)
+				boxes, _ = f.layoutFrames(gtx, size)
 			}
 		case pointer.Release:
+			// A click zooms to the frame, which keeps its row, so it
+			// stays under the pointer. A double click or one with
+			// Command or Ctrl held also opens its function.
 			if n := at(e.Position); f.press && !f.moved && n != nil {
-				f.zoom = n.path()
-				f.offset, f.view0, f.view1 = 0, 0, 0
-				if n.parent != nil {
+				double := n == f.lastNode && e.Time-f.lastClick < 400*time.Millisecond
+				f.lastNode, f.lastClick = n, e.Time
+				f.zoomTo(n)
+				// Escape and Home then zoom out.
+				gtx.Execute(key.FocusCmd{Tag: f})
+				if n.parent != nil && (double || e.Modifiers.Contain(key.ModShortcut)) {
 					clicked = n.name
+					f.lastNode = nil
 				}
 			}
 			f.press = false
@@ -259,13 +376,15 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 			f.press = false
 		}
 	}
-	// Keep the scroll within the frames.
-	height := 0
-	for _, b := range boxes {
-		height = max(height, b.rect.Max.Y+int(f.offset))
+	if f.reveal {
+		// Put the zoomed frame a third of the way into the pane.
+		f.reveal = false
+		f.offset = float32(max(len(f.zoom)-1, 0)*gtx.Dp(20) - size.Y/3)
 	}
+	// Keep the scroll within the frames.
+	_, height := f.layoutFrames(gtx, size)
 	f.offset = min(max(f.offset, 0), float32(max(height-size.Y, 0)))
-	boxes = f.layoutFrames(gtx, size)
+	boxes, _ = f.layoutFrames(gtx, size)
 	if f.hover != nil {
 		pointer.CursorPointer.Add(gtx.Ops)
 	}
@@ -291,7 +410,7 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 		paint.FillShape(gtx.Ops, c.Background, clip.UniformRRect(b.rect, radius).Op(gtx.Ops))
 		paint.FillShape(gtx.Ops, col, clip.UniformRRect(b.rect, radius).Op(gtx.Ops))
 		switch {
-		case query != "" && strings.Contains(strings.ToLower(n.name), query):
+		case query != "" && n.parent != nil && strings.Contains(strings.ToLower(n.name), query):
 			paint.FillShape(gtx.Ops, c.Marks.Spill, clip.Stroke{Path: clip.UniformRRect(b.rect, radius).Path(gtx.Ops), Width: float32(gtx.Dp(2))}.Op())
 		case n == f.hover || n.name == focus:
 			paint.FillShape(gtx.Ops, c.Accent, clip.Stroke{Path: clip.UniformRRect(b.rect, radius).Path(gtx.Ops), Width: float32(gtx.Dp(1))}.Op())
