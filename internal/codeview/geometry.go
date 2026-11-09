@@ -2,6 +2,7 @@ package codeview
 
 import (
 	"math/bits"
+	"strconv"
 
 	"gioui.org/f32"
 	"gioui.org/layout"
@@ -33,11 +34,12 @@ type codeColumns struct {
 	// short.
 	sourceMarks bounds
 	// sourceMarkSlots are the kinds that get a column in sourceMarks.
-	// The kinds in sourceMarkWide occur more than once on a line, and
-	// their columns are wider to fit the count.
-	sourceMarkSlots disasm.Mark
-	sourceMarkWide  disasm.Mark
-	source          bounds
+	// sourceMarkDigits is, per kind in disasm.Marks order, the digits
+	// of the largest count on a line, zero without one; the columns of
+	// counted kinds are wider to fit it.
+	sourceMarkSlots  disasm.Mark
+	sourceMarkDigits markDigits
+	source           bounds
 
 	// goCol, nativeCol and sourceCol split each column into text and
 	// comment regions.
@@ -165,8 +167,8 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	c.goCol = splitColumn(int(asm.Min)+pad/2, int(asm.Max), pad, minimumCommentWidth, 62)
 	c.nativeCol = splitColumn(int(native.Min), int(native.Max), pad, minimumCommentWidth, 62)
 	sourceRight := int(source.Max)
-	if slots, wide := ui.lineMarkKinds(); ui.ShowSource && slots != 0 {
-		c.sourceMarkSlots, c.sourceMarkWide = slots, wide
+	if slots, digits := ui.lineMarkKinds(); ui.ShowSource && slots != 0 {
+		c.sourceMarkSlots, c.sourceMarkDigits = slots, digits
 		w := 0
 		for _, m := range disasm.Marks {
 			if slots&m != 0 {
@@ -194,18 +196,21 @@ func (ui Style) maxMarks() int {
 	return most
 }
 
+// markDigits counts digits per kind, in disasm.Marks order.
+type markDigits [len(disasm.Marks)]int
+
 // lineMarkKinds are the shown kinds found on any source line, and the
-// ones among them that occur more than once on a line.
-func (ui Style) lineMarkKinds() (kinds, repeated disasm.Mark) {
+// digits of the largest count above one of each.
+func (ui Style) lineMarkKinds() (kinds disasm.Mark, digits markDigits) {
 	for _, line := range ui.hl.lineMarks {
 		kinds |= line.marks
 		for i, n := range line.counts {
-			if n > 1 {
-				repeated |= disasm.Marks[i]
+			if n > 1 && ui.Marks&disasm.Marks[i] != 0 {
+				digits[i] = max(digits[i], len(strconv.Itoa(n)))
 			}
 		}
 	}
-	return kinds & ui.Marks, repeated & ui.Marks
+	return kinds & ui.Marks, digits
 }
 
 // sourceMarksLeft is where the first cell of marks starts in the source
@@ -224,11 +229,12 @@ func (c codeColumns) sourceMarksLeft(marks disasm.Mark) int {
 }
 
 // markWidth is the width of the source lane column for m, a narrow
-// cell around the letter. A count after the letter needs room for two
-// digits.
+// cell around the letter and, after it, room for the count's digits.
 func (c codeColumns) markWidth(m disasm.Mark) int {
-	if c.sourceMarkWide&m != 0 {
-		return c.lineHeight * 5 / 4
+	for i, k := range disasm.Marks {
+		if k == m {
+			return c.lineHeight*3/4 + c.sourceMarkDigits[i]*c.lineHeight/2
+		}
 	}
 	return c.lineHeight * 3 / 4
 }

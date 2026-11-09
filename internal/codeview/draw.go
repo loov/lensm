@@ -519,16 +519,14 @@ func (ui Style) layoutMarks(gtx layout.Context, c codeColumns, x int, marks, slo
 		total := glyphWidth(gtx, ui.Theme.Theme, letter)
 		var count sourceLine
 		if counts != nil && counts[i] > 1 {
-			count = sourceLine{Text: strconv.Itoa(counts[i]), TextHeight: ui.TextHeight * 0.85, Color: col}
+			count = sourceLine{Text: strconv.Itoa(counts[i]), TextHeight: ui.TextHeight, Italic: true, Color: col}
 			total += glyphWidth(gtx, ui.Theme.Theme, count)
 		}
 		left := x + (width-total)/2
 		letter.TopLeft = image.Pt(left, top)
 		letter.Layout(ui.Theme.Theme, gtx)
 		if count.Text != "" {
-			// Share the baseline with the letter.
-			drop := codeLineHeightPx(gtx, letter.TextHeight) - codeLineHeightPx(gtx, count.TextHeight)
-			count.TopLeft = image.Pt(left+glyphWidth(gtx, ui.Theme.Theme, letter), top+drop*3/4)
+			count.TopLeft = image.Pt(left+glyphWidth(gtx, ui.Theme.Theme, letter), top)
 			count.Layout(ui.Theme.Theme, gtx)
 		}
 		x += width

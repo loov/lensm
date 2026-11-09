@@ -85,6 +85,13 @@ func TestSourceMarksLaneWidensForCounts(t *testing.T) {
 	if want := float32(c.markWidth(disasm.MarkSpill) + c.markWidth(disasm.MarkBoundsCheck)); c.sourceMarks.Width() != want {
 		t.Errorf("source lane is %v wide, want %v", c.sourceMarks.Width(), want)
 	}
+
+	// Twelve spills need room for a second digit.
+	one := c.markWidth(disasm.MarkSpill)
+	state.hl.lineMarks[sourcePos{"a.go", 3}] = &lineMarks{disasm.MarkSpill, markCounts{12, 0, 0, 0, 0}}
+	if two := style.columns(gtx).markWidth(disasm.MarkSpill); two <= one {
+		t.Errorf("spill cell is %d wide with twelve spills, %d with two", two, one)
+	}
 }
 
 func TestBoundsCheckCountsOnce(t *testing.T) {
