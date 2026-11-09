@@ -44,6 +44,7 @@ func (ui *FileUI) applySettings(s AppSettings) {
 	ui.ShowGoAsm.Value = s.ShowGoAsm
 	ui.ShowNativeAsm.Value = s.ShowNativeAsm
 	ui.ShowSource.Value = s.ShowSource
+	ui.ShowDiagnostics.Value = !s.HideDiagnostics
 	ui.ShowAsmHelp.Value = s.ShowAsmHelp
 	ui.HoverLinksOnly.Value = s.HoverLinksOnly
 	ui.SyncScroll.Value = s.SyncScroll

@@ -31,12 +31,15 @@ type AppSettings struct {
 	HiddenMarks disasm.Mark `json:"hidden_marks,omitempty"`
 	// HiddenNotes are the compiler note kinds turned off there. Not
 	// omitted when empty, since the default hides some.
-	HiddenNotes  disasm.NoteKind `json:"hidden_notes"`
-	TextSize     int             `json:"text_size,omitempty"`
-	SidebarRatio float32         `json:"sidebar_ratio,omitempty"`
-	LastPath     string          `json:"last_path,omitempty"`
-	OpenTabs     []string        `json:"open_tabs,omitempty"`
-	ActiveTab    string          `json:"active_tab,omitempty"`
+	HiddenNotes disasm.NoteKind `json:"hidden_notes"`
+	// HideDiagnostics turns off every mark and note at once, keeping
+	// the kinds chosen above for when they come back.
+	HideDiagnostics bool     `json:"hide_diagnostics,omitempty"`
+	TextSize        int      `json:"text_size,omitempty"`
+	SidebarRatio    float32  `json:"sidebar_ratio,omitempty"`
+	LastPath        string   `json:"last_path,omitempty"`
+	OpenTabs        []string `json:"open_tabs,omitempty"`
+	ActiveTab       string   `json:"active_tab,omitempty"`
 }
 
 func DefaultAppSettings() AppSettings {

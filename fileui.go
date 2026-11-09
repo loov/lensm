@@ -86,12 +86,14 @@ type FileUI struct {
 	HistoryList        gui.ClickList
 
 	// Column toggles and settings.
-	ShowGoAsm      widget.Bool
-	ShowNativeAsm  widget.Bool
-	ShowSource     widget.Bool
-	ShowAsmHelp    widget.Bool
-	HoverLinksOnly widget.Bool
-	SyncScroll     widget.Bool
+	ShowGoAsm     widget.Bool
+	ShowNativeAsm widget.Bool
+	// ShowDiagnostics shows the marks and notes, all of them at once.
+	ShowDiagnostics widget.Bool
+	ShowSource      widget.Bool
+	ShowAsmHelp     widget.Bool
+	HoverLinksOnly  widget.Bool
+	SyncScroll      widget.Bool
 	// SyncScrollSetting is the same switch in the settings, a widget of
 	// its own since both can be on screen.
 	SyncScrollSetting widget.Bool
@@ -159,6 +161,7 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.Tabs.List.Axis = layout.Horizontal
 	ui.ShowGoAsm.Value = settings.ShowGoAsm
 	ui.ShowNativeAsm.Value = settings.ShowNativeAsm
+	ui.ShowDiagnostics.Value = !settings.HideDiagnostics
 	ui.ShowSource.Value = settings.ShowSource
 	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
 	ui.HoverLinksOnly.Value = settings.HoverLinksOnly
@@ -505,8 +508,8 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	ui.handleColumnToggles(gtx)
 }
 
-// handleColumnToggles saves the column choice and keeps at least one
-// column showing.
+// handleColumnToggles saves the column and diagnostics choices and
+// keeps at least one column showing.
 func (ui *FileUI) handleColumnToggles(gtx layout.Context) {
 	changed := false
 	for _, b := range []*widget.Bool{&ui.ShowGoAsm, &ui.ShowNativeAsm, &ui.ShowSource} {
@@ -517,9 +520,13 @@ func (ui *FileUI) handleColumnToggles(gtx layout.Context) {
 			}
 		}
 	}
+	for ui.ShowDiagnostics.Update(gtx) {
+		changed = true
+	}
 	if changed {
 		s := ui.Settings
 		s.ShowGoAsm, s.ShowNativeAsm, s.ShowSource = ui.ShowGoAsm.Value, ui.ShowNativeAsm.Value, ui.ShowSource.Value
+		s.HideDiagnostics = !ui.ShowDiagnostics.Value
 		ui.saveSettings(s)
 	}
 }
@@ -669,6 +676,10 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 							code.Notes = disasm.AllNotes &^ ui.Settings.HiddenNotes
+							marks := disasm.AllMarks &^ ui.Settings.HiddenMarks
+							if ui.Settings.HideDiagnostics {
+								code.Notes, marks = 0, 0
+							}
 							return codeview.Style{
 								UI: code,
 
@@ -690,7 +701,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								ShowHelp:       ui.ShowAsmHelp.Value,
 								HoverLinksOnly: ui.HoverLinksOnly.Value,
 								SyncScroll:     ui.SyncScroll.Value,
-								Marks:          disasm.AllMarks &^ ui.Settings.HiddenMarks,
+								Marks:          marks,
 								TextHeight:     ui.Theme.TextSize,
 							}.Layout(gtx)
 						}),

@@ -35,7 +35,7 @@ var (
 	renderFilter   = flag.String("render.filter", "", "function list filter")
 	renderDark     = flag.Bool("render.dark", false, "use the dark theme")
 	renderPanel    = flag.String("render.panel", "functions", "sidebar panel: functions, comments, history or diagnostics")
-	renderCols     = flag.String("render.cols", "gns", "columns to show: g for Go asm, n for native asm, s for source")
+	renderCols     = flag.String("render.cols", "gnsd", "columns to show: g for Go asm, n for native asm, s for source, d for diagnostics")
 	renderSyntax   = flag.String("render.syntax", "xcode", "syntax style")
 	renderSize     = flag.String("render.size", "1400x900", "window size in dp")
 	renderScale    = flag.Float64("render.scale", 2, "pixels per dp")
@@ -69,6 +69,7 @@ func TestRender(t *testing.T) {
 	st.ShowGoAsm = strings.Contains(*renderCols, "g")
 	st.ShowNativeAsm = strings.Contains(*renderCols, "n")
 	st.ShowSource = strings.Contains(*renderCols, "s")
+	st.HideDiagnostics = !strings.Contains(*renderCols, "d")
 	st.SyntaxStyle = *renderSyntax
 	ui.split.Ratio = st.SidebarRatio
 	ui.applySettings(st)

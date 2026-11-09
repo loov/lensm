@@ -166,6 +166,7 @@ func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
 						{Label: "Go asm", Value: &ui.ShowGoAsm},
 						{Label: "Native", Value: &ui.ShowNativeAsm},
 						{Label: "Source", Value: &ui.ShowSource},
+						{Label: "Diagnostics", Value: &ui.ShowDiagnostics},
 					}}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						button := gui.IconButton{Theme: th, Clickable: &ui.SettingsButton, Icon: SettingsIcon, Description: "Settings"}
