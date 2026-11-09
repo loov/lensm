@@ -582,11 +582,11 @@ func glyphWidth(gtx layout.Context, th *material.Theme, line sourceLine) int {
 
 // markGlyphs are the letters drawn for each mark.
 var markGlyphs = map[disasm.Mark]string{
-	disasm.MarkSpill:        "s",
-	disasm.MarkReload:       "r",
-	disasm.MarkBoundsCheck:  "b",
-	disasm.MarkAlloc:        "a",
-	disasm.MarkWriteBarrier: "w",
+	disasm.MarkSpill:        "S",
+	disasm.MarkReload:       "R",
+	disasm.MarkBoundsCheck:  "B",
+	disasm.MarkAlloc:        "A",
+	disasm.MarkWriteBarrier: "W",
 }
 
 // MarkGlyph is the letter drawn for a single mark.
