@@ -71,6 +71,10 @@ Keys:
 - drag across Go assembly, native assembly, or source lines to select a block,
   then use `Cmd/Ctrl+C` to copy it. `Shift` extends a selection and
   `Escape` clears it;
+- right-click an instruction to scroll its source line beside it, or a
+  source line to scroll its instructions beside it; when the line
+  compiled into several runs of instructions, each right-click steps to
+  the next run;
 - double-click a line, or press `Enter` on a selected one, to comment on it;
   `Escape` leaves the comment.
 

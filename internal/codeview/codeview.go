@@ -191,17 +191,8 @@ func (ui *UI) applyReveal(gtx layout.Context, lineHeight int) {
 		region.Clamp(gtx, 0, float32(rows*lineHeight))
 	}
 	if c.View == ViewSource {
-		row, rows := -1, 0
-		for r := range sourceRows(ui.Code, ui.noteRows()) {
-			if r.kind == sourceRowLine {
-				src := ui.Code.Source[r.file]
-				if src.File == c.File && src.Blocks[r.block].From+r.off == c.Line {
-					row = rows
-				}
-			}
-			rows++
-		}
-		if row >= 0 {
+		if row := ui.sourceLineRow(c.File, c.Line); row >= 0 {
+			rows := sourceRowCount(ui.Code, ui.noteRows())
 			ui.SelectedAsm, ui.SelectedView = -1, ViewSource
 			ui.SelectedFile, ui.SelectedLine = c.File, c.Line
 			middle(&ui.src, row, rows)
@@ -273,6 +264,9 @@ func (ui Style) Layout(gtx layout.Context) layout.Dimensions {
 	}.Op())
 	if scroll, ok := ui.asm.Anim.Update(gtx); ok {
 		ui.asm.Offset = scroll
+	}
+	if scroll, ok := ui.src.Anim.Update(gtx); ok {
+		ui.src.Offset = scroll
 	}
 
 	hover := ui.resolveHover(gtx, c, mouseClicked)

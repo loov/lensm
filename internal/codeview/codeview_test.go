@@ -111,3 +111,52 @@ func TestCodeUIStyleLayoutWithHelpAndSelection(t *testing.T) {
 		t.Fatalf("overshoot drag selection = %#v, range %d..%d", state.Selection, from, to)
 	}
 }
+
+func TestAlignCounterpart(t *testing.T) {
+	// Line 2 compiles to two runs, instructions 1 and 3.
+	state := &UI{Code: &disasm.Code{
+		Insts: []disasm.Inst{
+			{Text: "A", File: "a.go", Line: 1},
+			{Text: "B", File: "a.go", Line: 2},
+			{Text: "C", File: "a.go", Line: 3},
+			{Text: "D", File: "a.go", Line: 2},
+		},
+		Source: []disasm.Source{{
+			File:   "a.go",
+			Blocks: []disasm.SourceBlock{{From: 1, To: 3, Lines: []string{"a", "b", "c"}}},
+		}},
+	}}
+	gtx := layout.Context{
+		Ops:         new(op.Ops),
+		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+		Now:         time.Now(),
+		Constraints: layout.Exact(image.Pt(1200, 600)),
+	}
+	style := Style{UI: state, ShowGo: true, ShowSource: true, TextHeight: 12}
+	c := style.columns(gtx)
+	lh := float32(c.lineHeight)
+	finish := func(region *scrollRegion) float32 {
+		gtx.Now = gtx.Now.Add(time.Second)
+		if scroll, ok := region.Anim.Update(gtx); ok {
+			region.Offset = scroll
+		}
+		return region.Offset
+	}
+
+	// The header is source row 0, so line 3 is row 3; instruction C
+	// is row 2 in the assembly.
+	style.alignCounterpart(gtx, c, f32.Pt(c.asm.Min+1, 2*lh+1))
+	if got := finish(&state.src); got != -lh {
+		t.Errorf("source offset = %v, want line 3 beside instruction C at %v", got, -lh)
+	}
+
+	// Pressing line 2 steps through its runs: B, then D, then B again.
+	state.src.Offset = 0
+	at := f32.Pt(c.source.Min+1, 2*lh+1)
+	for _, want := range []int{1, 3, 1} {
+		style.alignCounterpart(gtx, c, at)
+		if got := finish(&state.asm); got != 2*lh-float32(want)*lh {
+			t.Errorf("assembly offset = %v, want instruction %d beside line 2", got, want)
+		}
+	}
+}

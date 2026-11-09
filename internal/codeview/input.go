@@ -87,6 +87,9 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 				}
 			case pointer.Press:
 				ui.mousePosition = ev.Position
+				if ev.Buttons.Contain(pointer.ButtonSecondary) {
+					ui.alignCounterpart(gtx, c, ev.Position)
+				}
 				if ev.Buttons.Contain(pointer.ButtonPrimary) {
 					if ui.OnInteract != nil {
 						ui.OnInteract()
@@ -132,9 +135,11 @@ func (ui Style) handleInput(gtx layout.Context, c codeColumns) (mouseClicked boo
 				overflow := float32(lineHeight)
 				switch {
 				case c.asm.Contains(ev.Position.X) || ui.ShowNative && c.native.Contains(ev.Position.X):
+					ui.asm.Anim.Stop()
 					ui.asm.Offset -= ev.Scroll.Y
 					ui.asm.Clamp(gtx, -overflow, float32(len(ui.Code.Insts)*lineHeight)+overflow)
 				case c.source.Contains(ev.Position.X):
+					ui.src.Anim.Stop()
 					ui.src.Offset -= ev.Scroll.Y
 					ui.src.Clamp(gtx, -overflow, float32(sourceRowCount(ui.Code, ui.noteRows())*lineHeight)+overflow)
 				}
@@ -334,3 +339,98 @@ func (ui Style) measureAsmTextWidth(gtx layout.Context, f font.Font, text string
 	_ = macro.Stop()
 	return dims.Size.X
 }
+
+// alignCounterpart scrolls the other side so the counterpart of the row
+// at position lines up with it: the source line of an instruction, or
+// the instructions of a source line. A line compiled into several runs
+// of instructions steps to the next run on each press.
+func (ui Style) alignCounterpart(gtx layout.Context, c codeColumns, position f32.Point) {
+	lineHeight := c.lineHeight
+	duration := 150 * time.Millisecond
+	if c.asm.Contains(position.X) || ui.ShowNative && c.native.Contains(position.X) {
+		i := int(position.Y-ui.asm.Offset) / lineHeight
+		if !ui.ShowSource || position.Y < ui.asm.Offset || i >= len(ui.Code.Insts) {
+			return
+		}
+		row := ui.sourceLineRow(ui.Code.Insts[i].File, ui.Code.Insts[i].Line)
+		if row < 0 {
+			return
+		}
+		top := ui.asm.Offset + float32(i*lineHeight)
+		ui.src.Anim.Start(gtx, ui.src.Offset, top-float32(row*lineHeight), duration)
+		return
+	}
+	if !c.source.Contains(position.X) || !(ui.ShowGo || ui.ShowNative) {
+		return
+	}
+	row := sourceRowAtY(ui.Code, ui.noteRows(), ui.src.Offset, lineHeight, position.Y)
+	file, line, ok := ui.sourceRowLine(row)
+	if !ok {
+		return
+	}
+	top := ui.src.Offset + float32(row*lineHeight)
+	// The instruction now beside the line. When it is in one of the
+	// line's runs, step to the next run; otherwise go to the nearest.
+	beside := int(math.Floor(float64((top - ui.asm.Offset) / float32(lineHeight))))
+	insts := ui.Code.Insts
+	at := func(i int) bool { return 0 <= i && i < len(insts) && insts[i].File == file && insts[i].Line == line }
+	var starts []int
+	for i := range insts {
+		if at(i) && !at(i-1) {
+			starts = append(starts, i)
+		}
+	}
+	if len(starts) == 0 {
+		return
+	}
+	next := starts[0]
+	if at(beside) {
+		for _, i := range starts {
+			if i > beside {
+				next = i
+				break
+			}
+		}
+	} else {
+		for _, i := range starts {
+			if abs(i-beside) < abs(next-beside) {
+				next = i
+			}
+		}
+	}
+	ui.asm.Anim.Start(gtx, ui.asm.Offset, top-float32(next*lineHeight), duration)
+}
+
+// sourceLineRow is the source row index of line in file, or -1.
+func (ui *UI) sourceLineRow(file string, line int) int {
+	row := 0
+	for r := range sourceRows(ui.Code, ui.noteRows()) {
+		if r.kind == sourceRowLine {
+			src := ui.Code.Source[r.file]
+			if src.File == file && src.Blocks[r.block].From+r.off == line {
+				return row
+			}
+		}
+		row++
+	}
+	return -1
+}
+
+// sourceRowLine is the file and line shown on source row index, if it
+// shows one.
+func (ui *UI) sourceRowLine(index int) (string, int, bool) {
+	row := 0
+	for r := range sourceRows(ui.Code, ui.noteRows()) {
+		if row == index {
+			if r.kind != sourceRowLine {
+				return "", 0, false
+			}
+			src := ui.Code.Source[r.file]
+			return src.File, src.Blocks[r.block].From + r.off, true
+		}
+		row++
+	}
+	return "", 0, false
+}
+
+func abs(x int) int { return max(x, -x) }
