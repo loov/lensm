@@ -877,6 +877,7 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 								TextHeight:     ui.Theme.TextSize,
 								Profile:        profileFlat(ui.Profile),
 								ProfileTotal:   profileTotal(ui.Profile),
+								ProfileCalls:   profileCalls(ui.Profile),
 							}.Layout(gtx)
 						}),
 					)

@@ -11,6 +11,7 @@ import (
 
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"
+	"loov.dev/lensm/internal/pprof"
 )
 
 type indexResult struct {
@@ -54,6 +55,14 @@ func (ui *FileUI) layoutCallersPanel(gtx layout.Context) layout.Dimensions {
 	if tab != nil && ui.Index != nil {
 		callers = ui.Index.Callers[tab.Name]
 	}
+	// With a profile the callers that spend the most through the open
+	// function come first.
+	var sent func(caller string) int64
+	if ui.Profile != nil && tab != nil {
+		sent = func(caller string) int64 { return ui.Profile.Edges[pprof.Edge{Caller: caller, Callee: tab.Name}] }
+		callers = slices.Clone(callers)
+		slices.SortStableFunc(callers, func(a, b string) int { return cmp.Compare(sent(b), sent(a)) })
+	}
 	if i, ok := ui.CallersList.Clicked(gtx); ok && i < len(callers) {
 		ui.openTab(ui.findFunc(callers[i]), true)
 		gtx.Execute(op.InvalidateCmd{})
@@ -73,7 +82,13 @@ func (ui *FileUI) layoutCallersPanel(gtx layout.Context) layout.Dimensions {
 		}
 		return ui.CallersList.Layout(gtx, th, len(callers), -1, func(i int) (string, string) {
 			pkg, name := gui.SplitPackage(callers[i])
-			return name, strings.TrimSuffix(pkg, ".")
+			detail := strings.TrimSuffix(pkg, ".")
+			if sent != nil {
+				if v := sent(callers[i]); v > 0 {
+					detail += "  " + percentOf(v, ui.Profile.Total)
+				}
+			}
+			return name, detail
 		})
 	})
 }

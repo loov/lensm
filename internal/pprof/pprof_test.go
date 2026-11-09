@@ -85,6 +85,33 @@ func main() {
 	if all == 0 || in*2 < all {
 		t.Errorf("%d of %d %s in main.spin [%#x, %#x)", in, all, p.Type, addr, addr+size)
 	}
+	// main.main's call to main.spin carries nearly all the samples, and
+	// the call's address lies inside the call instruction.
+	if e := p.Edges[Edge{"main.main", "main.spin"}]; e*2 < all {
+		t.Errorf("edge main.main → main.spin = %d of %d", e, all)
+	}
+	mainCode, err := disasm.FindFunc(file, "main.main").Load(disasm.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var atCall int64
+	for i, ix := range mainCode.Insts {
+		if ix.Call != "main.spin" {
+			continue
+		}
+		end := ix.PC + 1
+		for _, next := range mainCode.Insts[i+1:] {
+			if next.Text != "" {
+				end = next.PC
+				break
+			}
+		}
+		atCall += Sum(p.Calls, ix.PC, end)
+	}
+	if atCall*2 < all {
+		t.Errorf("samples through the call to main.spin = %d of %d", atCall, all)
+	}
+
 	// With the shift right, every sample is at the start of an
 	// instruction.
 	code, err := disasm.FindFunc(file, "main.spin").Load(disasm.Options{})

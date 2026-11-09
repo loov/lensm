@@ -118,7 +118,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 	var tip markTip
 	defer func() { ui.layoutMarkTip(gtx, c, tip) }()
 
-	_, maxInst, _ := ui.profileLines()
+	profile, _ := ui.profileRows()
 	asmClip := clip.Rect{
 		Min: image.Pt(0, 0),
 		Max: image.Pt(int(gutter.Min), gtx.Constraints.Max.Y),
@@ -172,7 +172,7 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 				ui.SelectedAsm == i && ui.SelectedView == ViewGoAsm)
 		}
 		if c.profile.Width() > 0 && ix.Text != "" {
-			ui.layoutHeat(gtx, c.profile, i*lineHeight+int(ui.asm.Offset), lineHeight, ui.Profile[ix.PC], maxInst)
+			ui.layoutProfileRow(gtx, c, profile, i, i*lineHeight+int(ui.asm.Offset))
 		}
 		if marks := ix.Marks & ui.Marks; marks != 0 && c.marks.Width() > 0 {
 			if t := ui.layoutMarks(gtx, c, int(c.marks.Min), marks, 0, nil, nil, i*lineHeight+int(ui.asm.Offset), hover.position); t.text != "" {
@@ -372,8 +372,8 @@ func (ui Style) layoutSource(gtx layout.Context, c codeColumns, hover codeHover,
 	}
 	sourceClip.Pop()
 	if c.sourceProfile.Width() > 0 {
-		lines, _, maxLine := ui.profileLines()
-		ui.layoutSourceHeat(gtx, c, lines, maxLine)
+		rows, _ := ui.profileRows()
+		ui.layoutSourceHeat(gtx, c, rows)
 	}
 	if flow != nil {
 		ui.layoutNoteFlow(gtx, c, flow, flowLeft, flowTop)

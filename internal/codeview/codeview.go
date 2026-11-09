@@ -17,6 +17,7 @@ import (
 	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/disasm"
 	"loov.dev/lensm/internal/gui"
+	"loov.dev/lensm/internal/pprof"
 	"loov.dev/lensm/internal/syntax"
 )
 
@@ -255,6 +256,9 @@ type Style struct {
 	// PC, shown as a share of ProfileTotal.
 	Profile      map[uint64]int64
 	ProfileTotal int64
+	// ProfileCalls are the samples passing through each call, sorted
+	// by the address inside the call that the stacks hold.
+	ProfileCalls []pprof.Sample
 }
 
 func (ui Style) Layout(gtx layout.Context) layout.Dimensions {

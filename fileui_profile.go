@@ -76,6 +76,13 @@ func profileFlat(p *pprof.Profile) map[uint64]int64 {
 	return p.Flat
 }
 
+func profileCalls(p *pprof.Profile) []pprof.Sample {
+	if p == nil {
+		return nil
+	}
+	return p.Calls
+}
+
 func profileTotal(p *pprof.Profile) int64 {
 	if p == nil {
 		return 0

@@ -3,10 +3,12 @@
 package pprof
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
 	"os"
+	"slices"
 
 	"github.com/google/pprof/profile"
 )
@@ -20,6 +22,32 @@ type Profile struct {
 	Total int64
 	// Type names the value, such as "cpu nanoseconds".
 	Type string
+	// Calls are the samples whose stacks pass through each call, by the
+	// address the stack holds, which lies inside the call instruction.
+	// They are sorted by PC.
+	Calls []Sample
+	// Edges are the samples in which a function called another, by
+	// the functions' names.
+	Edges map[Edge]int64
+}
+
+// Sample is the value of the samples at one address.
+type Sample struct {
+	PC    uint64
+	Value int64
+}
+
+// Edge is a call from one function to another.
+type Edge struct{ Caller, Callee string }
+
+// Sum is the value of the samples in s at addresses in [lo, hi).
+func Sum(s []Sample, lo, hi uint64) int64 {
+	i, _ := slices.BinarySearchFunc(s, lo, func(x Sample, pc uint64) int { return cmp.Compare(x.PC, pc) })
+	var total int64
+	for ; i < len(s) && s[i].PC < hi; i++ {
+		total += s[i].Value
+	}
+	return total
 }
 
 // Lookup finds the code of a function in the binary by name.
@@ -52,12 +80,11 @@ func Load(path string, lookup Lookup) (*Profile, error) {
 	lo, hi := int64(math.MinInt64), int64(math.MaxInt64)
 	known := 0
 	for _, loc := range p.Location {
-		if loc.Address == 0 || len(loc.Line) == 0 || loc.Line[len(loc.Line)-1].Function == nil {
+		name := physical(loc)
+		if loc.Address == 0 || name == "" {
 			continue
 		}
-		// The last line is the function the code is in, the ones before
-		// it are inlined into it.
-		addr, size, ok := lookup(loc.Line[len(loc.Line)-1].Function.Name)
+		addr, size, ok := lookup(name)
 		if !ok || size == 0 {
 			continue
 		}
@@ -70,16 +97,54 @@ func Load(path string, lookup Lookup) (*Profile, error) {
 	}
 	shift := pickShift(lo, hi)
 
-	prof := &Profile{Flat: map[uint64]int64{}, Type: st.Type + " " + st.Unit}
+	prof := &Profile{Flat: map[uint64]int64{}, Edges: map[Edge]int64{}, Type: st.Type + " " + st.Unit}
+	calls := map[uint64]int64{}
+	// A recursive stack passes a call or an edge more than once; each
+	// sample counts once for each.
+	seenCalls := map[uint64]bool{}
+	seenEdges := map[Edge]bool{}
 	for _, s := range p.Sample {
 		v := s.Value[value]
 		prof.Total += v
-		if len(s.Location) == 0 || s.Location[0].Address == 0 {
+		if len(s.Location) == 0 {
 			continue
 		}
-		prof.Flat[uint64(int64(s.Location[0].Address)-shift)] += v
+		if s.Location[0].Address != 0 {
+			prof.Flat[uint64(int64(s.Location[0].Address)-shift)] += v
+		}
+		clear(seenCalls)
+		clear(seenEdges)
+		for i, loc := range s.Location {
+			if i > 0 && loc.Address != 0 {
+				pc := uint64(int64(loc.Address) - shift)
+				if !seenCalls[pc] {
+					seenCalls[pc] = true
+					calls[pc] += v
+				}
+			}
+			if i+1 < len(s.Location) {
+				e := Edge{Caller: physical(s.Location[i+1]), Callee: physical(loc)}
+				if e.Caller != "" && e.Callee != "" && !seenEdges[e] {
+					seenEdges[e] = true
+					prof.Edges[e] += v
+				}
+			}
+		}
 	}
+	for pc, v := range calls {
+		prof.Calls = append(prof.Calls, Sample{pc, v})
+	}
+	slices.SortFunc(prof.Calls, func(a, b Sample) int { return cmp.Compare(a.PC, b.PC) })
 	return prof, nil
+}
+
+// physical names the function the code at loc is in. Its lines list
+// the functions inlined there first and that function last.
+func physical(loc *profile.Location) string {
+	if len(loc.Line) == 0 || loc.Line[len(loc.Line)-1].Function == nil {
+		return ""
+	}
+	return loc.Line[len(loc.Line)-1].Function.Name
 }
 
 // pickShift picks the shift in [lo, hi]: none when that fits, as for a

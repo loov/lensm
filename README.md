@@ -94,7 +94,10 @@ Keys:
 - open a pprof profile of the binary with Open Profile… in the menu, or
   `-profile`, to see each instruction's and source line's share of the
   samples in a lane beside them, and to rank functions by samples in
-  the Summary panel. The profile's addresses are matched to the binary
+  the Summary panel. A call's row shows the time spent below it, marked
+  ↳, and a source line counts the time in its calls too, as pprof's
+  list does. With a profile the Callers panel puts the callers that
+  spend the most through the open function first. The profile's addresses are matched to the binary
   by function, so a profile of a position independent binary works;
 - Compare With… in the menu loads another build of the program and
   shows the open function from both side by side, with the instructions
