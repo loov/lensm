@@ -18,6 +18,9 @@ type IconStrip struct {
 	Theme  *Theme
 	Top    []layout.Widget
 	Bottom []layout.Widget
+	// Right puts the strip at the window's right edge, with its border
+	// on the left.
+	Right bool
 }
 
 func (s IconStrip) Layout(gtx layout.Context) layout.Dimensions {
@@ -25,7 +28,11 @@ func (s IconStrip) Layout(gtx layout.Context) layout.Dimensions {
 	size := image.Pt(gtx.Metric.Dp(40), gtx.Constraints.Max.Y)
 	gtx.Constraints = layout.Exact(size)
 	paint.FillShape(gtx.Ops, c.Sidebar, clip.Rect{Max: size}.Op())
-	paint.FillShape(gtx.Ops, c.Splitter, clip.Rect{Min: image.Pt(size.X-gtx.Metric.Dp(1), 0), Max: size}.Op())
+	border, inset := clip.Rect{Min: image.Pt(size.X-gtx.Metric.Dp(1), 0), Max: size}, layout.Inset{Top: 6, Bottom: 6, Right: 1}
+	if s.Right {
+		border, inset = clip.Rect{Max: image.Pt(gtx.Metric.Dp(1), size.Y)}, layout.Inset{Top: 6, Bottom: 6, Left: 1}
+	}
+	paint.FillShape(gtx.Ops, c.Splitter, border.Op())
 
 	stack := func(widgets []layout.Widget) layout.Widget {
 		return func(gtx layout.Context) layout.Dimensions {
@@ -39,7 +46,7 @@ func (s IconStrip) Layout(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 		}
 	}
-	return layout.Inset{Top: 6, Bottom: 6, Right: 1}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
 			layout.Rigid(stack(s.Top)),
 			layout.Rigid(stack(s.Bottom)),

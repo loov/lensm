@@ -343,18 +343,7 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 	case ui.Profile.Funcs[tab.Name].Cum == 0:
 		empty = "The profile has no samples in this function."
 	}
-	if ui.ExpandGraph.Clicked(gtx) {
-		ui.ShowGraph = !ui.ShowGraph
-	}
-	var expand layout.Widget
-	if ui.Profile != nil {
-		text := "Show all"
-		if ui.ShowGraph {
-			text = "Hide all"
-		}
-		expand = gui.Button{Theme: th, Clickable: &ui.ExpandGraph, Text: text}.Layout
-	}
-	return ui.panelFrame(gtx, "CALL GRAPH", expand, func(gtx layout.Context) layout.Dimensions {
+	return ui.panelFrame(gtx, "CALL GRAPH", nil, func(gtx layout.Context) layout.Dimensions {
 		if empty != "" {
 			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted(empty, 0.9).Layout)
 		}
@@ -375,13 +364,6 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 // a click on a function opens it.
 func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
-	if ui.CloseGraph.Clicked(gtx) {
-		ui.ShowGraph = false
-	}
-	if !ui.ShowGraph {
-		gtx.Execute(op.InvalidateCmd{})
-		return layout.Dimensions{}
-	}
 	focus := ""
 	if tab := ui.activeTab(); tab != nil {
 		focus = tab.Name
@@ -389,23 +371,15 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	g := &ui.ProfileGraph
 	g.full = true
 	g.build(gtx, th, ui.Profile, focus)
-	gtx.Constraints = layout.Exact(gtx.Constraints.Max)
-	return layout.Stack{Alignment: layout.NE}.Layout(gtx,
-		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			paint.FillShape(gtx.Ops, th.Colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
-			if g.layout == nil {
-				return layout.Dimensions{}
-			}
-			if name, ok := g.draw(gtx, th, ui.Profile); ok {
-				ui.openTab(ui.findFunc(name), true)
-				gtx.Execute(op.InvalidateCmd{})
-			}
-			return layout.Dimensions{Size: gtx.Constraints.Max}
-		}),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layout.UniformInset(10).Layout(gtx, gui.Button{Theme: th, Clickable: &ui.CloseGraph, Text: "Close"}.Layout)
-		}),
-	)
+	size := gtx.Constraints.Max
+	paint.FillShape(gtx.Ops, th.Colors.Background, clip.Rect{Max: size}.Op())
+	if g.layout != nil {
+		if name, ok := g.draw(gtx, th, ui.Profile); ok {
+			ui.openTab(ui.findFunc(name), true)
+			gtx.Execute(op.InvalidateCmd{})
+		}
+	}
+	return layout.Dimensions{Size: size}
 }
 
 // draw draws the graph scaled to fit the width, and returns the

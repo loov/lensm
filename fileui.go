@@ -121,10 +121,11 @@ type FileUI struct {
 	Compare           compareView
 	Graph             callGraph
 	// ShowGraph puts the whole profile's graph in place of the code.
-	ShowGraph      bool
-	ProfileGraph   callGraph
-	ExpandGraph    widget.Clickable
-	CloseGraph     widget.Clickable
+	ShowGraph    bool
+	ProfileGraph callGraph
+	// GraphButton on the right strip shows and hides the profile graph.
+	GraphButton    widget.Clickable
+	GraphTip       gui.Tooltip
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -538,6 +539,7 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return ui.layoutContent(gtx, colors)
 				}),
+				layout.Rigid(ui.layoutRightStrip),
 			)
 		}),
 		layout.Rigid(ui.layoutStatus),

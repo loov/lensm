@@ -341,6 +341,34 @@ func (ui *FileUI) transientStatus(gtx layout.Context) (string, bool) {
 	return ui.copyStatus, false
 }
 
+// layoutRightStrip holds the buttons for the panes right of the code.
+func (ui *FileUI) layoutRightStrip(gtx layout.Context) layout.Dimensions {
+	th := ui.Theme
+	for ui.GraphButton.Clicked(gtx) {
+		if ui.Profile == nil {
+			// The graph needs a profile; ask for one and show it after.
+			ui.ShowGraph = true
+			ui.chooseProfile()
+			continue
+		}
+		ui.ShowGraph = !ui.ShowGraph
+	}
+	description := "Show profile graph"
+	switch {
+	case ui.Profile == nil:
+		description = "Open a profile to see its graph"
+	case ui.ShowGraph:
+		description = "Hide profile graph"
+	}
+	return gui.IconStrip{
+		Theme: th,
+		Right: true,
+		Top: []layout.Widget{
+			gui.ToolButton{Theme: th, Clickable: &ui.GraphButton, Tip: &ui.GraphTip, Icon: ProfileGraphIcon, Description: description, Selected: ui.ShowGraph && ui.Profile != nil}.Layout,
+		},
+	}.Layout(gtx)
+}
+
 func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
 	for i := range ui.PanelButtons {
