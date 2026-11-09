@@ -1,5 +1,13 @@
 package main
 
+import (
+	"strings"
+
+	"gioui.org/layout"
+
+	"loov.dev/lensm/internal/gui"
+)
+
 const navigationHistoryLimit = 256
 
 // NavigationHistory tracks function visits independently from open tabs.
@@ -137,4 +145,24 @@ func (ui *FileUI) navigateHistoryEntry(name string) bool {
 	ui.copyStatus = ""
 	ui.invalidateMain()
 	return true
+}
+
+func (ui *FileUI) layoutHistoryPanel(gtx layout.Context) layout.Dimensions {
+	entries, current := ui.Navigation.Entries()
+	// Newest first.
+	at := func(i int) int { return len(entries) - 1 - i }
+	if i, ok := ui.HistoryList.Clicked(gtx); ok && i < len(entries) {
+		if name, ok := ui.Navigation.Go(at(i)); ok {
+			ui.navigateHistoryEntry(name)
+		}
+	}
+	return gui.PanelFrame{Theme: ui.Theme, Title: "HISTORY"}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		if len(entries) == 0 {
+			return gui.PanelNote(ui.Theme, "Functions you visit show up here.")(gtx)
+		}
+		return ui.HistoryList.Layout(gtx, ui.Theme, len(entries), at(current), func(i int) (string, string) {
+			pkg, name := gui.SplitPackage(entries[at(i)])
+			return name, strings.TrimSuffix(pkg, ".")
+		})
+	})
 }

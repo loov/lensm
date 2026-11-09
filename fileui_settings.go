@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"gioui.org/widget"
 
 	"loov.dev/lensm/internal/gui"
+	"loov.dev/lensm/internal/mcp"
 	"loov.dev/lensm/internal/syntax"
 )
 
@@ -305,4 +308,33 @@ func (ui *FileUI) saveSettings(settings AppSettings) {
 	ui.Settings = settings
 	ui.sessionDirty = true
 	ui.scheduleFlush()
+}
+
+func (ui *FileUI) startMCP() {
+	if ui.MCP != nil {
+		return
+	}
+	server, err := mcp.StartAppServer()
+	if err != nil {
+		ui.LoadError = fmt.Errorf("unable to start MCP server: %w", err)
+		ui.invalidateMain()
+		return
+	}
+	ui.MCP = server
+	if ui.File != nil {
+		ui.MCP.SetFile(ui.Config.Path, ui.File.Acquire(), ui.Comments)
+	}
+	fmt.Fprintf(os.Stderr, "lensm MCP server listening at %s\n", server.URL())
+	ui.invalidateMain()
+}
+
+func (ui *FileUI) stopMCP() {
+	if ui.MCP == nil {
+		return
+	}
+	if err := ui.MCP.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "unable to stop MCP server: %v\n", err)
+	}
+	ui.MCP = nil
+	ui.invalidateMain()
 }

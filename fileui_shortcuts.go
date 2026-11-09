@@ -137,3 +137,18 @@ func unit16(gap bool) unit.Dp {
 	}
 	return 0
 }
+
+// shortcut spells a key chord the way the platform does.
+func shortcut(key string) string {
+	if runtime.GOOS == "darwin" {
+		return "⌘" + key
+	}
+	return "Ctrl+" + key
+}
+
+func altShortcut(key string) string {
+	if runtime.GOOS == "darwin" {
+		return "⌥" + key
+	}
+	return "Alt+" + key
+}

@@ -3,6 +3,8 @@ package main
 import (
 	"gioui.org/layout"
 	"gioui.org/widget"
+
+	"loov.dev/lensm/internal/gui"
 )
 
 // Menu bar items beyond the ones the window's app menu has.
@@ -214,5 +216,62 @@ func (ui *FileUI) handleMenuBar(gtx layout.Context) {
 			ui.menuStates[tag] = packed
 			setMenuState(tag, st.checked, st.enabled)
 		}
+	}
+}
+
+// App menu items, in the order appMenuItems lists them.
+const (
+	menuOpen = iota
+	menuReload
+	menuWatch
+	menuOpenProfile
+	menuCloseProfile
+	menuBaseProfile
+	menuCloseBaseProfile
+	menuCompare
+	menuStopCompare
+	menuProfileGraph
+	sepFile
+	menuCopy
+	menuBack
+	menuForward
+	sepGo
+	menuSettings
+	menuShortcuts
+	sepApp
+	menuQuit
+)
+
+func (ui *FileUI) appMenuItems() []gui.MenuItem {
+	selection := ""
+	if code := ui.activeCode(); code != nil && code.Code != nil {
+		selection = code.SelectedText()
+	}
+	return []gui.MenuItem{
+		menuOpen:             {Label: "Open…", Shortcut: shortcut("O")},
+		menuReload:           {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
+		menuWatch:            {Label: "Watch for Changes", Checked: ui.Config.Watch},
+		menuOpenProfile:      {Label: "Open Profile…", Disabled: ui.File == nil},
+		menuCloseProfile:     {Label: "Close Profile", Disabled: ui.Profile == nil},
+		menuBaseProfile:      {Label: "Compare Profile With…", Disabled: ui.Profile == nil},
+		menuCloseBaseProfile: {Label: "Stop Comparing Profiles", Disabled: ui.BaseProfile == nil},
+		menuCompare:          {Label: "Compare With…", Disabled: ui.File == nil},
+		menuStopCompare:      {Label: "Stop Comparing", Disabled: ui.Compare.file == nil},
+		menuProfileGraph:     {Label: "Profile Graph", Checked: ui.ShowGraph, Disabled: ui.Profile == nil},
+		sepFile:              {Separator: true},
+		menuCopy:             {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
+		menuBack:             {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
+		menuForward:          {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
+		sepGo:                {Separator: true},
+		menuSettings:         {Label: "Settings…", Shortcut: shortcut(",")},
+		menuShortcuts:        {Label: "Keyboard Shortcuts", Shortcut: "?"},
+		sepApp:               {Separator: true},
+		menuQuit:             {Label: "Quit", Shortcut: shortcut("Q")},
+	}
+}
+
+func (ui *FileUI) handleAppMenu(gtx layout.Context) {
+	if item, ok := ui.AppMenu.Update(gtx); ok {
+		ui.runMenuItem(gtx, item)
 	}
 }

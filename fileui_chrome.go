@@ -5,7 +5,6 @@ import (
 	"image"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 	"gioui.org/widget"
 
 	"loov.dev/lensm/internal/codeview"
-	"loov.dev/lensm/internal/comments"
 	"loov.dev/lensm/internal/gui"
 )
 
@@ -38,78 +36,6 @@ const (
 	panelGraph
 	panelCount
 )
-
-// shortcut spells a key chord the way the platform does.
-func shortcut(key string) string {
-	if runtime.GOOS == "darwin" {
-		return "⌘" + key
-	}
-	return "Ctrl+" + key
-}
-
-func altShortcut(key string) string {
-	if runtime.GOOS == "darwin" {
-		return "⌥" + key
-	}
-	return "Alt+" + key
-}
-
-// App menu items, in the order appMenuItems lists them.
-const (
-	menuOpen = iota
-	menuReload
-	menuWatch
-	menuOpenProfile
-	menuCloseProfile
-	menuBaseProfile
-	menuCloseBaseProfile
-	menuCompare
-	menuStopCompare
-	menuProfileGraph
-	sepFile
-	menuCopy
-	menuBack
-	menuForward
-	sepGo
-	menuSettings
-	menuShortcuts
-	sepApp
-	menuQuit
-)
-
-func (ui *FileUI) appMenuItems() []gui.MenuItem {
-	selection := ""
-	if code := ui.activeCode(); code != nil && code.Code != nil {
-		selection = code.SelectedText()
-	}
-	return []gui.MenuItem{
-		menuOpen:             {Label: "Open…", Shortcut: shortcut("O")},
-		menuReload:           {Label: "Reload", Shortcut: shortcut("R"), Disabled: ui.Config.Path == ""},
-		menuWatch:            {Label: "Watch for Changes", Checked: ui.Config.Watch},
-		menuOpenProfile:      {Label: "Open Profile…", Disabled: ui.File == nil},
-		menuCloseProfile:     {Label: "Close Profile", Disabled: ui.Profile == nil},
-		menuBaseProfile:      {Label: "Compare Profile With…", Disabled: ui.Profile == nil},
-		menuCloseBaseProfile: {Label: "Stop Comparing Profiles", Disabled: ui.BaseProfile == nil},
-		menuCompare:          {Label: "Compare With…", Disabled: ui.File == nil},
-		menuStopCompare:      {Label: "Stop Comparing", Disabled: ui.Compare.file == nil},
-		menuProfileGraph:     {Label: "Profile Graph", Checked: ui.ShowGraph, Disabled: ui.Profile == nil},
-		sepFile:              {Separator: true},
-		menuCopy:             {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
-		menuBack:             {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},
-		menuForward:          {Label: "Forward", Shortcut: altShortcut("→"), Disabled: !ui.Navigation.CanForward()},
-		sepGo:                {Separator: true},
-		menuSettings:         {Label: "Settings…", Shortcut: shortcut(",")},
-		menuShortcuts:        {Label: "Keyboard Shortcuts", Shortcut: "?"},
-		sepApp:               {Separator: true},
-		menuQuit:             {Label: "Quit", Shortcut: shortcut("Q")},
-	}
-}
-
-func (ui *FileUI) handleAppMenu(gtx layout.Context) {
-	if item, ok := ui.AppMenu.Update(gtx); ok {
-		ui.runMenuItem(gtx, item)
-	}
-}
 
 // quit closes the window, which saves the settings and comments on the
 // way out.
@@ -455,74 +381,6 @@ func (ui *FileUI) layoutPanel(gtx layout.Context) layout.Dimensions {
 		return ui.layoutCallersPanel(gtx)
 	}
 	return ui.Funcs.Layout(ui.Theme, gtx)
-}
-
-func (ui *FileUI) layoutCommentsPanel(gtx layout.Context) layout.Dimensions {
-	records := ui.Comments.All()
-	if i, ok := ui.CommentsList.Clicked(gtx); ok && i < len(records) {
-		if tab := ui.openTab(ui.findFunc(records[i].Function), false); tab != nil {
-			tab.Code.Reveal(records[i].Coord)
-			gtx.Execute(op.InvalidateCmd{})
-		}
-	}
-	// Clearing takes two clicks; moving off the button cancels.
-	if !ui.ClearComments.Hovered() {
-		ui.clearCommentsArmed = false
-	}
-	for ui.ClearComments.Clicked(gtx) {
-		if ui.clearCommentsArmed {
-			for _, rec := range records {
-				ui.setBufferedComment(rec.Coord, "")
-			}
-			records = nil
-		}
-		ui.clearCommentsArmed = !ui.clearCommentsArmed
-	}
-	var clear layout.Widget
-	if len(records) > 0 {
-		text := "Clear all"
-		if ui.clearCommentsArmed {
-			text = "Click again to clear"
-		}
-		clear = gui.Button{Theme: ui.Theme, Clickable: &ui.ClearComments, Text: text}.Layout
-	}
-	return gui.PanelFrame{Theme: ui.Theme, Title: "COMMENTS", Action: clear}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		if len(records) == 0 {
-			return gui.PanelNote(ui.Theme, "No comments yet. Double-click a line in the code to add one.")(gtx)
-		}
-		return ui.CommentsList.Layout(gtx, ui.Theme, len(records), -1, func(i int) (string, string) {
-			rec := records[i]
-			_, name := gui.SplitPackage(rec.Function)
-			where := name
-			switch rec.View {
-			case comments.ViewSource:
-				where = fmt.Sprintf("%s  %s:%d", name, filepath.Base(rec.File), rec.Line)
-			default:
-				where = fmt.Sprintf("%s  %s", name, comments.FormatPC(rec.PC))
-			}
-			return rec.Text, where
-		})
-	})
-}
-
-func (ui *FileUI) layoutHistoryPanel(gtx layout.Context) layout.Dimensions {
-	entries, current := ui.Navigation.Entries()
-	// Newest first.
-	at := func(i int) int { return len(entries) - 1 - i }
-	if i, ok := ui.HistoryList.Clicked(gtx); ok && i < len(entries) {
-		if name, ok := ui.Navigation.Go(at(i)); ok {
-			ui.navigateHistoryEntry(name)
-		}
-	}
-	return gui.PanelFrame{Theme: ui.Theme, Title: "HISTORY"}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		if len(entries) == 0 {
-			return gui.PanelNote(ui.Theme, "Functions you visit show up here.")(gtx)
-		}
-		return ui.HistoryList.Layout(gtx, ui.Theme, len(entries), at(current), func(i int) (string, string) {
-			pkg, name := gui.SplitPackage(entries[at(i)])
-			return name, strings.TrimSuffix(pkg, ".")
-		})
-	})
 }
 
 // layoutCrumbs shows where the active function lives: its source file,

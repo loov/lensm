@@ -4,13 +4,13 @@ import (
 	"image"
 	"time"
 
+	"gioui.org/f32"
+	"gioui.org/font"
 	"gioui.org/io/event"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
-	"gioui.org/f32"
-	"gioui.org/font"
 )
 
 // tooltipDelay is how long the pointer rests on a widget before its
