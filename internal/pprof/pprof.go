@@ -307,3 +307,14 @@ func pickShift(lo, hi int64) int64 {
 	}
 	return lo
 }
+
+// IsRuntime reports whether name is in the Go runtime, which Hide
+// runtime leaves out so its time goes to the code that called it.
+func IsRuntime(name string) bool {
+	for _, prefix := range []string{"runtime.", "runtime/", "internal/runtime/"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}

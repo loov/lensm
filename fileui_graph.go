@@ -6,7 +6,6 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"slices"
 	"strings"
 
 	"gioui.org/f32"
@@ -54,10 +53,9 @@ type callGraph struct {
 	bounds glayout.Vector
 	min    glayout.Vector
 
-	// out and in are the profile's calls from and to each function,
-	// hottest first.
-	out, in map[string][]pprof.Edge
-	outFor  *pprof.Profile
+	// calls indexes the calls of the profile.
+	calls   *pprof.Calls
+	callsOf *pprof.Profile
 
 	offset f32.Point // pan, in px
 	hover  int
@@ -84,31 +82,6 @@ type callGraph struct {
 	center, reveal bool
 }
 
-// calls indexes the edges of prof by caller and by callee.
-func (g *callGraph) calls(prof *pprof.Profile) {
-	if g.outFor == prof {
-		return
-	}
-	g.outFor = prof
-	g.out, g.in = map[string][]pprof.Edge{}, map[string][]pprof.Edge{}
-	for e := range prof.Edges {
-		if e.Caller == e.Callee {
-			continue
-		}
-		g.out[e.Caller] = append(g.out[e.Caller], e)
-		g.in[e.Callee] = append(g.in[e.Callee], e)
-	}
-	hottest := func(a, b pprof.Edge) int {
-		return cmp.Or(cmp.Compare(abs(prof.Edges[b]), abs(prof.Edges[a])), cmp.Compare(a.Caller+a.Callee, b.Caller+b.Callee))
-	}
-	for _, es := range g.out {
-		slices.SortFunc(es, hottest)
-	}
-	for _, es := range g.in {
-		slices.SortFunc(es, hottest)
-	}
-}
-
 // build lays out the graph around focus.
 func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile, focus string) {
 	if g.prof == prof && g.textSize == th.TextSize && g.builtShare == g.minShare && (g.focus == focus || g.full && g.layout != nil) {
@@ -120,7 +93,9 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 	}
 	g.focus, g.prof, g.textSize, g.builtShare = focus, prof, th.TextSize, g.minShare
 	g.layout, g.offset, g.hover, g.center, g.zoom = nil, f32.Point{}, -1, true, 0
-	g.calls(prof)
+	if g.callsOf != prof {
+		g.calls, g.callsOf = prof.CallIndex(), prof
+	}
 
 	graph := glayout.NewDigraph()
 	fontSize := glayout.Length(float32(th.TextSize) * 0.85)
@@ -146,16 +121,16 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 		pkg, rest := gui.SplitPackage(name)
 		pkg = pkg[strings.LastIndexByte(pkg, '/')+1:]
 		if !g.full {
-			n.Label = pkg + rest + "\n" + signed(prof, f.Cum, percentLabel(f.Cum, prof.Total))
+			n.Label = pkg + rest + "\n" + prof.Signed(f.Cum, pprof.Percent(f.Cum, prof.Total))
 			return n
 		}
 		// As pprof does, the text grows with the function's own samples.
 		n.FontSize = fontSize * glayout.Length(1+1.5*math.Sqrt(float64(abs(f.Flat))/float64(max(maxFlat, 1))))
 		lines := []string{strings.TrimSuffix(pkg, "."), rest}
 		if f.Flat == f.Cum {
-			lines = append(lines, valueLabel(prof, f.Flat))
+			lines = append(lines, prof.Label(f.Flat))
 		} else {
-			lines = append(lines, valueLabel(prof, f.Flat), "of "+valueLabel(prof, f.Cum))
+			lines = append(lines, prof.Label(f.Flat), "of "+prof.Label(f.Cum))
 		}
 		if pkg == "" {
 			lines = lines[1:]
@@ -175,17 +150,26 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 		le := glayout.NewEdge(node(e.Caller), node(e.Callee))
 		le.Directed = true
 		v := prof.Edges[e]
-		le.Label = signed(prof, v, percentLabel(v, prof.Total))
+		le.Label = prof.Signed(v, pprof.Percent(v, prof.Total))
 		if g.full {
-			le.Label = signed(prof, v, valueText(prof, v))
+			le.Label = prof.Signed(v, prof.Format(v))
 		}
 		le.FontSize = fontSize * 0.9
 		graph.AddEdge(le)
 	}
+	var edges []pprof.Edge
 	if g.full {
-		g.pickAll(prof, node, edge)
+		var names []string
+		names, edges = g.calls.Hottest(g.share(), fullMaxNodes)
+		for _, name := range names {
+			node(name)
+		}
 	} else {
-		g.pickAround(prof, focus, node, edge)
+		node(focus)
+		edges = g.calls.Around(focus, graphCallers, graphCallees, graphCallees2, graphMinShare)
+	}
+	for _, e := range edges {
+		edge(e)
 	}
 
 	l, err := glayout.Hierarchical(graph, glayout.Options{})
@@ -215,36 +199,10 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 	g.min, g.bounds = lo, hi.Sub(lo)
 }
 
-// pickAround adds focus, its hottest callers and its hottest callees
-// two calls deep.
-func (g *callGraph) pickAround(prof *pprof.Profile, focus string, node func(string) *glayout.Node, edge func(pprof.Edge)) {
-	node(focus)
-	for _, e := range g.in[focus][:min(len(g.in[focus]), graphCallers)] {
-		edge(e)
-	}
-	minShare := int64(float64(prof.Total) * graphMinShare)
-	for _, e := range g.out[focus][:min(len(g.out[focus]), graphCallees)] {
-		edge(e)
-		// A call back to focus doesn't take one of the places.
-		shown := 0
-		for _, e2 := range g.out[e.Callee] {
-			if shown == graphCallees2 || abs(prof.Edges[e2]) < minShare {
-				break
-			}
-			if e2.Callee != focus {
-				edge(e2)
-				shown++
-			}
-		}
-	}
-}
-
 // Limits on the whole profile's graph, pprof's defaults.
 const (
 	fullMaxNodes  = 80
 	fullNodeShare = 0.005
-	// A call needs a fifth of the share a function needs.
-	fullEdgeShare = fullNodeShare / 5
 )
 
 func abs(v int64) int64 {
@@ -258,33 +216,6 @@ func abs(v int64) int64 {
 // the whole graph.
 func (g *callGraph) share() float64 { return cmp.Or(g.minShare, fullNodeShare) }
 
-// pickAll adds the functions with the most samples below them and the
-// calls between them, dropping the ones too small to matter.
-func (g *callGraph) pickAll(prof *pprof.Profile, node func(string) *glayout.Node, edge func(pprof.Edge)) {
-	var names []string
-	for name, f := range prof.Funcs {
-		if float64(abs(f.Cum)) >= g.share()*float64(prof.Total) {
-			names = append(names, name)
-		}
-	}
-	slices.SortFunc(names, func(a, b string) int {
-		return cmp.Or(cmp.Compare(abs(prof.Funcs[b].Cum), abs(prof.Funcs[a].Cum)), cmp.Compare(a, b))
-	})
-	names = names[:min(len(names), fullMaxNodes)]
-	keep := map[string]bool{}
-	for _, name := range names {
-		keep[name] = true
-		node(name)
-	}
-	for _, name := range names {
-		for _, e := range g.out[name] {
-			if keep[e.Callee] && float64(abs(prof.Edges[e])) >= g.share()/5*float64(prof.Total) {
-				edge(e)
-			}
-		}
-	}
-}
-
 // measureDp is the width of line in dp at size.
 func measureDp(gtx layout.Context, th *gui.Theme, line string, size unit.Sp) float32 {
 	label := th.Label(line, 1)
@@ -295,90 +226,6 @@ func measureDp(gtx layout.Context, th *gui.Theme, line string, size unit.Sp) flo
 	dims := label.Layout(gtx)
 	macro.Stop()
 	return float32(dims.Size.X) / gtx.Metric.PxPerDp
-}
-
-// percentLabel spells v as a share of total.
-func percentLabel(v, total int64) string {
-	if total <= 0 {
-		return ""
-	}
-	if v < 0 {
-		return "-" + percentLabel(-v, total)
-	}
-	return percentText(100 * float64(v) / float64(total))
-}
-
-func percentText(p float64) string {
-	switch {
-	case p < 0.1:
-		return "<0.1%"
-	case p < 10:
-		return fmt.Sprintf("%.1f%%", p)
-	}
-	return fmt.Sprintf("%.0f%%", p)
-}
-
-// valueLabel spells v and its share of the samples: 2.43s (18.9%).
-func valueLabel(prof *pprof.Profile, v int64) string {
-	if v == 0 {
-		return "0"
-	}
-	if prof.Diff && v > 0 {
-		// A difference shows its sign either way.
-		return "+" + valueLabel(&pprof.Profile{Type: prof.Type, Total: prof.Total}, v)
-	}
-	return valueText(prof, v) + " (" + percentLabel(v, prof.Total) + ")"
-}
-
-// signed puts a plus on s, the spelling of v, when prof is a
-// difference and v grew.
-func signed(prof *pprof.Profile, v int64, s string) string {
-	if prof.Diff && v > 0 {
-		return "+" + s
-	}
-	return s
-}
-
-// valueText spells v in the profile's unit.
-func valueText(prof *pprof.Profile, v int64) string {
-	if v < 0 {
-		return "-" + valueText(prof, -v)
-	}
-	unit := prof.Type[strings.LastIndexByte(prof.Type, ' ')+1:]
-	f := float64(v)
-	switch unit {
-	case "nanoseconds":
-		switch {
-		case f >= 1e9:
-			return trimZeros("%.2fs", f/1e9)
-		case f >= 1e6:
-			return trimZeros("%.2fms", f/1e6)
-		}
-		return fmt.Sprintf("%.0fµs", f/1e3)
-	case "bytes":
-		switch {
-		case f >= 1<<30:
-			return trimZeros("%.2fGB", f/(1<<30))
-		case f >= 1<<20:
-			return trimZeros("%.2fMB", f/(1<<20))
-		case f >= 1<<10:
-			return trimZeros("%.2fkB", f/(1<<10))
-		}
-		return fmt.Sprintf("%dB", v)
-	}
-	return fmt.Sprint(v)
-}
-
-// trimZeros formats a number and drops the zeros after its point:
-// 40.00ms is 40ms.
-func trimZeros(format string, v float64) string {
-	s := fmt.Sprintf(format, v)
-	unit := strings.TrimLeft(s, "0123456789.")
-	num := s[:len(s)-len(unit)]
-	if strings.Contains(num, ".") {
-		num = strings.TrimRight(strings.TrimRight(num, "0"), ".")
-	}
-	return num + unit
 }
 
 // layoutGraphPanel draws the call graph of the open function; a click
@@ -681,7 +528,7 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 	case hoverEdge >= 0:
 		ge := g.graph.Edges[hoverEdge]
 		v := prof.Edges[pprof.Edge{Caller: ge.From.ID, Callee: ge.To.ID}]
-		tip = []string{ge.From.ID, "calls " + ge.To.ID, valueLabel(prof, v)}
+		tip = []string{ge.From.ID, "calls " + ge.To.ID, prof.Label(v)}
 	}
 	if len(tip) > 0 {
 		drawTip(gtx, th, g.pointer, tip)
@@ -697,21 +544,21 @@ const graphTipCalls = 4
 // and cumulative samples and its hottest callers and callees.
 func (g *callGraph) nodeDetails(prof *pprof.Profile, name string) []string {
 	f := prof.Funcs[name]
-	lines := []string{name, "self " + valueLabel(prof, f.Flat), "total " + valueLabel(prof, f.Cum)}
+	lines := []string{name, "self " + prof.Label(f.Flat), "total " + prof.Label(f.Cum)}
 	list := func(title string, edges []pprof.Edge, other func(pprof.Edge) string) {
 		if len(edges) == 0 {
 			return
 		}
 		lines = append(lines, "", title)
 		for _, e := range edges[:min(len(edges), graphTipCalls)] {
-			lines = append(lines, "  "+other(e)+"  "+valueText(prof, prof.Edges[e]))
+			lines = append(lines, "  "+other(e)+"  "+prof.Format(prof.Edges[e]))
 		}
 		if len(edges) > graphTipCalls {
 			lines = append(lines, fmt.Sprintf("  and %d more", len(edges)-graphTipCalls))
 		}
 	}
-	list("Called by", g.in[name], func(e pprof.Edge) string { return e.Caller })
-	list("Calls", g.out[name], func(e pprof.Edge) string { return e.Callee })
+	list("Called by", g.calls.In[name], func(e pprof.Edge) string { return e.Caller })
+	list("Calls", g.calls.Out[name], func(e pprof.Edge) string { return e.Callee })
 	return lines
 }
 

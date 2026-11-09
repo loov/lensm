@@ -24,75 +24,10 @@ import (
 	"loov.dev/lensm/internal/pprof"
 )
 
-// flameNode is a function at one place in the call tree: the samples
-// in it and below it through the calls that led there.
-type flameNode struct {
-	name   string
-	parent *flameNode
-	// value is the samples of the profile; delta, of a difference, the
-	// change, which can be negative while value can't.
-	value, delta int64
-	children     []*flameNode
-	index        map[string]*flameNode
-}
-
-// flameTree builds the call tree of prof's stacks, the callers above
-// the callees, children in name order as pprof draws them.
-func flameTree(prof *pprof.Profile) *flameNode {
-	root := &flameNode{name: "all"}
-	for _, s := range prof.Stacks {
-		n := root
-		add := func(n *flameNode) {
-			if s.Value > 0 {
-				n.value += s.Value
-			}
-			n.delta += s.Value
-		}
-		add(n)
-		for i := len(s.Funcs) - 1; i >= 0; i-- {
-			name := s.Funcs[i]
-			if name == "" {
-				continue
-			}
-			child := n.index[name]
-			if child == nil {
-				child = &flameNode{name: name, parent: n}
-				if n.index == nil {
-					n.index = map[string]*flameNode{}
-				}
-				n.index[name] = child
-				n.children = append(n.children, child)
-			}
-			n = child
-			add(n)
-		}
-	}
-	var sortTree func(n *flameNode)
-	sortTree = func(n *flameNode) {
-		slices.SortFunc(n.children, func(a, b *flameNode) int { return cmp.Compare(a.name, b.name) })
-		n.index = nil
-		for _, c := range n.children {
-			sortTree(c)
-		}
-	}
-	sortTree(root)
-	return root
-}
-
-// path names n and its callers, from the root down.
-func (n *flameNode) path() []string {
-	var p []string
-	for ; n != nil; n = n.parent {
-		p = append(p, n.name)
-	}
-	slices.Reverse(p)
-	return p
-}
-
 // flameGraph draws the profile's call tree as a flame graph, the
 // callers on top, each frame as wide as its share of the samples.
 type flameGraph struct {
-	root *flameNode
+	root *pprof.TreeNode
 	of   *pprof.Profile
 	// zoom is the path of the frame drawn full width.
 	zoom []string
@@ -110,12 +45,12 @@ type flameGraph struct {
 
 	// matches are the frames whose names contain query, widest first,
 	// and match the one Enter last zoomed to, -1 for none yet.
-	matches []*flameNode
+	matches []*pprof.TreeNode
 	match   int
 	query   string
-	queryOf *flameNode
+	queryOf *pprof.TreeNode
 
-	hover   *flameNode
+	hover   *pprof.TreeNode
 	pointer f32.Point
 	inside  bool
 	press   bool
@@ -125,14 +60,14 @@ type flameGraph struct {
 	moved bool
 	// lastNode and lastClick are the frame and time of the last click,
 	// to tell a double click.
-	lastNode  *flameNode
+	lastNode  *pprof.TreeNode
 	lastClick time.Duration
 }
 
 // tree is the call tree of prof, built again when prof changes.
-func (f *flameGraph) tree(prof *pprof.Profile) *flameNode {
+func (f *flameGraph) tree(prof *pprof.Profile) *pprof.TreeNode {
 	if f.of != prof {
-		f.root, f.of, f.zoom, f.offset, f.hover = flameTree(prof), prof, nil, 0, nil
+		f.root, f.of, f.zoom, f.offset, f.hover = prof.Tree(), prof, nil, 0, nil
 		f.view0, f.view1, f.lastNode = 0, 0, nil
 	}
 	return f.root
@@ -140,7 +75,7 @@ func (f *flameGraph) tree(prof *pprof.Profile) *flameNode {
 
 // find marks the frames of prof whose names contain query, which is
 // lower case, and returns them.
-func (f *flameGraph) find(prof *pprof.Profile, query string) []*flameNode {
+func (f *flameGraph) find(prof *pprof.Profile, query string) []*pprof.TreeNode {
 	root := f.tree(prof)
 	if query == f.query && root == f.queryOf {
 		return f.matches
@@ -149,17 +84,17 @@ func (f *flameGraph) find(prof *pprof.Profile, query string) []*flameNode {
 	if query == "" {
 		return nil
 	}
-	var walk func(n *flameNode)
-	walk = func(n *flameNode) {
-		if n.parent != nil && strings.Contains(strings.ToLower(n.name), query) {
+	var walk func(n *pprof.TreeNode)
+	walk = func(n *pprof.TreeNode) {
+		if n.Parent != nil && strings.Contains(strings.ToLower(n.Name), query) {
 			f.matches = append(f.matches, n)
 		}
-		for _, c := range n.children {
+		for _, c := range n.Children {
 			walk(c)
 		}
 	}
 	walk(root)
-	slices.SortStableFunc(f.matches, func(a, b *flameNode) int { return cmp.Compare(b.value, a.value) })
+	slices.SortStableFunc(f.matches, func(a, b *pprof.TreeNode) int { return cmp.Compare(b.Value, a.Value) })
 	return f.matches
 }
 
@@ -174,8 +109,8 @@ func (f *flameGraph) next() {
 }
 
 // zoomTo draws n full width.
-func (f *flameGraph) zoomTo(n *flameNode) {
-	f.zoom = n.path()
+func (f *flameGraph) zoomTo(n *pprof.TreeNode) {
+	f.zoom = n.Path()
 	f.view0, f.view1 = 0, 0
 }
 
@@ -209,7 +144,7 @@ func (f *flameGraph) setView(v0, w float64) {
 // flameBox is a frame placed on screen.
 type flameBox struct {
 	rect image.Rectangle
-	node *flameNode
+	node *pprof.TreeNode
 }
 
 // layoutFrames places the frames of the zoomed tree in size: the
@@ -219,9 +154,9 @@ func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) ([]flame
 	row := gtx.Dp(20)
 	zoomed := f.root
 	for _, name := range f.zoom[min(len(f.zoom), 1):] {
-		var next *flameNode
-		for _, c := range zoomed.children {
-			if c.name == name {
+		var next *pprof.TreeNode
+		for _, c := range zoomed.Children {
+			if c.Name == name {
 				next = c
 			}
 		}
@@ -232,8 +167,8 @@ func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) ([]flame
 	}
 	var boxes []flameBox
 	y := -int(f.offset)
-	var ancestors []*flameNode
-	for n := zoomed.parent; n != nil; n = n.parent {
+	var ancestors []*pprof.TreeNode
+	for n := zoomed.Parent; n != nil; n = n.Parent {
 		ancestors = append(ancestors, n)
 	}
 	slices.Reverse(ancestors)
@@ -242,21 +177,21 @@ func (f *flameGraph) layoutFrames(gtx layout.Context, size image.Point) ([]flame
 		y += row
 	}
 	v0, v1 := f.view()
-	scale := float64(size.X) / float64(max(zoomed.value, 1)) / (v1 - v0)
-	var place func(n *flameNode, x0 float64, y int)
-	place = func(n *flameNode, x0 float64, y int) {
-		w := float64(n.value) * scale
+	scale := float64(size.X) / float64(max(zoomed.Value, 1)) / (v1 - v0)
+	var place func(n *pprof.TreeNode, x0 float64, y int)
+	place = func(n *pprof.TreeNode, x0 float64, y int) {
+		w := float64(n.Value) * scale
 		if w < 1 || x0 > float64(size.X) || x0+w < 0 {
 			return
 		}
 		boxes = append(boxes, flameBox{image.Rect(int(x0), y, int(x0+w)-1, y+row-1), n})
 		x := x0
-		for _, c := range n.children {
+		for _, c := range n.Children {
 			place(c, x, y+row)
-			x += float64(c.value) * scale
+			x += float64(c.Value) * scale
 		}
 	}
-	place(zoomed, -v0*float64(zoomed.value)*scale, y)
+	place(zoomed, -v0*float64(zoomed.Value)*scale, y)
 	height := 0
 	for i, b := range boxes {
 		height = max(height, b.rect.Max.Y+1+int(f.offset))
@@ -277,7 +212,7 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 	f.tree(prof)
 	boxes, _ := f.layoutFrames(gtx, size)
-	at := func(p f32.Point) *flameNode {
+	at := func(p f32.Point) *pprof.TreeNode {
 		pt := p.Round()
 		for i := len(boxes) - 1; i >= 0; i-- {
 			if pt.In(boxes[i].rect) {
@@ -366,8 +301,8 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 				f.zoomTo(n)
 				// Escape and Home then zoom out.
 				gtx.Execute(key.FocusCmd{Tag: f})
-				if n.parent != nil && (double || e.Modifiers.Contain(key.ModShortcut)) {
-					clicked = n.name
+				if n.Parent != nil && (double || e.Modifiers.Contain(key.ModShortcut)) {
+					clicked = n.Name
 					f.lastNode = nil
 				}
 			}
@@ -393,15 +328,15 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 	textSize := unit.Sp(float32(th.TextSize) * 0.8)
 	for _, b := range boxes {
 		n := b.node
-		col := flameColor(n.name)
+		col := flameColor(n.Name)
 		if prof.Diff {
 			// A difference is red where it grew and green where it shrank.
 			col = c.Marks.Alloc
-			share := float32(abs(n.delta)) / float32(max(n.value, 1))
+			share := float32(abs(n.Delta)) / float32(max(n.Value, 1))
 			switch {
-			case n.delta > 0:
+			case n.Delta > 0:
 				col = c.Marks.BoundsCheck
-			case n.delta < 0:
+			case n.Delta < 0:
 				col = c.Marks.Good
 			}
 			col.A = uint8(0x20 + 0xa0*min(share, 1))
@@ -410,13 +345,13 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 		paint.FillShape(gtx.Ops, c.Background, clip.UniformRRect(b.rect, radius).Op(gtx.Ops))
 		paint.FillShape(gtx.Ops, col, clip.UniformRRect(b.rect, radius).Op(gtx.Ops))
 		switch {
-		case query != "" && n.parent != nil && strings.Contains(strings.ToLower(n.name), query):
+		case query != "" && n.Parent != nil && strings.Contains(strings.ToLower(n.Name), query):
 			paint.FillShape(gtx.Ops, c.Marks.Spill, clip.Stroke{Path: clip.UniformRRect(b.rect, radius).Path(gtx.Ops), Width: float32(gtx.Dp(2))}.Op())
-		case n == f.hover || n.name == focus:
+		case n == f.hover || n.Name == focus:
 			paint.FillShape(gtx.Ops, c.Accent, clip.Stroke{Path: clip.UniformRRect(b.rect, radius).Path(gtx.Ops), Width: float32(gtx.Dp(1))}.Op())
 		}
 		if b.rect.Dx() > gtx.Dp(24) {
-			label := th.Label(n.name, 0.8)
+			label := th.Label(n.Name, 0.8)
 			label.TextSize = textSize
 			label.MaxLines = 1
 			label.Color = c.Text
@@ -434,12 +369,12 @@ func (f *flameGraph) layout(gtx layout.Context, th *gui.Theme, prof *pprof.Profi
 
 	if f.hover != nil && f.inside {
 		n := f.hover
-		tip := []string{n.name, valueLabel(prof, n.value)}
+		tip := []string{n.Name, prof.Label(n.Value)}
 		if prof.Diff {
-			tip = append(tip, "change "+signed(prof, n.delta, valueText(prof, n.delta)))
+			tip = append(tip, "change "+prof.Signed(n.Delta, prof.Format(n.Delta)))
 		}
-		if n.parent != nil && n.parent.value > 0 {
-			tip = append(tip, percentText(100*float64(n.value)/float64(n.parent.value))+" of "+n.parent.name)
+		if n.Parent != nil && n.Parent.Value > 0 {
+			tip = append(tip, pprof.PercentText(100*float64(n.Value)/float64(n.Parent.Value))+" of "+n.Parent.Name)
 		}
 		drawTip(gtx, th, f.pointer, tip)
 	}

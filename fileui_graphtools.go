@@ -59,17 +59,6 @@ var graphShares = []struct {
 	{"≥ 5%", 0.05},
 }
 
-// isRuntime reports whether name is in the Go runtime, which Hide
-// runtime leaves out so its time goes to the code that called it.
-func isRuntime(name string) bool {
-	for _, prefix := range []string{"runtime.", "runtime/", "internal/runtime/"} {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 // graphProfile is the profile the graphs draw: the loaded one with the
 // focus and the runtime hiding applied.
 func (ui *FileUI) graphProfile() *pprof.Profile {
@@ -94,7 +83,7 @@ func (ui *FileUI) graphProfile() *pprof.Profile {
 	if t.view == nil || t.viewOf != prof || t.viewFocus != t.focus || t.viewHide != hide {
 		var hidden func(string) bool
 		if hide {
-			hidden = isRuntime
+			hidden = pprof.IsRuntime
 		}
 		t.view, t.viewOf, t.viewFocus, t.viewHide = prof.Filter(t.focus, hidden), prof, t.focus, hide
 	}
