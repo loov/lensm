@@ -5,6 +5,7 @@ import (
 
 	"image"
 	"strings"
+	"unicode/utf8"
 
 	"gioui.org/f32"
 	"gioui.org/io/pointer"
@@ -89,6 +90,26 @@ type highlightCache struct {
 	source [][][][]syntax.Span
 	// lineMarks counts the marks of the instructions of each source line.
 	lineMarks map[sourcePos]*lineMarks
+	// widest are the likely widest rows of the Go asm, native asm and
+	// source columns, by their characters, for sizing the columns.
+	widest [3]widestRow
+}
+
+// widestRow is a row's text and its indent level.
+type widestRow struct {
+	text   string
+	indent int
+}
+
+// consider keeps the row if it has more characters, counting an indent
+// level as two and a tab as four.
+func (w *widestRow) consider(text string, indent int) {
+	size := func(text string, indent int) int {
+		return utf8.RuneCountInString(text) + 3*strings.Count(text, "\t") + 2*indent
+	}
+	if size(text, indent) > size(w.text, w.indent) {
+		*w = widestRow{text, indent}
+	}
 }
 
 // lineMarks are the marks found on one source line.
@@ -135,6 +156,25 @@ func (hl *highlightCache) update(code *disasm.Code, palette syntax.Palette) {
 		if ix.NativeText != "" {
 			p, ok := asmhelp.PerfForNative(code.Arch, ix.Mnemonic, ix.NativeText)
 			hl.perf[i] = instPerf{p, ok}
+		}
+	}
+
+	hl.widest = [3]widestRow{}
+	for i, ix := range code.Insts {
+		hl.widest[0].consider(ix.Text, ix.Indent)
+		indent := 0
+		if code.Arch == "wasm" {
+			indent = ix.Indent
+		}
+		hl.widest[1].consider(hl.nativeText[i], indent)
+	}
+	for _, src := range code.Source {
+		// Each file starts with its path as a comment.
+		hl.widest[2].consider("// "+src.File, 0)
+		for _, block := range src.Blocks {
+			for _, line := range block.Lines {
+				hl.widest[2].consider(line, 0)
+			}
 		}
 	}
 

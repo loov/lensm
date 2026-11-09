@@ -139,12 +139,14 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 		fixedWidth += profileWidth + pad/2
 	}
 	blocksWidth := max(0, gtx.Constraints.Max.X-fixedWidth)
-	width := func(i int) int {
-		if total == 0 {
-			return 0
+	var widths [3]int
+	for i := range widths {
+		if total > 0 {
+			widths[i] = blocksWidth * shares[i] / total
 		}
-		return blocksWidth * shares[i] / total
 	}
+	ui.fitColumns(gtx, &widths, shares, lineHeight/2)
+	width := func(i int) int { return widths[i] }
 
 	x := pad
 	profile := boundsWidth(x, 0)
@@ -204,6 +206,34 @@ func (ui Style) columns(gtx layout.Context) codeColumns {
 	c.sourceCol = splitColumn(int(source.Min), sourceRight, pad, minimumCommentWidth, 70)
 
 	return c
+}
+
+// fitColumns moves width to a column whose widest row doesn't fit from
+// the columns with room to spare, so a deeply indented wasm listing
+// isn't cut off beside a half empty statements column. Columns whose
+// rows all fit keep their shares. A column's text takes the part of
+// it left of the comments, which splitColumn puts at 62% or 70%.
+func (ui Style) fitColumns(gtx layout.Context, widths *[3]int, shares [3]int, indentStep int) {
+	var need, over, spare [3]int
+	totalOver, totalSpare := 0, 0
+	for i, row := range ui.UI.hl.widest {
+		if shares[i] == 0 || row.text == "" {
+			continue
+		}
+		text := row.indent*indentStep + glyphWidth(gtx, ui.Theme.Theme, sourceLine{Text: row.text, TextHeight: ui.TextHeight})
+		need[i] = text * 100 / [3]int{62, 62, 70}[i]
+		over[i] = max(need[i]-widths[i], 0)
+		spare[i] = max(widths[i]-need[i], 0)
+		totalOver += over[i]
+		totalSpare += spare[i]
+	}
+	move := min(totalOver, totalSpare)
+	if move == 0 {
+		return
+	}
+	for i := range widths {
+		widths[i] += move*over[i]/totalOver - move*spare[i]/totalSpare
+	}
 }
 
 // maxMarks is the most shown marks on one instruction.
