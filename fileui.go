@@ -137,6 +137,8 @@ type FileUI struct {
 	GraphFullTip gui.Tooltip
 	// ProfileMenu picks the profile value to show.
 	ProfileMenu gui.Menu
+	// GraphTools are the controls above the profile graph.
+	GraphTools graphTools
 	// profileModTime is when the loaded profile file last changed.
 	profileModTime time.Time
 	TextSizeEditor widget.Editor

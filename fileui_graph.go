@@ -40,9 +40,10 @@ const (
 type callGraph struct {
 	// The graph is laid out for focus in prof, with text measured at
 	// textSize.
-	focus    string
-	prof     *pprof.Profile
-	textSize unit.Sp
+	focus      string
+	prof       *pprof.Profile
+	textSize   unit.Sp
+	builtShare float64
 	// full lays out the whole profile, as pprof's graph does, instead
 	// of the calls around focus.
 	full bool
@@ -63,13 +64,21 @@ type callGraph struct {
 	// pointer is where the pointer is over the graph, if inside.
 	pointer f32.Point
 	inside  bool
-	press  bool
+	press   bool
 	// drag is where a press started, and moved whether it has moved
 	// far enough to pan instead of click.
 	drag  f32.Point
 	moved bool
 	// zoom multiplies the fitted scale; 0 is 1.
 	zoom float32
+
+	// minShare is the least share of the samples a function in the
+	// whole graph needs; 0 is fullNodeShare.
+	minShare float64
+	// matches are the functions found by the search, drawn marked.
+	matches map[string]bool
+	// target is a function to scroll to, other than focus.
+	target string
 	// center asks draw to centre the focus; reveal only when it is
 	// out of view, so a node clicked in the graph stays put.
 	center, reveal bool
@@ -102,14 +111,14 @@ func (g *callGraph) calls(prof *pprof.Profile) {
 
 // build lays out the graph around focus.
 func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile, focus string) {
-	if g.prof == prof && g.textSize == th.TextSize && (g.focus == focus || g.full && g.layout != nil) {
+	if g.prof == prof && g.textSize == th.TextSize && g.builtShare == g.minShare && (g.focus == focus || g.full && g.layout != nil) {
 		// The whole graph doesn't depend on focus; only bring it into
 		// view, if it isn't already.
 		g.reveal = g.reveal || g.focus != focus
 		g.focus = focus
 		return
 	}
-	g.focus, g.prof, g.textSize = focus, prof, th.TextSize
+	g.focus, g.prof, g.textSize, g.builtShare = focus, prof, th.TextSize, g.minShare
 	g.layout, g.offset, g.hover, g.center, g.zoom = nil, f32.Point{}, -1, true, 0
 	g.calls(prof)
 
@@ -233,15 +242,20 @@ func (g *callGraph) pickAround(prof *pprof.Profile, focus string, node func(stri
 const (
 	fullMaxNodes  = 80
 	fullNodeShare = 0.005
-	fullEdgeShare = 0.001
+	// A call needs a fifth of the share a function needs.
+	fullEdgeShare = fullNodeShare / 5
 )
+
+// share is the least share of the samples a function needs to be in
+// the whole graph.
+func (g *callGraph) share() float64 { return cmp.Or(g.minShare, fullNodeShare) }
 
 // pickAll adds the functions with the most samples below them and the
 // calls between them, dropping the ones too small to matter.
 func (g *callGraph) pickAll(prof *pprof.Profile, node func(string) *glayout.Node, edge func(pprof.Edge)) {
 	var names []string
 	for name, f := range prof.Funcs {
-		if float64(f.Cum) >= fullNodeShare*float64(prof.Total) {
+		if float64(f.Cum) >= g.share()*float64(prof.Total) {
 			names = append(names, name)
 		}
 	}
@@ -256,7 +270,7 @@ func (g *callGraph) pickAll(prof *pprof.Profile, node func(string) *glayout.Node
 	}
 	for _, name := range names {
 		for _, e := range g.out[name] {
-			if keep[e.Callee] && float64(prof.Edges[e]) >= fullEdgeShare*float64(prof.Total) {
+			if keep[e.Callee] && float64(prof.Edges[e]) >= g.share()/5*float64(prof.Total) {
 				edge(e)
 			}
 		}
@@ -345,13 +359,14 @@ func trimZeros(format string, v float64) string {
 func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
 	tab := ui.activeTab()
+	prof := ui.graphProfile()
 	var empty string
 	switch {
 	case ui.Profile == nil:
 		empty = "Open a profile to see the calls around a function."
 	case tab == nil:
 		empty = "Open a function to see its calls."
-	case ui.Profile.Funcs[tab.Name].Cum == 0:
+	case prof.Funcs[tab.Name].Cum == 0:
 		empty = "The profile has no samples in this function."
 	}
 	return ui.panelFrame(gtx, "CALL GRAPH", nil, func(gtx layout.Context) layout.Dimensions {
@@ -359,11 +374,11 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted(empty, 0.9).Layout)
 		}
 		g := &ui.Graph
-		g.build(gtx, th, ui.Profile, tab.Name)
+		g.build(gtx, th, prof, tab.Name)
 		if g.layout == nil {
 			return layout.Dimensions{}
 		}
-		if name, ok := g.draw(gtx, th, ui.Profile); ok && name != tab.Name {
+		if name, ok := g.draw(gtx, th, prof); ok && name != tab.Name {
 			ui.openTab(ui.findFunc(name), true)
 			gtx.Execute(op.InvalidateCmd{})
 		}
@@ -379,9 +394,11 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	if tab := ui.activeTab(); tab != nil {
 		focus = tab.Name
 	}
+	prof := ui.graphProfile()
 	g := &ui.ProfileGraph
 	g.full = true
-	g.build(gtx, th, ui.Profile, focus)
+	g.minShare = ui.GraphTools.share
+	g.build(gtx, th, prof, focus)
 	for ui.GraphFullBtn.Clicked(gtx) {
 		ui.GraphFull = !ui.GraphFull
 	}
@@ -389,12 +406,21 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	// The sidebar's darker tone and a shadow along the left edge set
 	// the pane apart from the code.
 	paint.FillShape(gtx.Ops, th.Colors.Sidebar, clip.Rect{Max: size}.Op())
-	if g.layout != nil {
-		if name, ok := g.draw(gtx, th, ui.Profile); ok {
-			ui.openTab(ui.findFunc(name), true)
-			gtx.Execute(op.InvalidateCmd{})
-		}
-	}
+	gtx.Constraints = layout.Exact(size)
+	layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.layoutGraphTools(gtx, g)
+		}),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			if g.layout != nil {
+				if name, ok := g.draw(gtx, th, prof); ok {
+					ui.openTab(ui.findFunc(name), true)
+					gtx.Execute(op.InvalidateCmd{})
+				}
+			}
+			return layout.Dimensions{Size: gtx.Constraints.Max}
+		}),
+	)
 	shadow := gtx.Dp(10)
 	stack := clip.Rect{Max: image.Pt(shadow, size.Y)}.Push(gtx.Ops)
 	paint.LinearGradientOp{
@@ -403,14 +429,6 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	}.Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
 	stack.Pop()
-
-	icon, description := FullscreenIcon, "Fill the window"
-	if ui.GraphFull {
-		icon, description = FullscreenExitIcon, "Back beside the code"
-	}
-	layout.NE.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.UniformInset(8).Layout(gtx, gui.IconButton{Theme: th, Clickable: &ui.GraphFullBtn, Tip: &ui.GraphFullTip, Icon: icon, Description: description}.Layout)
-	})
 	return layout.Dimensions{Size: size}
 }
 
@@ -438,9 +456,14 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		}
 	}
 	rescale()
+	if g.target != "" {
+		g.center = true
+	}
 	if g.center || g.reveal {
+		want := cmp.Or(g.target, g.focus)
+		g.target = ""
 		for i, n := range g.graph.Nodes {
-			if n.ID != g.focus {
+			if n.ID != want {
 				continue
 			}
 			box := g.layout.Nodes[i]
@@ -578,6 +601,9 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		paint.FillShape(gtx.Ops, heat, clip.UniformRRect(r, radius).Op(gtx.Ops))
 		border, bw := c.Divider, float32(gtx.Metric.Dp(1))
 		switch {
+		case g.matches[name]:
+			// Orange, as found text, to tell from the open function.
+			border, bw = c.Marks.Spill, float32(gtx.Metric.Dp(3))
 		case name == g.focus:
 			border, bw = c.Accent, float32(gtx.Metric.Dp(2))
 		case i == g.hover:

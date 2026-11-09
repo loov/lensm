@@ -106,7 +106,11 @@ Keys:
   Profile Graph in the menu, draws the whole profile's graph in a resizable pane right of
   the code, as pprof's web view does, with a node's text growing with
   its own time. Drag or scroll to pan, and hold Command or Ctrl and
-  scroll to zoom. The button in its corner lets it fill the window. The profile's addresses are matched
+  scroll to zoom. Above it, find functions by name (Enter steps
+  through them), focus on the stacks through the open function, hide
+  the runtime so its time counts in the code calling it, and pick the
+  least share a function needs to be drawn. The button at the end lets
+  it fill the window. The profile's addresses are matched
   to the binary by function, so a profile of a position independent
   binary works;
 - Compare With… in the menu loads another build of the program and

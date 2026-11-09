@@ -34,6 +34,16 @@ type Profile struct {
 	Edges map[Edge]int64
 	// Funcs are the samples of each function, by name.
 	Funcs map[string]FuncSamples
+	// Stacks are the functions of each sample, leaf first, which Filter
+	// sums again.
+	Stacks []Stack
+}
+
+// Stack is the functions one sample was in, the one running first, and
+// the sample's value. A function without a name is "".
+type Stack struct {
+	Funcs []string
+	Value int64
 }
 
 // FuncSamples are the samples in one function: Flat in its own code,
@@ -121,13 +131,11 @@ func Load(path, sample string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 	shift := pickShift(lo, hi)
 	physical := renamer(lookup, nameAt, shift)
 
-	prof := &Profile{Flat: map[uint64]int64{}, Edges: map[Edge]int64{}, Funcs: map[string]FuncSamples{}, Type: types[value], Types: types}
-	seenFuncs := map[string]bool{}
+	prof := &Profile{Flat: map[uint64]int64{}, Type: types[value], Types: types}
 	calls := map[uint64]int64{}
-	// A recursive stack passes a call or an edge more than once; each
-	// sample counts once for each.
+	// A recursive stack passes a call more than once; each sample counts
+	// once for each.
 	seenCalls := map[uint64]bool{}
-	seenEdges := map[Edge]bool{}
 	for _, s := range p.Sample {
 		v := s.Value[value]
 		prof.Total += v
@@ -138,20 +146,8 @@ func Load(path, sample string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 			prof.Flat[uint64(int64(s.Location[0].Address)-shift)] += v
 		}
 		clear(seenCalls)
-		clear(seenEdges)
-		clear(seenFuncs)
-		if name := physical(s.Location[0]); name != "" {
-			f := prof.Funcs[name]
-			f.Flat += v
-			prof.Funcs[name] = f
-		}
+		stack := Stack{Value: v}
 		for i, loc := range s.Location {
-			if name := physical(loc); name != "" && !seenFuncs[name] {
-				seenFuncs[name] = true
-				f := prof.Funcs[name]
-				f.Cum += v
-				prof.Funcs[name] = f
-			}
 			if i > 0 && loc.Address != 0 {
 				pc := uint64(int64(loc.Address) - shift)
 				if !seenCalls[pc] {
@@ -159,15 +155,11 @@ func Load(path, sample string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 					calls[pc] += v
 				}
 			}
-			if i+1 < len(s.Location) {
-				e := Edge{Caller: physical(s.Location[i+1]), Callee: physical(loc)}
-				if e.Caller != "" && e.Callee != "" && !seenEdges[e] {
-					seenEdges[e] = true
-					prof.Edges[e] += v
-				}
-			}
+			stack.Funcs = append(stack.Funcs, physical(loc))
 		}
+		prof.Stacks = append(prof.Stacks, stack)
 	}
+	prof.Funcs, prof.Edges = aggregate(prof.Stacks, nil)
 	for pc, v := range calls {
 		prof.Calls = append(prof.Calls, Sample{pc, v})
 	}
@@ -208,6 +200,69 @@ func renamer(lookup Lookup, nameAt NameAt, shift int64) func(*profile.Location) 
 		names[loc] = name
 		return name
 	}
+}
+
+// aggregate sums the samples of stacks per function and per call
+// between two functions. Functions hidden are left out of each stack,
+// so their samples go to the function that called them.
+func aggregate(stacks []Stack, hide func(string) bool) (map[string]FuncSamples, map[Edge]int64) {
+	funcs, edges := map[string]FuncSamples{}, map[Edge]int64{}
+	// A recursive stack passes a function or an edge more than once;
+	// each sample counts once for each.
+	seenFuncs, seenEdges := map[string]bool{}, map[Edge]bool{}
+	var frames []string
+	for _, s := range stacks {
+		frames = frames[:0]
+		for _, name := range s.Funcs {
+			if name != "" && (hide == nil || !hide(name)) {
+				frames = append(frames, name)
+			}
+		}
+		if len(frames) == 0 {
+			continue
+		}
+		clear(seenFuncs)
+		clear(seenEdges)
+		f := funcs[frames[0]]
+		f.Flat += s.Value
+		funcs[frames[0]] = f
+		for i, name := range frames {
+			if !seenFuncs[name] {
+				seenFuncs[name] = true
+				f := funcs[name]
+				f.Cum += s.Value
+				funcs[name] = f
+			}
+			if i+1 < len(frames) {
+				e := Edge{Caller: frames[i+1], Callee: name}
+				if !seenEdges[e] {
+					seenEdges[e] = true
+					edges[e] += s.Value
+				}
+			}
+		}
+	}
+	return funcs, edges
+}
+
+// Filter is p with only the samples whose stacks pass through focus,
+// when it is set, and with the functions hide matches left out of the
+// stacks, as pprof's focus and hide options do. Total stays, so shares
+// are still of the whole profile. Flat and Calls are p's.
+func (p *Profile) Filter(focus string, hide func(string) bool) *Profile {
+	q := *p
+	stacks := p.Stacks
+	if focus != "" {
+		stacks = nil
+		for _, s := range p.Stacks {
+			if slices.Contains(s.Funcs, focus) {
+				stacks = append(stacks, s)
+			}
+		}
+	}
+	q.Stacks = stacks
+	q.Funcs, q.Edges = aggregate(stacks, hide)
+	return &q
 }
 
 // pickShift picks the shift in [lo, hi]: none when that fits, as for a

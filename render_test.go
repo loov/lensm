@@ -34,6 +34,8 @@ var (
 	renderGraph       = flag.Bool("render.graph", false, "show the whole profile's graph")
 	renderGraphFull   = flag.Bool("render.graphfull", false, "show the profile's graph filling the window")
 	renderProfileMenu = flag.Bool("render.profilemenu", false, "open the menu of the profile's values")
+	renderGraphFind   = flag.String("render.graphfind", "", "search the profile graph for this")
+	renderHideRuntime = flag.Bool("render.hideruntime", false, "hide the runtime in the profile graph")
 	renderProfile     = flag.String("render.profile", "", "pprof profile to show")
 	renderPath        = flag.String("render.path", "", "binary or package directory to open")
 	renderFunc        = flag.String("render.func", "", "function to open in a tab")
@@ -102,6 +104,8 @@ func TestRender(t *testing.T) {
 	ui.ShowGraph = *renderGraph || *renderGraphFull
 	ui.GraphFull = *renderGraphFull
 	ui.ProfileMenu.Open = *renderProfileMenu
+	ui.GraphTools.Find.SetText(*renderGraphFind)
+	ui.GraphTools.HideRuntime.Value = *renderHideRuntime
 	if *renderCompare != "" {
 		other, err := loadFile(*renderCompare)
 		if err != nil {
