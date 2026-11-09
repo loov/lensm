@@ -102,16 +102,18 @@ Keys:
   list does. With a profile the Callers panel puts the callers that
   spend the most through the open function first, and the Call graph
   panel draws the hottest callers and callees around it; click a
-  function in the graph to open it. The button on the right edge, or
-  Profile Graph in the menu, draws the whole profile's graph in a resizable pane right of
-  the code, as pprof's web view does, with a node's text growing with
+  function in the graph to open it. The first button on the right edge,
+  or Profile Graph in the menu, draws the whole profile's graph in a
+  resizable pane right of the code, as pprof's web view does, with a node's text growing with
   its own time. Drag or scroll to pan, and hold Command or Ctrl and
   scroll to zoom. Above it, find functions by name (Enter steps
   through them), focus on the stacks through the open function, hide
   the runtime so its time counts in the code calling it, and pick the
-  least share a function needs to be drawn. Flame switches the pane to
-  a flame graph of the same samples, callers on top; click a frame to
-  zoom to it and open its function, and a frame above to zoom out.
+  least share a function needs to be drawn. The second button on the
+  right edge draws a flame graph of the same samples instead, callers
+  on top; click a frame to zoom to it and open its function, and a
+  frame above to zoom out. Hold Command or Ctrl and scroll to zoom
+  about the pointer, and drag or scroll to pan.
   Compare Profile With… in
   the menu loads a profile to compare with, from this build or another,
   and the graphs then show the change from it by function name, as

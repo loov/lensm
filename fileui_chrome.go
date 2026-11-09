@@ -358,30 +358,47 @@ func (ui *FileUI) transientStatus(gtx layout.Context) (string, bool) {
 	return ui.copyStatus, false
 }
 
-// layoutRightStrip holds the buttons for the panes right of the code.
+// layoutRightStrip holds the buttons for the pane right of the code:
+// the profile's call graph and its flame graph. The button of the one
+// shown hides the pane.
 func (ui *FileUI) layoutRightStrip(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
-	for ui.GraphButton.Clicked(gtx) {
+	t := &ui.GraphTools
+	toggle := func(flame bool) {
 		if ui.Profile == nil {
-			// The graph needs a profile; ask for one and show it after.
-			ui.ShowGraph = true
+			// The pane needs a profile; ask for one and show it after.
+			ui.ShowGraph, t.Flame = true, flame
 			ui.chooseProfile()
-			continue
+			return
 		}
-		ui.ShowGraph = !ui.ShowGraph
+		if ui.ShowGraph && t.Flame == flame {
+			ui.ShowGraph = false
+			return
+		}
+		ui.ShowGraph, t.Flame = true, flame
 	}
-	description := "Show profile graph"
-	switch {
-	case ui.Profile == nil:
-		description = "Open a profile to see its graph"
-	case ui.ShowGraph:
-		description = "Hide profile graph"
+	for ui.GraphButton.Clicked(gtx) {
+		toggle(false)
+	}
+	for ui.FlameButton.Clicked(gtx) {
+		toggle(true)
+	}
+	shown := ui.ShowGraph && ui.Profile != nil
+	tip := func(name string, on bool) string {
+		switch {
+		case ui.Profile == nil:
+			return "Open a profile to see its " + name
+		case on:
+			return "Hide the " + name
+		}
+		return "Show the " + name
 	}
 	return gui.IconStrip{
 		Theme: th,
 		Right: true,
 		Top: []layout.Widget{
-			gui.ToolButton{Theme: th, Clickable: &ui.GraphButton, Tip: &ui.GraphTip, Icon: ProfileGraphIcon, Description: description, Selected: ui.ShowGraph && ui.Profile != nil}.Layout,
+			gui.ToolButton{Theme: th, Clickable: &ui.GraphButton, Tip: &ui.GraphTip, Icon: ProfileGraphIcon, Description: tip("call graph", shown && !t.Flame), Selected: shown && !t.Flame}.Layout,
+			gui.ToolButton{Theme: th, Clickable: &ui.FlameButton, Tip: &ui.FlameTip, Icon: FlameGraphIcon, Description: tip("flame graph", shown && t.Flame), Selected: shown && t.Flame}.Layout,
 		},
 	}.Layout(gtx)
 }

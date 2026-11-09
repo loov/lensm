@@ -6,6 +6,7 @@ import (
 
 	"gioui.org/io/key"
 	"gioui.org/layout"
+	"gioui.org/op/clip"
 	"gioui.org/widget"
 
 	"loov.dev/lensm/internal/gui"
@@ -27,9 +28,8 @@ type graphTools struct {
 
 	HideRuntime widget.Bool
 
-	// GraphMode and FlameMode pick how the pane draws the profile; one
-	// is on.
-	GraphMode, FlameMode widget.Bool
+	// Flame draws the pane as a flame graph instead of a call graph.
+	Flame bool
 
 	Threshold gui.Select
 	// share is the least share of the samples; 0 is the default.
@@ -44,16 +44,16 @@ type graphTools struct {
 	viewHide  bool
 }
 
-// graphShares are the choices of the least share a function in the
-// whole graph needs.
+// graphShares are the choices of the least share of the samples a
+// function in the whole graph needs.
 var graphShares = []struct {
 	label string
 	share float64
 }{
-	{"Show above 0.1%", 0.001},
-	{"Show above 0.5%", fullNodeShare},
-	{"Show above 1%", 0.01},
-	{"Show above 5%", 0.05},
+	{"≥ 0.1%", 0.001},
+	{"≥ 0.5%", fullNodeShare},
+	{"≥ 1%", 0.01},
+	{"≥ 5%", 0.05},
 }
 
 // isRuntime reports whether name is in the Go runtime, which Hide
@@ -167,30 +167,15 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 		options[i] = s.label
 	}
 
-	if t.GraphMode.Update(gtx) {
-		t.FlameMode.Value = !t.GraphMode.Value
-	}
-	if t.FlameMode.Update(gtx) {
-		t.GraphMode.Value = !t.FlameMode.Value
-	}
-	if !t.FlameMode.Value {
-		t.GraphMode.Value = true
-	}
-
 	icon, description := FullscreenIcon, "Fill the window"
 	if ui.GraphFull {
 		icon, description = FullscreenExitIcon, "Back beside the code"
 	}
 	gap := layout.Spacer{Width: 8}.Layout
-	return layout.Inset{Top: 8, Bottom: 6, Left: 14, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	search := func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(gui.Segmented{Theme: th, Segments: []gui.Segment{
-				{Label: "Graph", Value: &t.GraphMode},
-				{Label: "Flame", Value: &t.FlameMode},
-			}}.Layout),
-			layout.Rigid(gap),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(200))
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(260))
 				gtx.Constraints.Min.X = gtx.Constraints.Max.X
 				return gui.SearchField(gtx, th, gtx.Focused(&t.Find), gui.Editor(th, &t.Find, "Find in graph"))
 			}),
@@ -204,20 +189,43 @@ func (ui *FileUI) layoutGraphTools(gtx layout.Context, g *callGraph) layout.Dime
 				}
 				return layout.Inset{Left: 6}.Layout(gtx, th.Muted(text, 0.85).Layout)
 			}),
-			layout.Rigid(gap),
-			layout.Rigid(gui.Button{Theme: th, Clickable: &t.FocusButton, Text: focusText}.Layout),
-			layout.Rigid(gap),
-			layout.Rigid(gui.Checkbox{Theme: th, Value: &t.HideRuntime, Label: "Hide runtime"}.Layout),
-			layout.Rigid(gap),
+		)
+	}
+	controls := []layout.FlexChild{
+		layout.Rigid(gui.Button{Theme: th, Clickable: &t.FocusButton, Text: focusText}.Layout),
+		layout.Rigid(gap),
+		layout.Rigid(gui.Checkbox{Theme: th, Value: &t.HideRuntime, Label: "Hide runtime"}.Layout),
+		layout.Rigid(gap),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if t.Flame {
+				return layout.Dimensions{}
+			}
+			t.Threshold.Width = 80
+			gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(90))
+			return t.Threshold.Layout(gtx, th, options, current)
+		}),
+		layout.Flexed(1, gap),
+		layout.Rigid(gui.IconButton{Theme: th, Clickable: &ui.GraphFullBtn, Tip: &ui.GraphFullTip, Icon: icon, Description: description}.Layout),
+	}
+	// Each row keeps one line high however narrow the pane, cutting off
+	// what doesn't fit; a narrow pane puts the search on its own row.
+	row := func(gtx layout.Context, children ...layout.FlexChild) layout.Dimensions {
+		gtx.Constraints.Max.Y = min(gtx.Constraints.Max.Y, gtx.Dp(32))
+		defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx, children...)
+	}
+	return layout.Inset{Top: 8, Bottom: 6, Left: 14, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		if gtx.Constraints.Max.X >= gtx.Dp(560) {
+			return row(gtx, append([]layout.FlexChild{layout.Flexed(1, search), layout.Rigid(gap)}, controls...)...)
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if t.FlameMode.Value {
-					return layout.Dimensions{}
-				}
-				gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(170))
-				return t.Threshold.Layout(gtx, th, options, current)
+				return row(gtx, layout.Flexed(1, search))
 			}),
-			layout.Flexed(1, gap),
-			layout.Rigid(gui.IconButton{Theme: th, Clickable: &ui.GraphFullBtn, Tip: &ui.GraphFullTip, Icon: icon, Description: description}.Layout),
+			layout.Rigid(layout.Spacer{Height: 6}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return row(gtx, controls...)
+			}),
 		)
 	})
 }

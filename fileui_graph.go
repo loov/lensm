@@ -439,7 +439,7 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 			return ui.layoutGraphTools(gtx, g)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			if ui.GraphTools.FlameMode.Value {
+			if ui.GraphTools.Flame {
 				if name, ok := ui.Flame.layout(gtx, th, prof, ui.GraphTools.query, focus); ok {
 					ui.openTab(ui.findFunc(name), true)
 					gtx.Execute(op.InvalidateCmd{})

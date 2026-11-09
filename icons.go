@@ -24,6 +24,7 @@ var (
 	ProfileGraphIcon   = mustIcon(icons.EditorBubbleChart)
 	FullscreenIcon     = mustIcon(icons.NavigationFullscreen)
 	FullscreenExitIcon = mustIcon(icons.NavigationFullscreenExit)
+	FlameGraphIcon     = mustIcon(icons.SocialWhatsHot)
 	GraphIcon          = mustIcon(icons.HardwareDeviceHub)
 	SummaryIcon        = mustIcon(icons.EditorShowChart)
 	CallersIcon        = mustIcon(icons.CommunicationCallReceived)

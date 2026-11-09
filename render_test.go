@@ -108,7 +108,7 @@ func TestRender(t *testing.T) {
 	ui.ProfileMenu.Open = *renderProfileMenu
 	ui.GraphTools.Find.SetText(*renderGraphFind)
 	ui.GraphTools.HideRuntime.Value = *renderHideRuntime
-	ui.GraphTools.FlameMode.Value = *renderFlame
+	ui.GraphTools.Flame = *renderFlame
 	if *renderCompare != "" {
 		other, err := loadFile(*renderCompare)
 		if err != nil {

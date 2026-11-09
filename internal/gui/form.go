@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"cmp"
 	"image"
 	"image/color"
 
@@ -168,7 +169,9 @@ func (b Checkbox) Layout(gtx layout.Context) layout.Dimensions {
 					return layout.Dimensions{Size: rect.Max}
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: 8}.Layout(gtx, b.Theme.Label(b.Label, 0.95).Layout)
+					label := b.Theme.Label(b.Label, 0.95)
+					label.MaxLines = 1
+					return layout.Inset{Left: 8}.Layout(gtx, label.Layout)
 				}),
 			)
 		})
@@ -178,6 +181,8 @@ func (b Checkbox) Layout(gtx layout.Context) layout.Dimensions {
 // Select picks one of several options from a popup menu.
 type Select struct {
 	Menu Menu
+	// Width is the least width of the button; 0 is 170dp.
+	Width unit.Dp
 }
 
 // Update returns the index of a newly chosen option.
@@ -196,14 +201,18 @@ func (s *Select) Layout(gtx layout.Context, th *Theme, options []string, current
 		if open {
 			bg = c.Fill
 		}
-		gtx.Constraints.Min.X = gtx.Metric.Dp(170)
+		gtx.Constraints.Min.X = min(gtx.Metric.Dp(cmp.Or(s.Width, 170)), gtx.Constraints.Max.X)
 		return frame(gtx, bg, c.Splitter, layout.Inset{Top: 3, Bottom: 3, Left: 9, Right: 4}, func(gtx layout.Context) layout.Dimensions {
 			label := ""
 			if current >= 0 && current < len(options) {
 				label = options[current]
 			}
 			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-				layout.Flexed(1, th.Label(label, 0.95).Layout),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					l := th.Label(label, 0.95)
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					s := gtx.Metric.Dp(16)
 					paint.FillShape(gtx.Ops, c.Accent, clip.UniformRRect(image.Rectangle{Max: image.Pt(s, s)}, gtx.Metric.Dp(4)).Op(gtx.Ops))

@@ -133,6 +133,8 @@ type FileUI struct {
 	// GraphButton on the right strip shows and hides the profile graph.
 	GraphButton widget.Clickable
 	GraphTip    gui.Tooltip
+	FlameButton widget.Clickable
+	FlameTip    gui.Tooltip
 	// GraphFull gives the profile graph the room of the sidebar and the
 	// code as well.
 	GraphFull    bool
