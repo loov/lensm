@@ -115,8 +115,21 @@ func (ui *FileUI) quit() {
 	}
 }
 
-// focusFilter puts the caret at the end of the function filter.
+// showSidebar shows or hides the panel left of the code.
+func (ui *FileUI) showSidebar(show bool) {
+	if ui.Settings.HideSidebar == !show {
+		return
+	}
+	settings := ui.Settings
+	settings.HideSidebar = !show
+	ui.saveSettings(settings)
+}
+
+// focusFilter puts the caret at the end of the function filter, showing
+// the function list first.
 func (ui *FileUI) focusFilter(gtx layout.Context) {
+	ui.Panel = panelFunctions
+	ui.showSidebar(true)
 	gtx.Execute(key.FocusCmd{Tag: &ui.Funcs.Filter})
 	ui.Funcs.Filter.SetCaret(ui.Funcs.Filter.Len(), 0)
 }
@@ -373,6 +386,8 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 	th := ui.Theme
 	for i := range ui.PanelButtons {
 		for ui.PanelButtons[i].Clicked(gtx) {
+			// The open panel's button hides the sidebar, for room.
+			ui.showSidebar(ui.Panel != i || ui.Settings.HideSidebar)
 			ui.Panel = i
 		}
 	}
@@ -380,7 +395,7 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 		ui.setWatch(!ui.Config.Watch)
 	}
 	tool := func(i int, icon *widget.Icon, description string) layout.Widget {
-		return gui.ToolButton{Theme: th, Clickable: &ui.PanelButtons[i], Tip: &ui.PanelTips[i], Icon: icon, Description: description, Selected: ui.Panel == i}.Layout
+		return gui.ToolButton{Theme: th, Clickable: &ui.PanelButtons[i], Tip: &ui.PanelTips[i], Icon: icon, Description: description, Selected: ui.Panel == i && !ui.Settings.HideSidebar}.Layout
 	}
 	watch := "Watch for changes"
 	if ui.Config.Watch {

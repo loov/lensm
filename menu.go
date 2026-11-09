@@ -14,6 +14,7 @@ const (
 	menuSyncScroll
 	menuGoTo
 	menuFilter
+	menuSidebar
 )
 
 // nativeMenuDef is one menu of the menu bar.
@@ -60,6 +61,8 @@ var menuBar = []nativeMenuDef{
 		{Label: "Copy Selection", Tag: menuCopy},
 	}},
 	{"View", []nativeMenuItem{
+		{Label: "Sidebar", Key: "b", Tag: menuSidebar},
+		{},
 		{Label: "Go Assembly", Tag: menuGoAsm},
 		{Label: "Native Assembly", Tag: menuNativeAsm},
 		{Label: "Source", Tag: menuSource},
@@ -98,6 +101,8 @@ func (ui *FileUI) runMenuItem(gtx layout.Context, item int) {
 		}
 	case menuStopCompare:
 		ui.setCompare("", nil)
+	case menuSidebar:
+		ui.showSidebar(ui.Settings.HideSidebar)
 	case menuProfileGraph:
 		ui.ShowGraph = !ui.ShowGraph
 	case menuCloseProfile:
@@ -177,6 +182,7 @@ func (ui *FileUI) handleMenuBar(gtx layout.Context) {
 		menuCompare:      {false, ui.File != nil},
 		menuStopCompare:  {false, ui.Compare.file != nil},
 		menuProfileGraph: {ui.ShowGraph, ui.Profile != nil},
+		menuSidebar:      {!ui.Settings.HideSidebar, true},
 		menuCopy:         {false, selection != ""},
 		menuBack:         {false, ui.Navigation.CanBack()},
 		menuForward:      {false, ui.Navigation.CanForward()},

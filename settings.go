@@ -36,6 +36,8 @@ type AppSettings struct {
 	HideDiagnostics bool    `json:"hide_diagnostics,omitempty"`
 	TextSize        int     `json:"text_size,omitempty"`
 	SidebarRatio    float32 `json:"sidebar_ratio,omitempty"`
+	// HideSidebar collapses the panel left of the code to its icon strip.
+	HideSidebar bool `json:"hide_sidebar,omitempty"`
 	// GraphRatio is the code's share of the width beside the profile graph.
 	GraphRatio float32 `json:"graph_ratio,omitempty"`
 	LastPath   string  `json:"last_path,omitempty"`

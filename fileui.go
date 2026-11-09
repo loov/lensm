@@ -573,6 +573,7 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 	// text editor has focus.
 	editorFocused := gtx.Focused(&ui.Comment) || gtx.Focused(&ui.Funcs.Filter) || gtx.Focused(&ui.QuickOpen.Editor) || gtx.Focused(&ui.Find.Editor)
 	filters := []event.Filter{
+		key.Filter{Required: key.ModShortcut, Name: key.Name("B")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("[")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("]")},
 		key.Filter{Required: key.ModShortcut, Name: key.Name("W")},
@@ -612,6 +613,8 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			ui.navigateForward()
 		case "?", "/":
 			ui.Shortcuts.Open = true
+		case key.Name("B"):
+			ui.showSidebar(ui.Settings.HideSidebar)
 		case key.Name("W"):
 			ui.closeTab(ui.ActiveTab)
 		case key.Name("F"):
@@ -806,98 +809,96 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 		}
 	}()
 
-	return ui.split.Layout(gtx,
-		func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutPanel(gtx)
-		},
-		ui.withGraph(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if ui.LoadError != nil {
-						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								txt := ui.Theme.ErrorLabel(ui.LoadError.Error(), 1)
-								return layout.UniformInset(6).Layout(gtx, txt.Layout)
-							}),
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								if ui.File == nil {
-									return layout.Dimensions{}
-								}
-								return ui.layoutCodeTabs(gtx, colors)
-							}),
-						)
-					}
-					return ui.layoutCodeTabs(gtx, colors)
-				}),
-				layout.Rigid(ui.layoutCrumbs),
-				layout.Rigid(ui.layoutFind),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					if ui.LoadError != nil && ui.File == nil {
-						return layout.Dimensions{}
-					}
-					if ui.File == nil && ui.Config.Path == "" {
-						return ui.layoutEmptyState(gtx)
-					}
-					if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
-						txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)
-						return layout.UniformInset(6).Layout(gtx, txt.Layout)
-					}
-					if tab := ui.activeTab(); tab != nil && tab.loading {
-						txt := ui.Theme.Muted("Disassembling "+tab.Name+"...", 1)
-						return layout.UniformInset(6).Layout(gtx, txt.Layout)
-					}
-					code := ui.activeCode()
-					if code == nil {
-						return layout.Dimensions{}
-					}
-					if ui.Compare.file != nil {
-						return ui.layoutCompare(gtx, ui.activeTab())
-					}
-
-					gtx.Constraints = layout.Exact(gtx.Constraints.Max)
-					return layout.Stack{
-						Alignment: layout.SE,
-					}.Layout(gtx,
-						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							code.Notes = disasm.AllNotes &^ ui.Settings.HiddenNotes
-							marks := disasm.AllMarks &^ ui.Settings.HiddenMarks
-							if ui.Settings.HideDiagnostics {
-								code.Notes, marks = 0, 0
+	content := ui.withGraph(func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if ui.LoadError != nil {
+					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							txt := ui.Theme.ErrorLabel(ui.LoadError.Error(), 1)
+							return layout.UniformInset(6).Layout(gtx, txt.Layout)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if ui.File == nil {
+								return layout.Dimensions{}
 							}
-							return codeview.Style{
-								UI: code,
-
-								TryOpen:    ui.tryOpen,
-								OnInteract: ui.keepActiveTab,
-								CopyText: func(gtx layout.Context, text string) {
-									ui.writeClipboardText(gtx, text, "Copied selection")
-								},
-
-								Comments:      ui.Comments,
-								SetComment:    ui.setBufferedComment,
-								CommentEditor: &ui.Comment,
-
-								Theme:          ui.Theme,
-								Syntax:         syntax.PaletteFor(ui.Settings.SyntaxStyle, codeview.SyntaxColors(colors)),
-								ShowGo:         ui.ShowGoAsm.Value,
-								ShowNative:     ui.ShowNativeAsm.Value,
-								ShowSource:     ui.ShowSource.Value,
-								ShowHelp:       ui.ShowAsmHelp.Value,
-								HoverLinksOnly: ui.HoverLinksOnly.Value,
-								SyncScroll:     ui.SyncScroll.Value,
-								Marks:          marks,
-								TextHeight:     ui.Theme.TextSize,
-								Profile:        profileFlat(ui.Profile),
-								ProfileTotal:   profileTotal(ui.Profile),
-								ProfileCalls:   profileCalls(ui.Profile),
-							}.Layout(gtx)
+							return ui.layoutCodeTabs(gtx, colors)
 						}),
 					)
-				}),
-			)
-		}),
-		ui.splitHandle,
-	)
+				}
+				return ui.layoutCodeTabs(gtx, colors)
+			}),
+			layout.Rigid(ui.layoutCrumbs),
+			layout.Rigid(ui.layoutFind),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				if ui.LoadError != nil && ui.File == nil {
+					return layout.Dimensions{}
+				}
+				if ui.File == nil && ui.Config.Path == "" {
+					return ui.layoutEmptyState(gtx)
+				}
+				if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
+					txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)
+					return layout.UniformInset(6).Layout(gtx, txt.Layout)
+				}
+				if tab := ui.activeTab(); tab != nil && tab.loading {
+					txt := ui.Theme.Muted("Disassembling "+tab.Name+"...", 1)
+					return layout.UniformInset(6).Layout(gtx, txt.Layout)
+				}
+				code := ui.activeCode()
+				if code == nil {
+					return layout.Dimensions{}
+				}
+				if ui.Compare.file != nil {
+					return ui.layoutCompare(gtx, ui.activeTab())
+				}
+
+				gtx.Constraints = layout.Exact(gtx.Constraints.Max)
+				return layout.Stack{
+					Alignment: layout.SE,
+				}.Layout(gtx,
+					layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+						code.Notes = disasm.AllNotes &^ ui.Settings.HiddenNotes
+						marks := disasm.AllMarks &^ ui.Settings.HiddenMarks
+						if ui.Settings.HideDiagnostics {
+							code.Notes, marks = 0, 0
+						}
+						return codeview.Style{
+							UI: code,
+
+							TryOpen:    ui.tryOpen,
+							OnInteract: ui.keepActiveTab,
+							CopyText: func(gtx layout.Context, text string) {
+								ui.writeClipboardText(gtx, text, "Copied selection")
+							},
+
+							Comments:      ui.Comments,
+							SetComment:    ui.setBufferedComment,
+							CommentEditor: &ui.Comment,
+
+							Theme:          ui.Theme,
+							Syntax:         syntax.PaletteFor(ui.Settings.SyntaxStyle, codeview.SyntaxColors(colors)),
+							ShowGo:         ui.ShowGoAsm.Value,
+							ShowNative:     ui.ShowNativeAsm.Value,
+							ShowSource:     ui.ShowSource.Value,
+							ShowHelp:       ui.ShowAsmHelp.Value,
+							HoverLinksOnly: ui.HoverLinksOnly.Value,
+							SyncScroll:     ui.SyncScroll.Value,
+							Marks:          marks,
+							TextHeight:     ui.Theme.TextSize,
+							Profile:        profileFlat(ui.Profile),
+							ProfileTotal:   profileTotal(ui.Profile),
+							ProfileCalls:   profileCalls(ui.Profile),
+						}.Layout(gtx)
+					}),
+				)
+			}),
+		)
+	})
+	if ui.Settings.HideSidebar {
+		return content(gtx)
+	}
+	return ui.split.Layout(gtx, ui.layoutPanel, content, ui.splitHandle)
 }
 
 // splitHandle is the line between two resizable panes.

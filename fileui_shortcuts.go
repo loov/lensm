@@ -40,6 +40,7 @@ func shortcutSections() []struct {
 			{shortcut("O"), "Open a binary"},
 			{shortcut("R"), "Reload the binary"},
 			{shortcut(","), "Settings"},
+			{shortcut("B"), "Show or hide the sidebar"},
 			{"Ctrl+Tab", "Next tab, with Shift the previous one"},
 			{shortcut("W"), "Close the tab"},
 			{altShortcut("←") + "  " + altShortcut("→"), "Back and forward between functions"},
