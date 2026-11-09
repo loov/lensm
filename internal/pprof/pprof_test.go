@@ -87,6 +87,9 @@ func main() {
 	}
 	// main.main's call to main.spin carries nearly all the samples, and
 	// the call's address lies inside the call instruction.
+	if f := p.Funcs["main.spin"]; f.Cum < f.Flat || f.Flat*2 < all || p.Funcs["main.main"].Cum < f.Cum {
+		t.Errorf("main.spin %+v, main.main %+v, of %d", f, p.Funcs["main.main"], all)
+	}
 	if e := p.Edges[Edge{"main.main", "main.spin"}]; e*2 < all {
 		t.Errorf("edge main.main → main.spin = %d of %d", e, all)
 	}

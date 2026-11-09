@@ -29,7 +29,13 @@ type Profile struct {
 	// Edges are the samples in which a function called another, by
 	// the functions' names.
 	Edges map[Edge]int64
+	// Funcs are the samples of each function, by name.
+	Funcs map[string]FuncSamples
 }
+
+// FuncSamples are the samples in one function: Flat in its own code,
+// Cum also in what it called, counted once per sample.
+type FuncSamples struct{ Flat, Cum int64 }
 
 // Sample is the value of the samples at one address.
 type Sample struct {
@@ -97,7 +103,8 @@ func Load(path string, lookup Lookup) (*Profile, error) {
 	}
 	shift := pickShift(lo, hi)
 
-	prof := &Profile{Flat: map[uint64]int64{}, Edges: map[Edge]int64{}, Type: st.Type + " " + st.Unit}
+	prof := &Profile{Flat: map[uint64]int64{}, Edges: map[Edge]int64{}, Funcs: map[string]FuncSamples{}, Type: st.Type + " " + st.Unit}
+	seenFuncs := map[string]bool{}
 	calls := map[uint64]int64{}
 	// A recursive stack passes a call or an edge more than once; each
 	// sample counts once for each.
@@ -114,7 +121,19 @@ func Load(path string, lookup Lookup) (*Profile, error) {
 		}
 		clear(seenCalls)
 		clear(seenEdges)
+		clear(seenFuncs)
+		if name := physical(s.Location[0]); name != "" {
+			f := prof.Funcs[name]
+			f.Flat += v
+			prof.Funcs[name] = f
+		}
 		for i, loc := range s.Location {
+			if name := physical(loc); name != "" && !seenFuncs[name] {
+				seenFuncs[name] = true
+				f := prof.Funcs[name]
+				f.Cum += v
+				prof.Funcs[name] = f
+			}
 			if i > 0 && loc.Address != 0 {
 				pc := uint64(int64(loc.Address) - shift)
 				if !seenCalls[pc] {

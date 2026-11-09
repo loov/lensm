@@ -7,6 +7,7 @@ require (
 	gioui.org/x v0.10.2
 	github.com/google/pprof v0.0.0-20261105003125-4bf881d7fb0b
 	github.com/loov/disasm v0.1.5
+	github.com/loov/layout v0.4.1
 	golang.org/x/arch v0.32.0
 	golang.org/x/exp/shiny v0.0.0-20260820142414-ca536658362e
 )
@@ -20,7 +21,7 @@ require (
 	github.com/ianlancetaylor/demangle v0.0.0-20260724033716-83e58baca724 // indirect
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )

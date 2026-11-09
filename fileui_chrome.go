@@ -35,6 +35,7 @@ const (
 	panelMarks
 	panelCallers
 	panelSummary
+	panelGraph
 	panelCount
 )
 
@@ -364,6 +365,7 @@ func (ui *FileUI) layoutStrip(gtx layout.Context) layout.Dimensions {
 			tool(panelCallers, CallersIcon, "Callers"),
 			tool(panelMarks, MarksIcon, "Diagnostics"),
 			tool(panelSummary, SummaryIcon, "Summary"),
+			tool(panelGraph, GraphIcon, "Call graph"),
 		},
 		Bottom: []layout.Widget{
 			gui.ToolButton{Theme: th, Clickable: &ui.WatchButton, Tip: &ui.WatchTip, Icon: WatchIcon, Description: watch, Selected: ui.Config.Watch}.Layout,
@@ -380,6 +382,8 @@ func (ui *FileUI) layoutPanel(gtx layout.Context) layout.Dimensions {
 		return ui.layoutHistoryPanel(gtx)
 	case panelMarks:
 		return ui.layoutMarksPanel(gtx)
+	case panelGraph:
+		return ui.layoutGraphPanel(gtx)
 	case panelSummary:
 		return ui.layoutSummaryPanel(gtx)
 	case panelCallers:

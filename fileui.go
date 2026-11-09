@@ -117,6 +117,7 @@ type FileUI struct {
 	Find              findBar
 	Shortcuts         shortcutSheet
 	Compare           compareView
+	Graph             callGraph
 	TextSizeEditor    widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
