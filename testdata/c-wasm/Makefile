@@ -14,3 +14,10 @@ PHONY := odump-clang
 odump:
 	wasm-objdump -x example-clang.wasm
 	wasm-objdump -x example.wasm
+
+# Optimised objects, so the variables live in locals; an object needs
+# no wasm-ld.
+PHONY := dwarf
+dwarf:
+	clang --target=wasm32 -O2 -g -gdwarf-4 -c -o sum-dwarf4.o sum.c
+	clang --target=wasm32 -O2 -g -gdwarf-5 -c -o sum-dwarf5.o sum.c

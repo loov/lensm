@@ -1,6 +1,7 @@
 package goobj
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -345,5 +346,24 @@ func TestLoadEmptyComponent(t *testing.T) {
 	_, err := Load(path)
 	if err == nil || !strings.Contains(err.Error(), "core module") {
 		t.Fatalf("err = %v, want it to report an empty component", err)
+	}
+}
+
+// TestWasmLocalNamesDWARF checks that locals get their names from both
+// DWARF 4 and DWARF 5 location lists, read from objects clang built.
+func TestWasmLocalNamesDWARF(t *testing.T) {
+	want := map[uint32]string{0: "xs", 1: "n", 3: "i", 4: "total"}
+	for _, name := range []string{"sum-dwarf4.o", "sum-dwarf5.o"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "c-wasm", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		info := loadWasmInfo(data)
+		if info == nil {
+			t.Fatalf("%s: not read", name)
+		}
+		if got := info.locals[0]; !maps.Equal(got, want) {
+			t.Errorf("%s: got %v, want %v", name, got, want)
+		}
 	}
 }
