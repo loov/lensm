@@ -63,6 +63,7 @@ const (
 	menuCloseProfile
 	menuCompare
 	menuStopCompare
+	menuProfileGraph
 	sepFile
 	menuCopy
 	menuBack
@@ -87,6 +88,7 @@ func (ui *FileUI) appMenuItems() []gui.MenuItem {
 		menuCloseProfile: {Label: "Close Profile", Disabled: ui.Profile == nil},
 		menuCompare:      {Label: "Compare With…", Disabled: ui.File == nil},
 		menuStopCompare:  {Label: "Stop Comparing", Disabled: ui.Compare.file == nil},
+		menuProfileGraph: {Label: "Profile Graph", Checked: ui.ShowGraph, Disabled: ui.Profile == nil},
 		sepFile:          {Separator: true},
 		menuCopy:         {Label: "Copy Selection", Shortcut: shortcut("C"), Disabled: selection == ""},
 		menuBack:         {Label: "Back", Shortcut: altShortcut("←"), Disabled: !ui.Navigation.CanBack()},

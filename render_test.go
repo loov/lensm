@@ -31,6 +31,7 @@ import (
 var (
 	renderOut      = flag.String("render", "", "render the window to this PNG file")
 	renderCompare  = flag.String("render.compare", "", "binary to compare the open one with")
+	renderGraph    = flag.Bool("render.graph", false, "show the whole profile's graph")
 	renderProfile  = flag.String("render.profile", "", "pprof profile to show")
 	renderPath     = flag.String("render.path", "", "binary or package directory to open")
 	renderFunc     = flag.String("render.func", "", "function to open in a tab")
@@ -94,6 +95,7 @@ func TestRender(t *testing.T) {
 		ui.SetFile(file)
 		defer ui.File.Close()
 	}
+	ui.ShowGraph = *renderGraph
 	if *renderCompare != "" {
 		other, err := loadFile(*renderCompare)
 		if err != nil {

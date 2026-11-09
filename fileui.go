@@ -118,7 +118,12 @@ type FileUI struct {
 	Shortcuts         shortcutSheet
 	Compare           compareView
 	Graph             callGraph
-	TextSizeEditor    widget.Editor
+	// ShowGraph puts the whole profile's graph in place of the code.
+	ShowGraph      bool
+	ProfileGraph   callGraph
+	ExpandGraph    widget.Clickable
+	CloseGraph     widget.Clickable
+	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
 	// settingsPath is where Settings are saved, empty for none.
@@ -826,6 +831,9 @@ func (ui *FileUI) layoutContent(gtx layout.Context, colors gui.UIColors) layout.
 					}
 					if ui.File == nil && ui.Config.Path == "" {
 						return ui.layoutEmptyState(gtx)
+					}
+					if ui.ShowGraph && ui.Profile != nil {
+						return ui.layoutProfileGraph(gtx)
 					}
 					if tab := ui.activeTab(); tab != nil && tab.LoadError != nil {
 						txt := ui.Theme.ErrorLabel(tab.LoadError.Error(), 1)

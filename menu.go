@@ -66,6 +66,7 @@ var menuBar = []nativeMenuDef{
 		{Label: "Diagnostics", Tag: menuDiagnostics},
 		{},
 		{Label: "Sync Scroll", Tag: menuSyncScroll},
+		{Label: "Profile Graph", Tag: menuProfileGraph},
 	}},
 	{"Go", []nativeMenuItem{
 		{Label: "Go to Function…", Key: "p", Tag: menuGoTo},
@@ -97,6 +98,8 @@ func (ui *FileUI) runMenuItem(gtx layout.Context, item int) {
 		}
 	case menuStopCompare:
 		ui.setCompare("", nil)
+	case menuProfileGraph:
+		ui.ShowGraph = !ui.ShowGraph
 	case menuCloseProfile:
 		ui.Config.ProfilePath = ""
 		ui.loadProfile()
@@ -173,6 +176,7 @@ func (ui *FileUI) handleMenuBar(gtx layout.Context) {
 		menuCloseProfile: {false, ui.Profile != nil},
 		menuCompare:      {false, ui.File != nil},
 		menuStopCompare:  {false, ui.Compare.file != nil},
+		menuProfileGraph: {ui.ShowGraph, ui.Profile != nil},
 		menuCopy:         {false, selection != ""},
 		menuBack:         {false, ui.Navigation.CanBack()},
 		menuForward:      {false, ui.Navigation.CanForward()},

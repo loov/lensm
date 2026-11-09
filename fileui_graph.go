@@ -12,6 +12,7 @@ import (
 	"gioui.org/f32"
 	"gioui.org/font"
 	"gioui.org/io/event"
+	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -42,6 +43,9 @@ type callGraph struct {
 	focus    string
 	prof     *pprof.Profile
 	textSize unit.Sp
+	// full lays out the whole profile, as pprof's graph does, instead
+	// of the calls around focus.
+	full bool
 
 	graph  *glayout.Graph
 	layout *glayout.Layout
@@ -57,6 +61,12 @@ type callGraph struct {
 	offset f32.Point // pan, in px
 	hover  int
 	press  bool
+	// drag is where a press started, and moved whether it has moved
+	// far enough to pan instead of click.
+	drag  f32.Point
+	moved bool
+	// zoom multiplies the fitted scale; 0 is 1.
+	zoom float32
 	// center asks draw to scroll the focus into view.
 	center bool
 }
@@ -88,11 +98,13 @@ func (g *callGraph) calls(prof *pprof.Profile) {
 
 // build lays out the graph around focus.
 func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile, focus string) {
-	if g.focus == focus && g.prof == prof && g.textSize == th.TextSize {
+	if g.prof == prof && g.textSize == th.TextSize && (g.focus == focus || g.full && g.layout != nil) {
+		// The whole graph doesn't depend on focus, only its highlight.
+		g.focus = focus
 		return
 	}
 	g.focus, g.prof, g.textSize = focus, prof, th.TextSize
-	g.layout, g.offset, g.hover, g.center = nil, f32.Point{}, -1, true
+	g.layout, g.offset, g.hover, g.center, g.zoom = nil, f32.Point{}, -1, true, 0
 	g.calls(prof)
 
 	graph := glayout.NewDigraph()
@@ -105,14 +117,38 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 	graph.MeasureText = func(line, _ string, size glayout.Length) glayout.Length {
 		return glayout.Length(measureDp(gtx, th, line, unit.Sp(size)))
 	}
+	var maxFlat int64
+	for _, f := range prof.Funcs {
+		maxFlat = max(maxFlat, f.Flat)
+	}
 	node := func(name string) *glayout.Node {
 		if n, ok := graph.NodeByID[name]; ok {
 			return n
 		}
 		n := graph.Node(name)
+		f := prof.Funcs[name]
 		// Keep the last element of the package path: runtime.main.
-		pkg, _ := gui.SplitPackage(name)
-		n.Label = name[strings.LastIndexByte(pkg, '/')+1:] + "\n" + percentLabel(prof.Funcs[name].Cum, prof.Total)
+		pkg, rest := gui.SplitPackage(name)
+		pkg = pkg[strings.LastIndexByte(pkg, '/')+1:]
+		if !g.full {
+			n.Label = pkg + rest + "\n" + percentLabel(f.Cum, prof.Total)
+			return n
+		}
+		// As pprof does, the text grows with the function's own samples.
+		n.FontSize = fontSize * glayout.Length(1+1.5*math.Sqrt(float64(f.Flat)/float64(max(maxFlat, 1))))
+		lines := []string{strings.TrimSuffix(pkg, "."), rest}
+		if f.Flat == f.Cum {
+			lines = append(lines, valueLabel(prof, f.Flat))
+		} else {
+			lines = append(lines, valueLabel(prof, f.Flat), "of "+valueLabel(prof, f.Cum))
+		}
+		if pkg == "" {
+			lines = lines[1:]
+		}
+		n.Label = strings.Join(lines, "\n")
+		// The layout uses one line height for every node; make room for
+		// the larger text.
+		n.MinSize.Y = n.FontSize * (1.3*glayout.Length(len(lines)) + 1)
 		return n
 	}
 	seen := map[pprof.Edge]bool{}
@@ -124,21 +160,16 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 		le := glayout.NewEdge(node(e.Caller), node(e.Callee))
 		le.Directed = true
 		le.Label = percentLabel(prof.Edges[e], prof.Total)
+		if g.full {
+			le.Label = valueText(prof, prof.Edges[e])
+		}
 		le.FontSize = fontSize * 0.9
 		graph.AddEdge(le)
 	}
-	node(focus)
-	for _, e := range g.in[focus][:min(len(g.in[focus]), graphCallers)] {
-		edge(e)
-	}
-	minShare := int64(float64(prof.Total) * graphMinShare)
-	for _, e := range g.out[focus][:min(len(g.out[focus]), graphCallees)] {
-		edge(e)
-		for _, e2 := range g.out[e.Callee][:min(len(g.out[e.Callee]), graphCallees2)] {
-			if prof.Edges[e2] >= minShare && e2.Callee != focus {
-				edge(e2)
-			}
-		}
+	if g.full {
+		g.pickAll(prof, node, edge)
+	} else {
+		g.pickAround(prof, focus, node, edge)
 	}
 
 	l, err := glayout.Hierarchical(graph, glayout.Options{})
@@ -166,6 +197,58 @@ func (g *callGraph) build(gtx layout.Context, th *gui.Theme, prof *pprof.Profile
 		}
 	}
 	g.min, g.bounds = lo, hi.Sub(lo)
+}
+
+// pickAround adds focus, its hottest callers and its hottest callees
+// two calls deep.
+func (g *callGraph) pickAround(prof *pprof.Profile, focus string, node func(string) *glayout.Node, edge func(pprof.Edge)) {
+	node(focus)
+	for _, e := range g.in[focus][:min(len(g.in[focus]), graphCallers)] {
+		edge(e)
+	}
+	minShare := int64(float64(prof.Total) * graphMinShare)
+	for _, e := range g.out[focus][:min(len(g.out[focus]), graphCallees)] {
+		edge(e)
+		for _, e2 := range g.out[e.Callee][:min(len(g.out[e.Callee]), graphCallees2)] {
+			if prof.Edges[e2] >= minShare && e2.Callee != focus {
+				edge(e2)
+			}
+		}
+	}
+}
+
+// Limits on the whole profile's graph, pprof's defaults.
+const (
+	fullMaxNodes  = 80
+	fullNodeShare = 0.005
+	fullEdgeShare = 0.001
+)
+
+// pickAll adds the functions with the most samples below them and the
+// calls between them, dropping the ones too small to matter.
+func (g *callGraph) pickAll(prof *pprof.Profile, node func(string) *glayout.Node, edge func(pprof.Edge)) {
+	var names []string
+	for name, f := range prof.Funcs {
+		if float64(f.Cum) >= fullNodeShare*float64(prof.Total) {
+			names = append(names, name)
+		}
+	}
+	slices.SortFunc(names, func(a, b string) int {
+		return cmp.Or(cmp.Compare(prof.Funcs[b].Cum, prof.Funcs[a].Cum), cmp.Compare(a, b))
+	})
+	names = names[:min(len(names), fullMaxNodes)]
+	keep := map[string]bool{}
+	for _, name := range names {
+		keep[name] = true
+		node(name)
+	}
+	for _, name := range names {
+		for _, e := range g.out[name] {
+			if keep[e.Callee] && float64(prof.Edges[e]) >= fullEdgeShare*float64(prof.Total) {
+				edge(e)
+			}
+		}
+	}
 }
 
 // measureDp is the width of line in dp at size.
@@ -198,6 +281,53 @@ func percentText(p float64) string {
 	return fmt.Sprintf("%.0f%%", p)
 }
 
+// valueLabel spells v and its share of the samples: 2.43s (18.9%).
+func valueLabel(prof *pprof.Profile, v int64) string {
+	if v == 0 {
+		return "0"
+	}
+	return valueText(prof, v) + " (" + percentLabel(v, prof.Total) + ")"
+}
+
+// valueText spells v in the profile's unit.
+func valueText(prof *pprof.Profile, v int64) string {
+	unit := prof.Type[strings.LastIndexByte(prof.Type, ' ')+1:]
+	f := float64(v)
+	switch unit {
+	case "nanoseconds":
+		switch {
+		case f >= 1e9:
+			return trimZeros("%.2fs", f/1e9)
+		case f >= 1e6:
+			return trimZeros("%.2fms", f/1e6)
+		}
+		return fmt.Sprintf("%.0fµs", f/1e3)
+	case "bytes":
+		switch {
+		case f >= 1<<30:
+			return trimZeros("%.2fGB", f/(1<<30))
+		case f >= 1<<20:
+			return trimZeros("%.2fMB", f/(1<<20))
+		case f >= 1<<10:
+			return trimZeros("%.2fkB", f/(1<<10))
+		}
+		return fmt.Sprintf("%dB", v)
+	}
+	return fmt.Sprint(v)
+}
+
+// trimZeros formats a number and drops the zeros after its point:
+// 40.00ms is 40ms.
+func trimZeros(format string, v float64) string {
+	s := fmt.Sprintf(format, v)
+	unit := strings.TrimLeft(s, "0123456789.")
+	num := s[:len(s)-len(unit)]
+	if strings.Contains(num, ".") {
+		num = strings.TrimRight(strings.TrimRight(num, "0"), ".")
+	}
+	return num + unit
+}
+
 // layoutGraphPanel draws the call graph of the open function; a click
 // on a function opens it.
 func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
@@ -212,7 +342,18 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 	case ui.Profile.Funcs[tab.Name].Cum == 0:
 		empty = "The profile has no samples in this function."
 	}
-	return ui.panelFrame(gtx, "CALL GRAPH", nil, func(gtx layout.Context) layout.Dimensions {
+	if ui.ExpandGraph.Clicked(gtx) {
+		ui.ShowGraph = !ui.ShowGraph
+	}
+	var expand layout.Widget
+	if ui.Profile != nil {
+		text := "Expand"
+		if ui.ShowGraph {
+			text = "Collapse"
+		}
+		expand = gui.Button{Theme: th, Clickable: &ui.ExpandGraph, Text: text}.Layout
+	}
+	return ui.panelFrame(gtx, "CALL GRAPH", expand, func(gtx layout.Context) layout.Dimensions {
 		if empty != "" {
 			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, th.Muted(empty, 0.9).Layout)
 		}
@@ -229,36 +370,96 @@ func (ui *FileUI) layoutGraphPanel(gtx layout.Context) layout.Dimensions {
 	})
 }
 
+// layoutProfileGraph draws the whole profile's graph in place of the
+// code; a click on a function opens it, and Escape goes back.
+func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
+	th := ui.Theme
+	for {
+		ev, ok := gtx.Event(key.Filter{Name: key.NameEscape})
+		if !ok {
+			break
+		}
+		if e, ok := ev.(key.Event); ok && e.State == key.Press {
+			ui.ShowGraph = false
+		}
+	}
+	if ui.CloseGraph.Clicked(gtx) {
+		ui.ShowGraph = false
+	}
+	if !ui.ShowGraph {
+		gtx.Execute(op.InvalidateCmd{})
+		return layout.Dimensions{}
+	}
+	focus := ""
+	if tab := ui.activeTab(); tab != nil {
+		focus = tab.Name
+	}
+	g := &ui.ProfileGraph
+	g.full = true
+	g.build(gtx, th, ui.Profile, focus)
+	gtx.Constraints = layout.Exact(gtx.Constraints.Max)
+	return layout.Stack{Alignment: layout.NE}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			paint.FillShape(gtx.Ops, th.Colors.Background, clip.Rect{Max: gtx.Constraints.Max}.Op())
+			if g.layout == nil {
+				return layout.Dimensions{}
+			}
+			if name, ok := g.draw(gtx, th, ui.Profile); ok {
+				ui.ShowGraph = false
+				ui.openTab(ui.findFunc(name), true)
+				gtx.Execute(op.InvalidateCmd{})
+			}
+			return layout.Dimensions{Size: gtx.Constraints.Max}
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return layout.UniformInset(10).Layout(gtx, gui.Button{Theme: th, Clickable: &ui.CloseGraph, Text: "Close graph"}.Layout)
+		}),
+	)
+}
+
 // draw draws the graph scaled to fit the width, and returns the
 // function clicked, if any.
 func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile) (string, bool) {
 	size := gtx.Constraints.Max
 	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
 	pad := float32(gtx.Metric.Dp(8))
-	// Fit the width, but keep the text readable; wider graphs pan.
-	scale := gtx.Metric.PxPerDp
-	if w := float32(g.bounds.X) * scale; w > float32(size.X)-2*pad {
-		scale = max((float32(size.X)-2*pad)/float32(g.bounds.X), gtx.Metric.PxPerDp*0.9)
+	// Fit the width, but keep the text readable; the graph pans when it doesn't fit, and
+	// zooms with Ctrl or Command held.
+	fit, least := (float32(size.X)-2*pad)/float32(g.bounds.X), float32(0.9)
+	if g.full {
+		least = 0.6
 	}
-	content := f32.Pt(float32(g.bounds.X)*scale+2*pad, float32(g.bounds.Y)*scale+2*pad)
-	origin := f32.Pt(max((float32(size.X)-content.X)/2, 0), 0)
+	fit = min(max(fit, gtx.Metric.PxPerDp*least), gtx.Metric.PxPerDp)
+	var scale float32
+	var content, origin f32.Point
+	rescale := func() {
+		scale = fit * cmp.Or(g.zoom, 1)
+		content = f32.Pt(float32(g.bounds.X)*scale+2*pad, float32(g.bounds.Y)*scale+2*pad)
+		origin = f32.Pt(max((float32(size.X)-content.X)/2, 0), 0)
+		if g.full {
+			origin.Y = max((float32(size.Y)-content.Y)/2, 0)
+		}
+	}
+	rescale()
 	if g.center {
 		g.center = false
 		for i, n := range g.graph.Nodes {
 			if n.ID == g.focus {
-				x := float32(g.layout.Nodes[i].Center.X-g.min.X)*scale + pad
-				g.offset.X = float32(size.X)/2 - origin.X - x
+				p := g.layout.Nodes[i].Center.Sub(g.min)
+				g.offset.X = float32(size.X)/2 - origin.X - (float32(p.X)*scale + pad)
+				if g.full {
+					g.offset.Y = float32(size.Y)/2 - origin.Y - (float32(p.Y)*scale + pad)
+				}
 			}
 		}
 	}
 
-	// Pan with the wheel or trackpad, within the content.
 	clicked := ""
 	event.Op(gtx.Ops, g)
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
 			Target:  g,
-			Kinds:   pointer.Move | pointer.Press | pointer.Release | pointer.Leave | pointer.Scroll,
+			Kinds:   pointer.Move | pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Leave | pointer.Scroll,
 			ScrollX: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
 			ScrollY: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
 		})
@@ -272,24 +473,41 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 		at := func() int { return g.nodeAt(e.Position.Sub(origin).Sub(g.offset), scale, pad) }
 		switch e.Kind {
 		case pointer.Scroll:
-			g.offset = g.offset.Sub(e.Scroll)
+			if !e.Modifiers.Contain(key.ModShortcut) {
+				g.offset = g.offset.Sub(e.Scroll)
+				break
+			}
+			// Zoom about the pointer.
+			p := e.Position.Sub(origin).Sub(g.offset).Sub(f32.Pt(pad, pad)).Mul(1 / scale)
+			g.zoom = min(max(cmp.Or(g.zoom, 1)*float32(math.Exp(float64(-e.Scroll.Y)/200)), 0.2), 4)
+			rescale()
+			g.offset = e.Position.Sub(origin).Sub(f32.Pt(pad, pad)).Sub(p.Mul(scale))
 		case pointer.Move:
 			g.hover = at()
 		case pointer.Leave:
 			g.hover = -1
 		case pointer.Press:
-			g.press = true
+			g.press, g.moved, g.drag = true, false, e.Position
+		case pointer.Drag:
+			// Drag to pan, once the pointer has moved past a click's slop.
+			if d := e.Position.Sub(g.drag); g.moved || d.X*d.X+d.Y*d.Y > float32(gtx.Dp(4)*gtx.Dp(4)) {
+				g.moved = true
+				g.offset = g.offset.Add(d)
+				g.drag = e.Position
+			}
 		case pointer.Release:
-			if g.press {
+			if g.press && !g.moved {
 				if i := at(); i >= 0 {
 					clicked = g.graph.Nodes[i].ID
 				}
 			}
 			g.press = false
+		case pointer.Cancel:
+			g.press = false
 		}
 	}
 	g.offset.X = min(max(g.offset.X, min(float32(size.X)-content.X-origin.X, 0)), 0)
-	g.offset.Y = min(max(g.offset.Y, min(float32(size.Y)-content.Y, 0)), 0)
+	g.offset.Y = min(max(g.offset.Y, min(float32(size.Y)-content.Y-origin.Y, 0)), 0)
 	if g.hover >= 0 {
 		pointer.CursorPointer.Add(gtx.Ops)
 	}
@@ -348,12 +566,12 @@ func (g *callGraph) draw(gtx layout.Context, th *gui.Theme, prof *pprof.Profile)
 
 		lines := strings.Split(g.layout.Nodes[i].Label, "\n")
 		size := unit.Sp(float32(n.FontSize) * scale / gtx.Metric.PxPerDp)
-		lineHeight := float32(g.graph.LineHeight) * scale
+		lineHeight := float32(n.FontSize) * 1.3 * scale
 		center := at(n.Center)
 		top := center.Y - lineHeight*float32(len(lines)-1)/2
 		for k, line := range lines {
 			col, weight := c.Text, font.Medium
-			if k > 0 {
+			if strings.ContainsRune(line, '%') {
 				col, weight = c.MutedText, font.Normal
 			}
 			drawText(gtx, th, line, f32.Pt(center.X, top+float32(k)*lineHeight), size, col, weight)
