@@ -40,9 +40,12 @@ type expr struct {
 	prec int
 	// not is the comparison's negation, for eqz to use.
 	not string
-	// shift marks a shift, which Go binds tighter than + and C looser,
-	// so it gets parentheses inside a sum either way.
-	shift bool
+	// bits marks a shift or an and, which Go binds tighter than + and
+	// C looser, so it gets parentheses inside arithmetic either way.
+	bits bool
+	// narrow is the 32-bit value an extension widened, which wrapping
+	// gives back.
+	narrow string
 	// row is the instruction that completed it, and reads what its
 	// value depends on, so a statement that changes that first can
 	// give the value a name on its own row.
@@ -191,7 +194,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 	push := func(text string, prec int) { pushExpr(expr{text: text, prec: prec}) }
 	// wrap puts e in parentheses when it binds looser than prec.
 	wrap := func(e expr, prec int) string {
-		if e.prec < prec || e.shift && (prec == 4 || prec == 5) {
+		if e.prec < prec || e.bits && (prec == 4 || prec == 5) {
 			return "(" + e.text + ")"
 		}
 		return e.text
@@ -328,7 +331,10 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 			stack = stack[:0:0]
 		case op == "nop":
 		case op == "drop":
-			text = pop().text
+			// Only a call does something worth showing.
+			if v := pop(); v.reads.call && v.row >= 0 {
+				text = v.text
+			}
 		case op == "select":
 			c, b, a := pop(), pop(), pop()
 			push(wrap(c, 3)+" ? "+wrap(a, 2)+" : "+wrap(b, 2), 1)
@@ -407,7 +413,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 				push(short+"("+a.text+", "+b.text+")", 9)
 				break
 			}
-			e := expr{text: wrap(a, o.prec) + " " + o.text + " " + wrap(b, o.prec+1), prec: o.prec, shift: strings.HasPrefix(short, "sh")}
+			e := expr{text: wrap(a, o.prec) + " " + o.text + " " + wrap(b, o.prec+1), prec: o.prec, bits: strings.HasPrefix(short, "sh") || short == "and"}
 			// A float comparison is false either way for NaN, so only an
 			// integer one turns around.
 			if not, ok := negations[o.text]; ok && typ[0] == 'i' {
@@ -420,11 +426,25 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 				pushExpr(expr{text: a.not, prec: 3, not: a.text})
 				break
 			}
-			pushExpr(expr{text: wrap(a, 4) + " == 0", prec: 3, not: wrap(a, 4) + " != 0"})
+			pushExpr(expr{text: wrap(a, 9) + " == 0", prec: 3, not: wrap(a, 9) + " != 0"})
 		case short == "neg":
 			push("-"+wrap(pop(), 9), 9)
 		case isUnary(short):
-			push(convert(typ, short)+"("+pop().text+")", 9)
+			a := pop()
+			if a.not != "" && strings.HasPrefix(short, "extend_i32") {
+				// A comparison is 0 or 1 at any width.
+				pushExpr(expr{text: a.text, prec: a.prec, not: a.not})
+				break
+			}
+			if short == "wrap_i64" && a.narrow != "" {
+				push(a.narrow, 9)
+				break
+			}
+			e := expr{text: convert(typ, short) + "(" + a.text + ")", prec: 9}
+			if strings.HasPrefix(short, "extend_i32") {
+				e.narrow = wrap(a, 9)
+			}
+			pushExpr(e)
 		default:
 			// An instruction this doesn't know the operands of: show it
 			// and start over with an unknown stack.
