@@ -212,9 +212,15 @@ func (g *callGraph) pickAround(prof *pprof.Profile, focus string, node func(stri
 	minShare := int64(float64(prof.Total) * graphMinShare)
 	for _, e := range g.out[focus][:min(len(g.out[focus]), graphCallees)] {
 		edge(e)
-		for _, e2 := range g.out[e.Callee][:min(len(g.out[e.Callee]), graphCallees2)] {
-			if prof.Edges[e2] >= minShare && e2.Callee != focus {
+		// A call back to focus doesn't take one of the places.
+		shown := 0
+		for _, e2 := range g.out[e.Callee] {
+			if shown == graphCallees2 || prof.Edges[e2] < minShare {
+				break
+			}
+			if e2.Callee != focus {
 				edge(e2)
+				shown++
 			}
 		}
 	}
