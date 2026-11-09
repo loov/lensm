@@ -31,6 +31,9 @@ type MenuItem struct {
 // anywhere else closes it.
 type Menu struct {
 	Open bool
+	// Up opens the popup above the anchor, for anchors at the bottom of
+	// the window.
+	Up bool
 
 	anchor widget.Clickable
 	items  []widget.Clickable
@@ -92,9 +95,16 @@ func (m *Menu) Layout(gtx layout.Context, th *Theme, items []MenuItem, anchor fu
 
 	macro := op.Record(gtx.Ops)
 	m.layoutScrim(gtx)
-	op.Offset(image.Pt(0, dims.Size.Y+gtx.Metric.Dp(4))).Add(gtx.Ops)
 	gtx.Constraints.Min = image.Point{}
-	m.layoutPopup(gtx, th, items)
+	popup := op.Record(gtx.Ops)
+	size := m.layoutPopup(gtx, th, items).Size
+	call := popup.Stop()
+	at := dims.Size.Y + gtx.Metric.Dp(4)
+	if m.Up {
+		at = -size.Y - gtx.Metric.Dp(4)
+	}
+	op.Offset(image.Pt(0, at)).Add(gtx.Ops)
+	call.Add(gtx.Ops)
 	op.Defer(gtx.Ops, macro.Stop())
 	return dims
 }

@@ -23,6 +23,8 @@ type Profile struct {
 	Total int64
 	// Type names the value, such as "cpu nanoseconds".
 	Type string
+	// Types names every value the samples carry; Type is one of them.
+	Types []string
 	// Calls are the samples whose stacks pass through each call, by the
 	// address the stack holds, which lies inside the call instruction.
 	// They are sorted by PC.
@@ -70,7 +72,11 @@ type NameAt func(pc uint64) string
 // samples name. A function the binary names differently than the
 // profile, such as Go assembly local to its file, which the profile
 // leaves without a package, takes the binary's name from nameAt.
-func Load(path string, lookup Lookup, nameAt NameAt) (*Profile, error) {
+//
+// sample names the value to read, one of Types; any other picks the
+// last, which pprof shows by default: cpu time rather than the sample
+// count, in-use space for a heap profile.
+func Load(path, sample string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -83,10 +89,14 @@ func Load(path string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 	if len(p.SampleType) == 0 {
 		return nil, errors.New("profile has no sample types")
 	}
-	// The last type is the one pprof shows by default: cpu time rather
-	// than the sample count, in-use space for a heap profile.
-	value := len(p.SampleType) - 1
-	st := p.SampleType[value]
+	var types []string
+	for _, st := range p.SampleType {
+		types = append(types, st.Type+" "+st.Unit)
+	}
+	value := slices.Index(types, sample)
+	if value < 0 {
+		value = len(types) - 1
+	}
 
 	// Each leaf location in a known function bounds the shift: the
 	// address minus the shift lies inside the function.
@@ -111,7 +121,7 @@ func Load(path string, lookup Lookup, nameAt NameAt) (*Profile, error) {
 	shift := pickShift(lo, hi)
 	physical := renamer(lookup, nameAt, shift)
 
-	prof := &Profile{Flat: map[uint64]int64{}, Edges: map[Edge]int64{}, Funcs: map[string]FuncSamples{}, Type: st.Type + " " + st.Unit}
+	prof := &Profile{Flat: map[uint64]int64{}, Edges: map[Edge]int64{}, Funcs: map[string]FuncSamples{}, Type: types[value], Types: types}
 	seenFuncs := map[string]bool{}
 	calls := map[uint64]int64{}
 	// A recursive stack passes a call or an edge more than once; each

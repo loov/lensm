@@ -6,7 +6,10 @@ import (
 	"path/filepath"
 	"slices"
 
+	"gioui.org/layout"
+
 	"loov.dev/lensm/internal/disasm"
+	"loov.dev/lensm/internal/gui"
 	"loov.dev/lensm/internal/pprof"
 )
 
@@ -49,7 +52,7 @@ func (ui *FileUI) loadProfile() {
 		}
 		return -1
 	}
-	prof, err := pprof.Load(ui.Config.ProfilePath, func(name string) (uint64, uint64, bool) {
+	prof, err := pprof.Load(ui.Config.ProfilePath, ui.Config.ProfileSample, func(name string) (uint64, uint64, bool) {
 		s, ok := byName[name]
 		return s.addr, s.size, ok
 	}, func(pc uint64) string {
@@ -73,12 +76,31 @@ func (ui *FileUI) loadProfile() {
 	}
 }
 
-// profileStatus names the loaded profile for the status bar.
-func (ui *FileUI) profileStatus() string {
-	if ui.Profile == nil {
-		return ""
+// layoutProfileStatus names the loaded profile in the status bar; a
+// click picks which of its values to show.
+func (ui *FileUI) layoutProfileStatus(gtx layout.Context) layout.Dimensions {
+	th := ui.Theme
+	prof := ui.Profile
+	if i, ok := ui.ProfileMenu.Update(gtx); ok && i < len(prof.Types) && prof.Types[i] != prof.Type {
+		ui.Config.ProfileSample = prof.Types[i]
+		ui.loadProfile()
+		if ui.Profile == nil {
+			return layout.Dimensions{}
+		}
+		prof = ui.Profile
 	}
-	return fmt.Sprintf("%s · %s", filepath.Base(ui.Config.ProfilePath), ui.Profile.Type)
+	items := make([]gui.MenuItem, len(prof.Types))
+	for i, t := range prof.Types {
+		items[i] = gui.MenuItem{Label: t, Checked: t == prof.Type}
+	}
+	ui.ProfileMenu.Up = true
+	return ui.ProfileMenu.Layout(gtx, th, items, func(gtx layout.Context, open bool) layout.Dimensions {
+		text := fmt.Sprintf("%s · %s", filepath.Base(ui.Config.ProfilePath), prof.Type)
+		if len(prof.Types) > 1 {
+			text += " ▾"
+		}
+		return th.StatusText(text)(gtx)
+	})
 }
 
 func profileFlat(p *pprof.Profile) map[uint64]int64 {

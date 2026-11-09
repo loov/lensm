@@ -595,8 +595,8 @@ func (ui *FileUI) layoutStatus(gtx layout.Context) layout.Dimensions {
 	if ui.File != nil {
 		left = append(left, th.StatusText(ui.Funcs.CountText()))
 	}
-	if status := ui.profileStatus(); status != "" {
-		left = append(left, th.StatusText(status))
+	if ui.Profile != nil {
+		left = append(left, ui.layoutProfileStatus)
 	}
 	if ui.SyncScroll.Update(gtx) {
 		s := ui.Settings

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"loov.dev/lensm/internal/disasm"
@@ -88,7 +89,7 @@ func main() {
 		}
 		return ""
 	}
-	p, err := Load(prof, lookup, nameAt)
+	p, err := Load(prof, "", lookup, nameAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,6 +111,18 @@ func main() {
 	}
 	if e := p.Edges[Edge{"main.main", "main.spin"}]; e*2 < all {
 		t.Errorf("edge main.main → main.spin = %d of %d", e, all)
+	}
+	if p.Type != "cpu nanoseconds" || !slices.Equal(p.Types, []string{"samples count", "cpu nanoseconds"}) {
+		t.Errorf("Type %q of %q", p.Type, p.Types)
+	}
+	// The sample count is the other value, one per sample, each 10ms of
+	// cpu time at the default rate.
+	counts, err := Load(prof, "samples count", lookup, nameAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts.Type != "samples count" || counts.Total*10_000_000 != p.Total {
+		t.Errorf("%d samples, %d ns", counts.Total, p.Total)
 	}
 	if p.Funcs["internal/bytealg.cmpbody"].Flat == 0 || p.Funcs["cmpbody"] != (FuncSamples{}) {
 		t.Errorf("cmpbody %+v, internal/bytealg.cmpbody %+v", p.Funcs["cmpbody"], p.Funcs["internal/bytealg.cmpbody"])

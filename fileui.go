@@ -43,6 +43,9 @@ type FileUIConfig struct {
 	CommentsPath string
 	// ProfilePath is a pprof profile of the binary to show.
 	ProfilePath string
+	// ProfileSample names the profile's value to show, such as
+	// "alloc_space bytes"; empty is the profile's default.
+	ProfileSample string
 }
 
 type FileUI struct {
@@ -128,9 +131,11 @@ type FileUI struct {
 	GraphTip    gui.Tooltip
 	// GraphFull gives the profile graph the room of the sidebar and the
 	// code as well.
-	GraphFull      bool
-	GraphFullBtn   widget.Clickable
-	GraphFullTip   gui.Tooltip
+	GraphFull    bool
+	GraphFullBtn widget.Clickable
+	GraphFullTip gui.Tooltip
+	// ProfileMenu picks the profile value to show.
+	ProfileMenu    gui.Menu
 	TextSizeEditor widget.Editor
 	// textSizeEdited marks TextSizeEditor as changed since it was applied.
 	textSizeEdited bool
@@ -366,7 +371,7 @@ func (ui *FileUI) Run(w *app.Window) error {
 			if res.err != nil {
 				ui.LoadError = res.err
 			} else if res.ok && res.kind == pickProfile {
-				ui.Config.ProfilePath = res.path
+				ui.Config.ProfilePath, ui.Config.ProfileSample = res.path, ""
 				ui.loadProfile()
 			} else if res.ok && res.kind == pickCompare {
 				ui.setCompare(res.path, res.file)
