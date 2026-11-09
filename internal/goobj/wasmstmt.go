@@ -161,6 +161,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 	readsGlobal := func(n uint32) func(reads) bool {
 		return func(r reads) bool { return r.call || slices.Contains(r.globals, n) }
 	}
+	readsCall := func(r reads) bool { return r.call }
 	readsMemory := func(r reads) bool { return r.memory || r.call }
 	readsAny := func(r reads) bool { return r.memory || r.call || len(r.globals) > 0 }
 	popN := func(n int) []string {
@@ -312,6 +313,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 			popped, own = reads{}, reads{locals: []uint32{in.LocalIndex}}
 			push(name(in.LocalIndex), 9)
 		case op == "global.get":
+			settle(readsCall)
 			own.globals = []uint32{in.GlobalIndex}
 			push(global(in.GlobalIndex), 9)
 		case op == "global.set":
@@ -344,6 +346,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 		case short == "const":
 			push(arg, 9)
 		case strings.HasPrefix(short, "load"):
+			settle(readsCall)
 			own.memory = true
 			push(memType(typ, short)+"["+address(pop(), in.MemoryOffset)+"]", 9)
 		case strings.HasPrefix(short, "store"):
@@ -352,6 +355,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst) {
 			settle(readsMemory)
 			text = memType(typ, short) + "[" + a + "] = " + v.text
 		case op == "memory.size":
+			settle(readsCall)
 			own.memory = true
 			push("memory_size()", 9)
 		case op == "memory.grow":
