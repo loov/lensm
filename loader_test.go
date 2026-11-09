@@ -101,3 +101,55 @@ func TestLoaderWatchToggle(t *testing.T) {
 		t.Fatal("no reload after turning watching on")
 	}
 }
+
+// TestLoaderWatchPackage checks that watching a package directory
+// reloads when any Go file of its module changes, but not one in a
+// directory the go command ignores.
+func TestLoaderWatchPackage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for the debounce")
+	}
+	root := t.TempDir()
+	pkg := filepath.Join(root, "cmd", "app")
+	for path, data := range map[string]string{
+		"go.mod":            "module example.com/app\n",
+		"cmd/app/main.go":   "package main\n",
+		"lib/lib.go":        "package lib\n",
+		".hidden/hidden.go": "package hidden\n",
+	} {
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var closed atomic.Int32
+	l := newLoader(func(string) (disasm.File, error) {
+		return loaderTestFile{&closed}, nil
+	}, true)
+	defer l.Close()
+
+	l.Request(1, pkg)
+	<-l.Results()
+
+	touch := func(path string, mod time.Time) {
+		if err := os.Chtimes(filepath.Join(root, path), mod, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	touch(".hidden/hidden.go", time.Now().Add(time.Second))
+	select {
+	case <-l.Results():
+		t.Fatal("reloaded for a file in an ignored directory")
+	case <-time.After(600 * time.Millisecond):
+	}
+
+	touch("lib/lib.go", time.Now().Add(2*time.Second))
+	select {
+	case <-l.Results():
+	case <-time.After(5 * time.Second):
+		t.Fatal("no reload after a change in another package of the module")
+	}
+}
