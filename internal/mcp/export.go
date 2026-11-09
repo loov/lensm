@@ -47,10 +47,13 @@ type SourceLineDTO struct {
 // function's own. Index counts the spacer rows the
 // viewer puts before jump targets, which RefOffset and Related use too.
 type AsmLineDTO struct {
-	Index         int    `json:"index"`
-	PC            string `json:"pc"`
-	Go            string `json:"go,omitempty"`
-	Native        string `json:"native,omitempty"`
+	Index  int    `json:"index"`
+	PC     string `json:"pc"`
+	Go     string `json:"go,omitempty"`
+	Native string `json:"native,omitempty"`
+	// Statement is what a wasm row completes, spelled like source, in
+	// place of native assembly.
+	Statement     string `json:"statement,omitempty"`
 	Indent        int    `json:"indent,omitempty"`
 	File          string `json:"file,omitempty"`
 	Line          int    `json:"line,omitempty"`
@@ -139,6 +142,9 @@ func BuildFunctionCodeDTO(binary string, code *disasm.Code, store *comments.Stor
 		}
 		if opts.NativeAsm {
 			line.Native = inst.NativeText
+			if code.Statements {
+				line.Native, line.Statement = "", inst.NativeText
+			}
 			line.NativeComment = store.ForAsm(code.Name, comments.ViewNativeAsm, inst.PC)
 		}
 		dto.Asm = append(dto.Asm, line)

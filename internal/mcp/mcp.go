@@ -510,6 +510,7 @@ func mcpTools() []mcpTool {
 			Title: "Get Function Code",
 			Description: "Return a function's source, its assembly in Go and native syntax, which instructions each source line compiled to, and comments. " +
 				"Source comes from the debug info and is missing when the files aren't on this machine. " +
+				"A wasm function has no native assembly; the native view gives each row the statement it completes, such as \"l2 = l2 + i32[p0 + l1]\", in statement, and rows that only feed one have none. " +
 				"Instructions come in pages of 500; when truncated is set, call again with offset.",
 			InputSchema: objectSchema(map[string]any{
 				"name":    stringSchema("Exact function name."),
