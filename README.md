@@ -142,7 +142,10 @@ inlined code isn't always the file of its first instruction.
 ### WebAssembly
 
 Modules from `GOOS=wasip1 GOARCH=wasm`, TinyGo or anything else are shown
-as WAT, with calls resolved to function names.
+as WAT, with calls resolved to function names and branches drawn as
+jumps. The Statements column spells the same code as expressions, such
+as `l2 = i32[p0 + l1] + l2`, each on the row of the instruction that
+completes it.
 
 - Go records a source position per resume point, not per instruction, so
   the instructions between two resume points share one line.
