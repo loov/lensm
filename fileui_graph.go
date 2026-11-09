@@ -374,13 +374,23 @@ func (ui *FileUI) layoutProfileGraph(gtx layout.Context) layout.Dimensions {
 	g.full = true
 	g.build(gtx, th, ui.Profile, focus)
 	size := gtx.Constraints.Max
-	paint.FillShape(gtx.Ops, th.Colors.Background, clip.Rect{Max: size}.Op())
+	// The sidebar's darker tone and a shadow along the left edge set
+	// the pane apart from the code.
+	paint.FillShape(gtx.Ops, th.Colors.Sidebar, clip.Rect{Max: size}.Op())
 	if g.layout != nil {
 		if name, ok := g.draw(gtx, th, ui.Profile); ok {
 			ui.openTab(ui.findFunc(name), true)
 			gtx.Execute(op.InvalidateCmd{})
 		}
 	}
+	shadow := gtx.Dp(10)
+	stack := clip.Rect{Max: image.Pt(shadow, size.Y)}.Push(gtx.Ops)
+	paint.LinearGradientOp{
+		Stop1: f32.Pt(0, 0), Color1: color.NRGBA{A: 0x22},
+		Stop2: f32.Pt(float32(shadow), 0), Color2: color.NRGBA{},
+	}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	stack.Pop()
 	return layout.Dimensions{Size: size}
 }
 
