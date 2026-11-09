@@ -49,6 +49,14 @@ type expr struct {
 	// narrow is the 32-bit value an extension widened, which wrapping
 	// gives back.
 	narrow string
+	// konst is set for a constant, val.
+	konst bool
+	val   int64
+	// sp marks an address on Go's stack, spOff bytes from where SP was
+	// when the function started; spGlobal marks the SP global itself.
+	sp       bool
+	spOff    int64
+	spGlobal bool
 	// row is the instruction that completed it, and reads what its
 	// value depends on, so a statement that changes that first can
 	// give the value a name on its own row.
@@ -75,7 +83,10 @@ func (r *reads) add(o reads) {
 // and the instructions feeding it get none. insts are the function's
 // rows, in the order of its body. dwarfLocals names locals the module's
 // name section doesn't, by the index among the module's own functions.
-func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals map[int]map[uint32]string) {
+//
+// goArgs names a Go function's arguments and results by their offset
+// from the first, for the loads and stores that reach them.
+func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals map[int]map[uint32]string, goArgs map[int64]string) {
 	funcs := wasmFuncTypes(m)
 	imported := len(funcs) - len(m.Funcs)
 	if idx < imported || idx >= len(funcs) {
@@ -140,12 +151,51 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 		// its case by, plus one; 0 when there is none.
 		selector uint32
 		loop     bool
+		// cond marks an if, and adj is where l1 pointed when it started.
+		cond     bool
+		adj      int64
+		adjKnown bool
 		height   int // the stack's height when the block started
 		result   int // the values the block leaves
 	}
 	targeted := wasmTargets(body)
 	cases, switches, selectors := wasmSwitches(m, body, insts)
 	labels := 0
+
+	// Go's wasm port keeps SP in local 1. adj is where it points, from
+	// SP at the function's start, while adjKnown; frameAdj is where it
+	// points once the function has made its frame.
+	var adj, frameAdj int64
+	adjKnown, frameKnown := false, false
+	var frames []block
+	inIf := func() bool {
+		return slices.ContainsFunc(frames[1:], func(b block) bool { return b.cond })
+	}
+	// moveSP follows a store to local 1.
+	moveSP := func(local uint32, v expr) {
+		switch {
+		case goArgs == nil || local != 1:
+		case v.sp:
+			adj, adjKnown = v.spOff, true
+		case v.spGlobal && frameKnown:
+			// After a call SP is back at the frame.
+			adj, adjKnown = frameAdj, true
+		case v.spGlobal:
+			// The function's start, before it makes its frame.
+			adj, adjKnown = 0, true
+		default:
+			adjKnown = false
+		}
+	}
+	// argName is the argument or result a Go stack address reaches.
+	argName := func(base expr, offset uint64) (string, bool) {
+		if !base.sp {
+			return "", false
+		}
+		// The arguments start past the return address.
+		n, ok := goArgs[base.spOff+int64(offset)-8]
+		return n, ok
+	}
 
 	var stack []expr
 	current := 0
@@ -210,7 +260,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 		}
 		return e.text
 	}
-	frames := []block{{label: "", result: len(ftype.Results)}}
+	frames = []block{{label: "", result: len(ftype.Results)}}
 	// leftover spells the values a block leaves as an assignment to its
 	// label, so they show before the block's end.
 	leftover := func(b *block) string {
@@ -234,7 +284,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 		text := ""
 		switch {
 		case op == "block" || op == "loop" || op == "if" || op == "try_table":
-			b := block{loop: op == "loop", result: blockResults(m, in), cases: cases[i], selector: selectors[i]}
+			b := block{loop: op == "loop", result: blockResults(m, in), cases: cases[i], selector: selectors[i], cond: op == "if", adj: adj, adjKnown: adjKnown}
 			if b.cases == "" && (targeted[i] || b.result > 0) {
 				labels++
 				b.label = fmt.Sprint("L", labels)
@@ -258,6 +308,7 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 		case op == "else":
 			b := &frames[len(frames)-1]
 			text = leftover(b) + "} else {"
+			adj, adjKnown = b.adj, b.adjKnown
 		case op == "end":
 			if len(frames) == 1 {
 				break
@@ -266,6 +317,17 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 			text = leftover(&b) + "}"
 			if b.cases != "" {
 				text = b.cases + ":"
+				// Go enters case 0 at the function's start and any other
+				// to resume, with its frame made.
+				if b.cases == "case 0" || strings.HasPrefix(b.cases, "case 0,") {
+					adj, adjKnown = 0, true
+				} else {
+					adj, adjKnown = frameAdj, frameKnown
+				}
+			}
+			if b.cond {
+				// Go only moves SP inside an if on its way out.
+				adj, adjKnown = b.adj, b.adjKnown
 			}
 			frames = frames[:len(frames)-1]
 			if b.result > 0 {
@@ -354,23 +416,30 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 			push(wrap(c, 3)+" ? "+wrap(a, 2)+" : "+wrap(b, 2), 1)
 		case op == "local.get":
 			own.locals = []uint32{in.LocalIndex}
-			push(name(in.LocalIndex), 9)
+			pushExpr(expr{text: name(in.LocalIndex), prec: 9, sp: goArgs != nil && in.LocalIndex == 1 && adjKnown, spOff: adj})
 		case op == "local.set":
 			v := pop()
 			settle(readsLocal(in.LocalIndex))
+			moveSP(in.LocalIndex, v)
 			text = name(in.LocalIndex) + " = " + v.text
 		case op == "local.tee":
 			v := pop()
 			settle(readsLocal(in.LocalIndex))
+			moveSP(in.LocalIndex, v)
 			text = name(in.LocalIndex) + " = " + v.text
 			popped, own = reads{}, reads{locals: []uint32{in.LocalIndex}}
-			push(name(in.LocalIndex), 9)
+			pushExpr(expr{text: name(in.LocalIndex), prec: 9, sp: v.sp, spOff: v.spOff, spGlobal: v.spGlobal})
 		case op == "global.get":
 			settle(readsCall)
 			own.globals = []uint32{in.GlobalIndex}
-			push(global(in.GlobalIndex), 9)
+			pushExpr(expr{text: global(in.GlobalIndex), prec: 9, spGlobal: goArgs != nil && in.GlobalIndex == 0})
 		case op == "global.set":
 			v := pop()
+			if goArgs != nil && in.GlobalIndex == 0 && v.sp && !frameKnown && !inIf() {
+				// The function's first SP outside the stack check makes
+				// its frame.
+				frameAdj, frameKnown = v.spOff, true
+			}
 			settle(readsGlobal(in.GlobalIndex))
 			text = global(in.GlobalIndex) + " = " + v.text
 		case op == "call" || op == "call_indirect" || op == "return_call":
@@ -397,16 +466,26 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 				}
 			}
 		case short == "const":
-			push(arg, 9)
+			v, err := strconv.ParseInt(arg, 0, 64)
+			pushExpr(expr{text: arg, prec: 9, konst: err == nil, val: v})
 		case strings.HasPrefix(short, "load"):
 			settle(readsCall)
 			own.memory = true
-			push(memType(typ, short)+"["+address(pop(), in.MemoryOffset)+"]", 9)
+			base := pop()
+			if n, ok := argName(base, in.MemoryOffset); ok {
+				push(n, 9)
+				break
+			}
+			push(memType(typ, short)+"["+address(base, in.MemoryOffset)+"]", 9)
 		case strings.HasPrefix(short, "store"):
 			v := pop()
-			a := address(pop(), in.MemoryOffset)
+			base := pop()
+			a := memType(typ, short) + "[" + address(base, in.MemoryOffset) + "]"
+			if n, ok := argName(base, in.MemoryOffset); ok {
+				a = n
+			}
 			settle(readsMemory)
-			text = memType(typ, short) + "[" + a + "] = " + v.text
+			text = a + " = " + v.text
 		case op == "memory.size":
 			settle(readsCall)
 			own.memory = true
@@ -428,6 +507,15 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 				break
 			}
 			e := expr{text: wrap(a, o.prec) + " " + o.text + " " + wrap(b, o.prec+1), prec: o.prec, bits: strings.HasPrefix(short, "sh") || short == "and"}
+			// An address on Go's stack stays one past an offset.
+			switch {
+			case short == "add" && a.sp && b.konst:
+				e.sp, e.spOff = true, a.spOff+b.val
+			case short == "add" && b.sp && a.konst:
+				e.sp, e.spOff = true, b.spOff+a.val
+			case short == "sub" && a.sp && b.konst:
+				e.sp, e.spOff = true, a.spOff-b.val
+			}
 			// A float comparison is false either way for NaN, so only an
 			// integer one turns around.
 			if not, ok := negations[o.text]; ok && typ[0] == 'i' {
@@ -451,10 +539,13 @@ func wasmStatements(m *wasmir.Module, idx int, insts []disasm.Inst, dwarfLocals 
 				break
 			}
 			if short == "wrap_i64" && a.narrow != "" {
-				push(a.narrow, 9)
+				pushExpr(expr{text: a.narrow, prec: 9, sp: a.sp, spOff: a.spOff})
 				break
 			}
 			e := expr{text: convert(typ, short) + "(" + a.text + ")", prec: 9}
+			if short == "wrap_i64" || strings.HasPrefix(short, "extend_i32") {
+				e.sp, e.spOff = a.sp, a.spOff
+			}
 			if strings.HasPrefix(short, "extend_i32") {
 				e.narrow = wrap(a, 9)
 			}

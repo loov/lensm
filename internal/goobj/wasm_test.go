@@ -159,7 +159,7 @@ func TestLoadGoWasm(t *testing.T) {
 	for _, in := range dot.Insts {
 		stmts = append(stmts, in.NativeText)
 	}
-	for _, want := range []string{"switch (PC_B)", "case 0, 1:", "goto case 3", "SP = l1"} {
+	for _, want := range []string{"switch (PC_B)", "case 0, 1:", "goto case 3", "SP = l1", "l2 = a.len", "l5 = b.ptr", "r0 = l9"} {
 		if !slices.Contains(stmts, want) {
 			t.Errorf("main.dot has no %q:\n%s", want, strings.Join(stmts, "\n"))
 		}
