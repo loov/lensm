@@ -136,7 +136,7 @@ func TestRender(t *testing.T) {
 	}
 	if *renderSettings >= 0 {
 		ui.openSettings()
-		ui.SettingsNav.Selected = *renderSettings
+		ui.SettingsDialog.Nav.Selected = *renderSettings
 	}
 	ui.AppMenu.Open = *renderMenu
 	ui.Shortcuts.Open = *renderKeys

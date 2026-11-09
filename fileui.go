@@ -114,22 +114,13 @@ type FileUI struct {
 	ShowAsmHelp     widget.Bool
 	HoverLinksOnly  widget.Bool
 	SyncScroll      widget.Bool
-	// SyncScrollSetting is the same switch in the settings, a widget of
-	// its own since both can be on screen.
-	SyncScrollSetting widget.Bool
-	SettingsNav       gui.NavList
-	ThemeSelect       gui.Select
-	SyntaxSelect      gui.Select
-	FlameSelect       gui.Select
-	CallGraphSelect   gui.Select
-	FlameUpSelect     gui.Select
-	SettingsOK        widget.Clickable
-	SettingsCancel    widget.Clickable
-	Comment           codeview.CommentEditor
-	Find              findBar
-	Shortcuts         shortcutSheet
-	Compare           compareView
-	Graph             callGraph
+	// SettingsDialog is the state of the settings dialog.
+	SettingsDialog settingsDialog
+	Comment        codeview.CommentEditor
+	Find           findBar
+	Shortcuts      shortcutSheet
+	Compare        compareView
+	Graph          callGraph
 	// ShowGraph puts the whole profile's graph in place of the code.
 	ShowGraph    bool
 	ProfileGraph callGraph
@@ -153,13 +144,8 @@ type FileUI struct {
 	BaseProfile *pprof.Profile
 	// profileModTime is when the loaded profile file last changed.
 	profileModTime time.Time
-	TextSizeEditor widget.Editor
-	// textSizeEdited marks TextSizeEditor as changed since it was applied.
-	textSizeEdited bool
 	// settingsPath is where Settings are saved, empty for none.
 	settingsPath string
-	StartMCP     widget.Clickable
-	StopMCP      widget.Clickable
 
 	// Index is the scan of the file for callers and stats, nil until
 	// it finishes.
@@ -200,8 +186,6 @@ type FileUI struct {
 	copyStatus        string
 	copyStatusAt      time.Time
 	saveError         string
-	settingsOpen      bool
-	settingsSnapshot  AppSettings
 	pickerOpen        bool
 	loadGeneration    uint64
 	loadedPath        string
@@ -255,7 +239,7 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.ShowAsmHelp.Value = settings.ShowAsmHelp
 	ui.HoverLinksOnly.Value = settings.HoverLinksOnly
 	ui.SyncScroll.Value = settings.SyncScroll
-	ui.SyncScrollSetting.Value = settings.SyncScroll
+	ui.SettingsDialog.SyncScroll.Value = settings.SyncScroll
 	ui.split.Axis = layout.Horizontal
 	ui.split.Ratio = settings.SidebarRatio
 	ui.graphSplit.Axis = layout.Horizontal
@@ -263,9 +247,9 @@ func NewFileUI(windows *gui.Windows, theme *material.Theme) *FileUI {
 	ui.belowSplit.Axis = layout.Vertical
 	ui.belowSplit.Ratio = settings.BelowRatio
 	ui.Comment.SingleLine = true
-	ui.TextSizeEditor.SingleLine = true
-	ui.TextSizeEditor.Submit = true
-	ui.TextSizeEditor.SetText(strconv.Itoa(settings.TextSize))
+	ui.SettingsDialog.TextSize.SingleLine = true
+	ui.SettingsDialog.TextSize.Submit = true
+	ui.SettingsDialog.TextSize.SetText(strconv.Itoa(settings.TextSize))
 	ui.Comments = comments.NewMemory("")
 	ui.QuickOpen.Lookup = func(pattern string) (disasm.Func, bool) {
 		pc, ok := parseAddress(pattern)
@@ -610,7 +594,7 @@ func (ui *FileUI) Layout(gtx layout.Context) {
 		}
 	}
 	ui.QuickOpen.Layout(gtx, ui.Theme, "Go to function")
-	if ui.settingsOpen {
+	if ui.SettingsDialog.open {
 		ui.layoutSettings(gtx)
 	}
 	ui.layoutShortcuts(gtx)
@@ -653,7 +637,7 @@ func (ui *FileUI) handleActions(gtx layout.Context) {
 			continue
 		}
 		// The settings dialog keeps its own keys.
-		if ui.settingsOpen {
+		if ui.SettingsDialog.open {
 			continue
 		}
 		switch keyEvent.Name {

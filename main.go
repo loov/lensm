@@ -57,7 +57,7 @@ func main() {
 
 	ui := NewFileUI(windows, theme)
 	if explicitTextSize {
-		ui.TextSizeEditor.SetText(strconv.Itoa(*textSize))
+		ui.SettingsDialog.TextSize.SetText(strconv.Itoa(*textSize))
 	} else {
 		theme.TextSize = unit.Sp(ui.Settings.TextSize)
 	}
