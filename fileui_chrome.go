@@ -121,6 +121,11 @@ func (ui *FileUI) layoutToolbar(gtx layout.Context) layout.Dimensions {
 }
 
 func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
+	// A wasm module has WAT and the statements it adds up to instead.
+	asmLabel, nativeLabel := "Go asm", "Native"
+	if code := ui.activeCode(); code != nil && code.Code != nil && code.Code.Arch == "wasm" {
+		asmLabel, nativeLabel = "WAT", "Statements"
+	}
 	th := ui.Theme
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	// The two sides share what the search leaves, so it stays centred.
@@ -159,8 +164,8 @@ func (ui *FileUI) layoutToolbarRow(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(ui.layoutCopyStatus),
 					layout.Rigid(gui.Segmented{Theme: th, Segments: []gui.Segment{
-						{Label: "Go asm", Value: &ui.ShowGoAsm},
-						{Label: "Native", Value: &ui.ShowNativeAsm},
+						{Label: asmLabel, Value: &ui.ShowGoAsm},
+						{Label: nativeLabel, Value: &ui.ShowNativeAsm},
 						{Label: "Source", Value: &ui.ShowSource},
 						{Label: "Diagnostics", Value: &ui.ShowDiagnostics},
 					}}.Layout),

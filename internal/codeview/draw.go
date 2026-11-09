@@ -182,9 +182,14 @@ func (ui Style) layoutAssembly(gtx layout.Context, c codeColumns, hover codeHove
 		if ui.ShowNative {
 			width := ui.layoutRowComment(gtx, ui.asmCoord(ViewNativeAsm, ix), ";", c.nativeCol, i*lineHeight+int(ui.asm.Offset), lineHeight,
 				ui.SelectedAsm == i && ui.SelectedView == ViewNativeAsm)
+			// wasm statements nest as the blocks do.
+			nativeIndent := 0
+			if ui.Code.Arch == "wasm" {
+				nativeIndent = indent
+			}
 			sourceLine{
-				TopLeft:    image.Pt(c.nativeCol.textLeft, i*lineHeight+int(ui.asm.Offset)),
-				Width:      width,
+				TopLeft:    image.Pt(c.nativeCol.textLeft+nativeIndent, i*lineHeight+int(ui.asm.Offset)),
+				Width:      max(width-nativeIndent, 0),
 				Text:       hl.nativeText[i],
 				Spans:      hl.native[i],
 				TextHeight: ui.TextHeight,

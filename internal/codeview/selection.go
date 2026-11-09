@@ -263,6 +263,13 @@ func (s TextSelection) Text(code *disasm.Code, notes noteLayout) string {
 			text := strings.Repeat(" ", code.Insts[i].Indent) + code.Insts[i].Text
 			if s.View == ViewNativeAsm {
 				text = strings.ToUpper(code.Insts[i].NativeText)
+				if code.Arch == "wasm" {
+					// Only the rows that complete a statement have one.
+					if code.Insts[i].NativeText == "" {
+						continue
+					}
+					text = strings.Repeat("  ", code.Insts[i].Indent) + code.Insts[i].NativeText
+				}
 			}
 			lines = append(lines, text)
 		}
