@@ -1,4 +1,4 @@
-PHONY := llc
+.PHONY: llc
 llc:
 	clang --target=wasm32 -emit-llvm -g -c -S example.c
 	llc -O0 -march=wasm32 \
@@ -6,18 +6,18 @@ llc:
 		example.s
 	wasm-ld --no-entry --export-all -o example.wasm example.s.o
 
-PHONY := clang
+.PHONY: clang
 clang:
 	clang -g --target=wasm32 --no-standard-libraries -Wl,--no-entry -o example-clang.wasm example.c
 
-PHONY := odump-clang
+.PHONY: odump
 odump:
 	wasm-objdump -x example-clang.wasm
 	wasm-objdump -x example.wasm
 
 # Optimised objects, so the variables live in locals; an object needs
 # no wasm-ld.
-PHONY := dwarf
+.PHONY: dwarf
 dwarf:
 	clang --target=wasm32 -O2 -g -gdwarf-4 -c -o sum-dwarf4.o sum.c
 	clang --target=wasm32 -O2 -g -gdwarf-5 -c -o sum-dwarf5.o sum.c
